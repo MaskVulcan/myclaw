@@ -86,7 +86,6 @@ describe("sanitizeUserFacingText", () => {
     const raw = '{"type":"error","error":{"type":"server_error","message":"Something exploded"}}';
     expect(sanitizeUserFacingText(raw)).toBe(raw);
   });
-
   it("sanitizes Codex error-prefixed API payloads", () => {
     const raw =
       'Codex error: {"type":"error","error":{"type":"server_error","message":"Something exploded"},"sequence_number":2}';
@@ -121,7 +120,6 @@ describe("sanitizeUserFacingText", () => {
       "Context overflow: prompt too large for the model.",
     );
   });
-
   it("returns a friendly message for rate limit errors in Error: prefixed payloads", () => {
     expect(sanitizeUserFacingText("Error: 429 Rate limit exceeded", { errorContext: true })).toBe(
       "⚠️ API rate limit reached. Please try again later.",
