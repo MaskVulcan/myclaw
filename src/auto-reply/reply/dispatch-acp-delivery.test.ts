@@ -161,7 +161,6 @@ describe("createAcpDispatchDeliveryCoordinator", () => {
     expect(coordinator.hasDeliveredVisibleText()).toBe(false);
     expect(coordinator.hasFailedVisibleTextDelivery()).toBe(true);
   });
-
   it("starts reply lifecycle only once when called directly and through deliver", async () => {
     const onReplyStart = vi.fn(async () => {});
     const coordinator = createCoordinator(onReplyStart);
