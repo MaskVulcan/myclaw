@@ -100,6 +100,8 @@ async function runDispatch(params: {
   cfg?: OpenClawConfig;
   dispatcher?: ReplyDispatcher;
   shouldRouteToOriginating?: boolean;
+  originatingChannel?: string;
+  originatingTo?: string;
   onReplyStart?: () => void;
   ctxOverrides?: Record<string, unknown>;
 }) {
@@ -117,7 +119,10 @@ async function runDispatch(params: {
     inboundAudio: false,
     shouldRouteToOriginating: params.shouldRouteToOriginating ?? false,
     ...(params.shouldRouteToOriginating
-      ? { originatingChannel: "telegram", originatingTo: "telegram:thread-1" }
+      ? {
+          originatingChannel: params.originatingChannel ?? "telegram",
+          originatingTo: params.originatingTo ?? "telegram:thread-1",
+        }
       : {}),
     shouldSendToolSummaries: true,
     bypassForCommand: false,
@@ -474,6 +479,26 @@ describe("tryDispatchAcpReply", () => {
     expect(result?.counts.block).toBe(1);
     expect(result?.counts.final).toBe(0);
     expect(routeMocks.routeReply).toHaveBeenCalledTimes(1);
+  });
+
+  it("delivers final fallback text when routed block text is not visible on the parent surface", async () => {
+    setReadyAcpResolution();
+    ttsMocks.resolveTtsConfig.mockReturnValue({ mode: "final" });
+    mockRoutedTextTurn("CODEX_OK");
+
+    const { dispatcher } = createDispatcher();
+    const result = await runDispatch({
+      bodyForAgent: "run acp",
+      dispatcher,
+      shouldRouteToOriginating: true,
+      originatingChannel: "discord",
+      originatingTo: "discord:thread-1",
+    });
+
+    expect(result?.counts.block).toBe(1);
+    expect(result?.counts.final).toBe(1);
+    expect(routeMocks.routeReply).toHaveBeenCalledTimes(2);
+    expectSecondRoutedPayload({ text: "CODEX_OK" });
   });
 
   it("does not deliver final fallback text when direct block text was already visible", async () => {
