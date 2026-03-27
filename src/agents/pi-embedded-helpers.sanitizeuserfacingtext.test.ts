@@ -112,7 +112,6 @@ describe("sanitizeUserFacingText", () => {
       "Context overflow: prompt too large for the model.",
     );
   });
-
   it("preserves specialized context overflow guidance for Codex-prefixed API payloads", () => {
     const raw =
       'Codex error: {"type":"error","error":{"type":"invalid_request_error","message":"Request size exceeds model context window"}}';
