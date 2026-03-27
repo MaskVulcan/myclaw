@@ -4,7 +4,12 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { clearPluginDiscoveryCache } from "../../../plugins/discovery.js";
 import { clearPluginManifestRegistryCache } from "../../../plugins/manifest-registry.js";
-import { setActivePluginRegistry } from "../../../plugins/runtime.js";
+import {
+  releasePinnedPluginChannelRegistry,
+  pinActivePluginChannelRegistry,
+  resetPluginRuntimeStateForTest,
+  setActivePluginRegistry,
+} from "../../../plugins/runtime.js";
 import {
   createChannelTestPluginBase,
   createOutboundTestPlugin,
@@ -46,6 +51,8 @@ describe("channel plugin registry", () => {
   });
 
   beforeEach(() => {
+    resetPluginRuntimeStateForTest();
+    releasePinnedPluginChannelRegistry();
     setActivePluginRegistry(emptyRegistry);
   });
 
@@ -58,6 +65,8 @@ describe("channel plugin registry", () => {
   }
 
   afterEach(() => {
+    releasePinnedPluginChannelRegistry();
+    resetPluginRuntimeStateForTest();
     setActivePluginRegistry(emptyRegistry);
     clearPluginDiscoveryCache();
     clearPluginManifestRegistryCache();
@@ -484,10 +493,14 @@ describe("channel plugin loader", () => {
   }
 
   beforeEach(() => {
+    resetPluginRuntimeStateForTest();
+    releasePinnedPluginChannelRegistry();
     setActivePluginRegistry(emptyRegistry);
   });
 
   afterEach(() => {
+    releasePinnedPluginChannelRegistry();
+    resetPluginRuntimeStateForTest();
     setActivePluginRegistry(emptyRegistry);
     clearPluginDiscoveryCache();
     clearPluginManifestRegistryCache();
@@ -563,6 +576,17 @@ describe("channel plugin loader", () => {
         await expectOutboundAdapterMissingCase(testCase.registry);
         return;
     }
+  });
+
+  it("keeps outbound adapters on the pinned channel registry across active registry swaps", async () => {
+    setActivePluginRegistry(registryWithDemoLoader);
+    pinActivePluginChannelRegistry(registryWithDemoLoader);
+
+    expect(await loadChannelOutboundAdapter("demo-loader")).toBe(demoOutbound);
+
+    setActivePluginRegistry(emptyRegistry);
+
+    expect(await loadChannelOutboundAdapter("demo-loader")).toBe(demoOutbound);
   });
 });
 
