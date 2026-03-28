@@ -4,6 +4,9 @@ Docs: https://docs.openclaw.ai
 
 ## Unreleased
 
+### Fixes
+
+- Memory/QMD: resolve slugified `memory_search` file hints back to the indexed filesystem path before returning search hits, so `memory_get` works again for mixed-case and spaced paths. (#50313) Thanks @erra9x.
 ### Breaking
 
 - Providers/Qwen: remove the deprecated `qwen-portal-auth` OAuth integration for `portal.qwen.ai`; migrate to Model Studio with `openclaw onboard --auth-choice modelstudio-api-key`. (#52709) Thanks @pomelo-nwu.
