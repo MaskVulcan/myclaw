@@ -36,9 +36,11 @@ apps/android/benchmark/results/
 # Bun build artifacts
 *.bun-build
 apps/macos/.build/
+apps/shared/ClawdisKit/.build/
 apps/shared/MoltbotKit/.build/
 apps/shared/OpenClawKit/.build/
 apps/shared/OpenClawKit/Package.resolved
+apps/shared/ClawdisKit/.swiftpm/
 **/ModuleCache/
 bin/
 bin/clawdbot-mac
