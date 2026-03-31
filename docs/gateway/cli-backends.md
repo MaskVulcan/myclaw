@@ -203,12 +203,16 @@ The bundled OpenAI plugin also registers a default for `codex-cli`:
 
 - `command: "codex"`
 - `args: ["exec","--json","--color","never","--sandbox","workspace-write","--skip-git-repo-check"]`
-- `resumeArgs: ["exec","resume","{sessionId}","--color","never","--sandbox","workspace-write","--skip-git-repo-check"]`
+- `resumeArgs: ["exec","resume","{sessionId}","--json","--skip-git-repo-check"]`
 - `output: "jsonl"`
-- `resumeOutput: "text"`
+- `resumeOutput: "jsonl"`
 - `modelArg: "--model"`
 - `imageArg: "--image"`
 - `sessionMode: "existing"`
+
+Current Codex CLI releases accept `--json` on `exec resume` and reject some
+fresh-only flags like `--color` / `--sandbox` there, so OpenClaw keeps the
+resume argv narrower than the fresh-run argv.
 
 The bundled Google plugin also registers a default for `google-gemini-cli`:
 

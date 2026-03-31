@@ -29,6 +29,37 @@ describe("resolveSkillsPromptForRun", () => {
     expect(prompt).toContain("<available_skills>");
     expect(prompt).toContain("/app/skills/demo-skill/SKILL.md");
   });
+
+  it("rebuilds a compact prompt from resolved snapshot skills for runtime use", () => {
+    const skill = createFixtureSkill({
+      name: "demo-skill",
+      description: "Demo description",
+      filePath: "/app/skills/demo-skill/SKILL.md",
+      baseDir: "/app/skills/demo-skill",
+      source: "openclaw-bundled",
+    });
+    const prompt = resolveSkillsPromptForRun({
+      skillsSnapshot: { prompt: "FULL SNAPSHOT", skills: [], resolvedSkills: [skill] },
+      workspaceDir: "/tmp/openclaw",
+      promptMode: "compact",
+    });
+
+    expect(prompt).not.toBe("FULL SNAPSHOT");
+    expect(prompt).toContain("<available_skills>");
+    expect(prompt).toContain("<name>demo-skill</name>");
+    expect(prompt).toContain("/app/skills/demo-skill/SKILL.md");
+    expect(prompt).not.toContain("Demo description");
+  });
+
+  it("returns an empty prompt when runtime skills are disabled", () => {
+    const prompt = resolveSkillsPromptForRun({
+      skillsSnapshot: { prompt: "SNAPSHOT", skills: [] },
+      workspaceDir: "/tmp/openclaw",
+      promptMode: "off",
+    });
+
+    expect(prompt).toBe("");
+  });
 });
 
 function createFixtureSkill(params: {

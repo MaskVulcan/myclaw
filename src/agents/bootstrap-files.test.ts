@@ -126,4 +126,56 @@ describe("resolveBootstrapContextForRun", () => {
 
     expect(files).toEqual([]);
   });
+
+  it("suppresses BOOTSTRAP.md after the session already has an assistant reply", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-bootstrap-");
+    await fs.writeFile(path.join(workspaceDir, "BOOTSTRAP.md"), "hello", "utf8");
+    const sessionFile = path.join(workspaceDir, "session.jsonl");
+    await fs.writeFile(
+      sessionFile,
+      [
+        JSON.stringify({ type: "session", version: 3 }),
+        JSON.stringify({
+          type: "message",
+          message: { role: "user", content: [{ type: "text", text: "hi" }] },
+        }),
+        JSON.stringify({
+          type: "message",
+          message: { role: "assistant", content: [{ type: "text", text: "pong" }] },
+        }),
+      ].join("\n"),
+      "utf8",
+    );
+
+    const files = await resolveBootstrapFilesForRun({
+      workspaceDir,
+      sessionFile,
+    });
+
+    expect(files.some((file) => file.name === "BOOTSTRAP.md")).toBe(false);
+  });
+
+  it("keeps BOOTSTRAP.md on a session that has not replied yet", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-bootstrap-");
+    await fs.writeFile(path.join(workspaceDir, "BOOTSTRAP.md"), "hello", "utf8");
+    const sessionFile = path.join(workspaceDir, "session.jsonl");
+    await fs.writeFile(
+      sessionFile,
+      [
+        JSON.stringify({ type: "session", version: 3 }),
+        JSON.stringify({
+          type: "message",
+          message: { role: "user", content: [{ type: "text", text: "hi" }] },
+        }),
+      ].join("\n"),
+      "utf8",
+    );
+
+    const files = await resolveBootstrapFilesForRun({
+      workspaceDir,
+      sessionFile,
+    });
+
+    expect(files.some((file) => file.name === "BOOTSTRAP.md")).toBe(true);
+  });
 });

@@ -14,6 +14,35 @@ import {
   TypingModeSchema,
 } from "./zod-schema.core.js";
 
+const StageRunSchema = z
+  .object({
+    model: z.string().optional(),
+    thinkLevel: z
+      .union([
+        z.literal("off"),
+        z.literal("minimal"),
+        z.literal("low"),
+        z.literal("medium"),
+        z.literal("high"),
+        z.literal("xhigh"),
+        z.literal("adaptive"),
+      ])
+      .optional(),
+    reasoningLevel: z.union([z.literal("off"), z.literal("on"), z.literal("stream")]).optional(),
+    fastMode: z.boolean().optional(),
+    systemPromptMode: z
+      .union([z.literal("full"), z.literal("minimal"), z.literal("none")])
+      .optional(),
+    skillsPromptMode: z
+      .union([z.literal("auto"), z.literal("compact"), z.literal("off")])
+      .optional(),
+    bootstrapContextMode: z.union([z.literal("full"), z.literal("lightweight")]).optional(),
+    disableTools: z.boolean().optional(),
+    inheritExtraSystemPrompt: z.boolean().optional(),
+    extraSystemPrompt: z.string().optional(),
+  })
+  .strict();
+
 export const AgentDefaultsSchema = z
   .object({
     model: AgentModelSchema.optional(),
@@ -51,6 +80,15 @@ export const AgentDefaultsSchema = z
     envelopeElapsed: z.union([z.literal("on"), z.literal("off")]).optional(),
     contextTokens: z.number().int().positive().optional(),
     cliBackends: z.record(z.string(), CliBackendSchema).optional(),
+    multiStageRouting: z
+      .object({
+        enabled: z.boolean().optional(),
+        skipImages: z.boolean().optional(),
+        fastPass: StageRunSchema.optional(),
+        escalationPass: StageRunSchema.optional(),
+      })
+      .strict()
+      .optional(),
     memorySearch: MemorySearchSchema,
     contextPruning: z
       .object({

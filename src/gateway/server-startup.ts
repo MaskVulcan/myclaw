@@ -1,6 +1,7 @@
 import { getAcpSessionManager } from "../acp/control-plane/manager.js";
 import { ACP_SESSION_IDENTITY_RENDERER_VERSION } from "../acp/runtime/session-identifiers.js";
 import { resolveOpenClawAgentDir } from "../agents/agent-paths.js";
+import { listAgentIds, resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { loadModelCatalog } from "../agents/model-catalog.js";
 import {
@@ -10,6 +11,7 @@ import {
 } from "../agents/model-selection.js";
 import { ensureOpenClawModelsJson } from "../agents/models-config.js";
 import { resolveModelAsync } from "../agents/pi-embedded-runner/model.js";
+import { ensureRuntimePluginsLoaded } from "../agents/runtime-plugins.js";
 import { resolveAgentSessionDirs } from "../agents/session-dirs.js";
 import { cleanStaleLockFiles } from "../agents/session-write-lock.js";
 import type { CliDeps } from "../cli/deps.js";
@@ -58,6 +60,48 @@ async function prewarmConfiguredPrimaryModel(params: {
     }
   } catch (err) {
     params.log.warn(`startup model warmup failed for ${provider}/${model}: ${String(err)}`);
+  }
+}
+
+function resolveGatewayRuntimePrewarmWorkspaceDirs(params: {
+  cfg: ReturnType<typeof loadConfig>;
+  defaultWorkspaceDir: string;
+}): string[] {
+  const defaultWorkspaceDir = params.defaultWorkspaceDir.trim();
+  const otherWorkspaceDirs: string[] = [];
+  const seen = new Set<string>();
+
+  for (const agentId of listAgentIds(params.cfg)) {
+    const workspaceDir = resolveAgentWorkspaceDir(params.cfg, agentId).trim();
+    if (!workspaceDir || workspaceDir === defaultWorkspaceDir || seen.has(workspaceDir)) {
+      continue;
+    }
+    seen.add(workspaceDir);
+    otherWorkspaceDirs.push(workspaceDir);
+  }
+
+  return defaultWorkspaceDir ? [...otherWorkspaceDirs, defaultWorkspaceDir] : otherWorkspaceDirs;
+}
+
+function prewarmGatewayRuntimePlugins(params: {
+  cfg: ReturnType<typeof loadConfig>;
+  defaultWorkspaceDir: string;
+  log: { warn: (msg: string) => void };
+}): void {
+  const workspaceDirs = resolveGatewayRuntimePrewarmWorkspaceDirs({
+    cfg: params.cfg,
+    defaultWorkspaceDir: params.defaultWorkspaceDir,
+  });
+  for (const workspaceDir of workspaceDirs) {
+    try {
+      ensureRuntimePluginsLoaded({
+        config: params.cfg,
+        workspaceDir,
+        allowGatewaySubagentBinding: true,
+      });
+    } catch (err) {
+      params.log.warn(`startup runtime plugin warmup failed for ${workspaceDir}: ${String(err)}`);
+    }
   }
 }
 
@@ -148,6 +192,11 @@ export async function startGatewaySidecars(params: {
   const skipChannels =
     isTruthyEnvValue(process.env.OPENCLAW_SKIP_CHANNELS) ||
     isTruthyEnvValue(process.env.OPENCLAW_SKIP_PROVIDERS);
+  prewarmGatewayRuntimePlugins({
+    cfg: params.cfg,
+    defaultWorkspaceDir: params.defaultWorkspaceDir,
+    log: params.log,
+  });
   if (!skipChannels) {
     try {
       await prewarmConfiguredPrimaryModel({
@@ -217,4 +266,6 @@ export async function startGatewaySidecars(params: {
 
 export const __testing = {
   prewarmConfiguredPrimaryModel,
+  prewarmGatewayRuntimePlugins,
+  resolveGatewayRuntimePrewarmWorkspaceDirs,
 };

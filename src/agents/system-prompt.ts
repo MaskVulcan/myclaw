@@ -25,7 +25,7 @@ function buildSkillsSection(params: { skillsPrompt?: string; readToolName: strin
   }
   return [
     "## Skills (mandatory)",
-    "Before replying: scan <available_skills> <description> entries.",
+    "Before replying: scan <available_skills> entries.",
     `- If exactly one skill clearly applies: read its SKILL.md at <location> with \`${params.readToolName}\`, then follow it.`,
     "- If multiple could apply: choose the most specific one, then read/follow it.",
     "- If none clearly apply: do not read any SKILL.md.",
@@ -399,9 +399,16 @@ export function buildAgentSystemPrompt(params: {
   });
   const workspaceNotes = (params.workspaceNotes ?? []).map((note) => note.trim()).filter(Boolean);
 
-  // For "none" mode, return just the basic identity line
+  // For "none" mode, keep only the identity line plus explicit caller-supplied
+  // instructions so latency-sensitive runs can inject a tiny custom prompt.
   if (promptMode === "none") {
-    return "You are a personal assistant running inside OpenClaw.";
+    return [
+      "You are a personal assistant running inside OpenClaw.",
+      reasoningHint,
+      extraSystemPrompt,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
   }
 
   const lines = [

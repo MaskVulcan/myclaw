@@ -8,6 +8,7 @@ import {
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { normalizeGoogleModelId } from "../plugin-sdk/google.js";
 import { normalizeXaiModelId } from "../plugin-sdk/xai.js";
+import { BUNDLED_PLUGIN_CONTRACT_SNAPSHOTS } from "../plugins/bundled-capability-metadata.js";
 import { sanitizeForLog } from "../terminal/ansi.js";
 import {
   resolveAgentConfig,
@@ -36,6 +37,12 @@ const CLI_BACKEND_RUNTIME_CANDIDATES = [
 ] as const;
 
 let cliBackendRuntimeModule: CliBackendRuntimeModule | undefined;
+
+const BUNDLED_CLI_PROVIDER_IDS = new Set(
+  BUNDLED_PLUGIN_CONTRACT_SNAPSHOTS.flatMap((entry) =>
+    entry.cliBackendIds.map((backendId) => normalizeProviderId(backendId)),
+  ),
+);
 
 function loadCliBackendRuntime(): CliBackendRuntimeModule | null {
   if (cliBackendRuntimeModule) {
@@ -109,6 +116,9 @@ export function isCliProvider(provider: string, cfg?: OpenClawConfig): boolean {
   const normalized = normalizeProviderId(provider);
   const cliBackends = loadCliBackendRuntime()?.resolveRuntimeCliBackends() ?? [];
   if (cliBackends.some((backend) => normalizeProviderId(backend.id) === normalized)) {
+    return true;
+  }
+  if (BUNDLED_CLI_PROVIDER_IDS.has(normalized)) {
     return true;
   }
   const backends = cfg?.agents?.defaults?.cliBackends ?? {};

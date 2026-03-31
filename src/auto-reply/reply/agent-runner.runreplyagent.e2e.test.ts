@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionEntry } from "../../config/sessions.js";
 import * as sessions from "../../config/sessions.js";
 import type { TypingMode } from "../../config/types.js";
@@ -1666,6 +1666,7 @@ describe("runReplyAgent typing (heartbeat)", () => {
 describe("runReplyAgent memory flush", () => {
   let fixtureRoot = "";
   let caseId = 0;
+  let restoreMemoryPluginStateFn: (() => void) | null = null;
 
   async function withTempStore<T>(fn: (storePath: string) => Promise<T>): Promise<T> {
     const dir = path.join(fixtureRoot, `case-${++caseId}`);
@@ -1680,6 +1681,26 @@ describe("runReplyAgent memory flush", () => {
 
   beforeAll(async () => {
     fixtureRoot = await fs.mkdtemp(path.join(tmpdir(), "openclaw-memory-flush-"));
+  });
+
+  beforeEach(async () => {
+    const memoryState = await import("../../plugins/memory-state.js");
+    const previousState = {
+      promptBuilder: memoryState.getMemoryPromptSectionBuilder(),
+      flushPlanResolver: memoryState.getMemoryFlushPlanResolver(),
+      runtime: memoryState.getMemoryRuntime(),
+    };
+    const { buildMemoryFlushPlan } =
+      await import("../../../extensions/memory-core/src/flush-plan.ts");
+    memoryState.registerMemoryFlushPlanResolver((params) => buildMemoryFlushPlan(params));
+    restoreMemoryPluginStateFn = () => {
+      memoryState.restoreMemoryPluginState(previousState);
+    };
+  });
+
+  afterEach(() => {
+    restoreMemoryPluginStateFn?.();
+    restoreMemoryPluginStateFn = null;
   });
 
   afterAll(async () => {
@@ -1840,6 +1861,7 @@ describe("runReplyAgent memory flush", () => {
         sessionId: "session",
         updatedAt: Date.now(),
         totalTokens: 80_000,
+        totalTokensFresh: true,
         compactionCount: 1,
       };
 
@@ -1892,7 +1914,7 @@ describe("runReplyAgent memory flush", () => {
       expect(flushCall?.extraSystemPrompt).toContain("extra system");
       expect(flushCall?.extraSystemPrompt).toContain("Flush memory now.");
       expect(flushCall?.extraSystemPrompt).toContain("NO_REPLY");
-      expect(flushCall?.extraSystemPrompt).toContain("memory/YYYY-MM-DD.md");
+      expect(flushCall?.extraSystemPrompt).toMatch(/memory\/\d{4}-\d{2}-\d{2}\.md/);
       expect(flushCall?.extraSystemPrompt).toContain("MEMORY.md");
       expect(calls[1]?.prompt).toBe("hello");
     });
@@ -1905,6 +1927,7 @@ describe("runReplyAgent memory flush", () => {
         sessionId: "session",
         updatedAt: Date.now(),
         totalTokens: 80_000,
+        totalTokensFresh: true,
         compactionCount: 1,
         systemPromptReport: {
           source: "run",
@@ -1976,6 +1999,7 @@ describe("runReplyAgent memory flush", () => {
         sessionId: "session",
         updatedAt: Date.now(),
         totalTokens: 80_000,
+        totalTokensFresh: true,
         compactionCount: 1,
       };
 
@@ -2031,7 +2055,7 @@ describe("runReplyAgent memory flush", () => {
       expect(calls[0]?.prompt).toMatch(/memory\/\d{4}-\d{2}-\d{2}\.md/);
       expect(calls[0]?.prompt).toContain("MEMORY.md");
       expect(calls[0]?.memoryFlushWritePath).toMatch(/^memory\/\d{4}-\d{2}-\d{2}\.md$/);
-      expect(calls[0]?.extraSystemPrompt).toContain("memory/YYYY-MM-DD.md");
+      expect(calls[0]?.extraSystemPrompt).toMatch(/memory\/\d{4}-\d{2}-\d{2}\.md/);
       expect(calls[0]?.extraSystemPrompt).toContain("MEMORY.md");
       expect(calls[1]?.prompt).toBe("hello");
       expect(calls[1]?.sessionId).toBe("session-rotated");
@@ -2185,6 +2209,7 @@ describe("runReplyAgent memory flush", () => {
         sessionId: "session",
         updatedAt: Date.now(),
         totalTokens: 80_000,
+        totalTokensFresh: true,
         compactionCount: 1,
       };
 
@@ -2227,6 +2252,7 @@ describe("runReplyAgent memory flush", () => {
         sessionId: "session",
         updatedAt: Date.now(),
         totalTokens: 80_000,
+        totalTokensFresh: true,
         compactionCount: 2,
         memoryFlushCompactionCount: 2,
       };
@@ -2266,6 +2292,7 @@ describe("runReplyAgent memory flush", () => {
         sessionId: "session",
         updatedAt: Date.now(),
         totalTokens: 80_000,
+        totalTokensFresh: true,
         compactionCount: 1,
       };
 

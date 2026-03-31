@@ -190,6 +190,15 @@ export type SessionEntry = {
   lastThreadId?: string | number;
   skillsSnapshot?: SessionSkillSnapshot;
   systemPromptReport?: SessionSystemPromptReport;
+  /**
+   * Foreground task bound to this session when the channel runtime does not
+   * provide native current-conversation task or ACP bindings.
+   */
+  foregroundTaskId?: string;
+  /** Recently active task ids, newest first. */
+  recentTaskIds?: string[];
+  /** Suspended task ids that can be resumed later. */
+  suspendedTaskIds?: string[];
   acp?: SessionAcpMeta;
 };
 

@@ -563,6 +563,7 @@ export function formatSkillsCompact(skills: Skill[]): string {
 
 // Budget reserved for the compact-mode warning line prepended by the caller.
 const COMPACT_WARNING_OVERHEAD = 150;
+export type SkillsPromptMode = "auto" | "compact" | "off";
 
 function applySkillsPromptLimits(params: { skills: Skill[]; config?: OpenClawConfig }): {
   skillsForPrompt: Skill[];
@@ -612,6 +613,65 @@ function applySkillsPromptLimits(params: { skills: Skill[]; config?: OpenClawCon
   return { skillsForPrompt, truncated, compact };
 }
 
+function renderSkillsPrompt(params: {
+  skills: Skill[];
+  config?: OpenClawConfig;
+  promptMode?: SkillsPromptMode;
+}): string {
+  const promptMode = params.promptMode ?? "auto";
+  if (promptMode === "off") {
+    return "";
+  }
+
+  const limits = resolveSkillsLimits(params.config);
+  const promptSkills = compactSkillPaths(params.skills);
+  const total = promptSkills.length;
+  let skillsForPrompt = promptSkills.slice(0, Math.max(0, limits.maxSkillsInPrompt));
+  let truncated = total > skillsForPrompt.length;
+  let compact = promptMode === "compact";
+
+  const fitsFull = (skills: Skill[]): boolean =>
+    formatSkillsForPrompt(skills).length <= limits.maxSkillsPromptChars;
+  const compactBudget = limits.maxSkillsPromptChars - COMPACT_WARNING_OVERHEAD;
+  const fitsCompact = (skills: Skill[]): boolean =>
+    formatSkillsCompact(skills).length <= compactBudget;
+
+  if (compact) {
+    if (!fitsCompact(skillsForPrompt)) {
+      let lo = 0;
+      let hi = skillsForPrompt.length;
+      while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        if (fitsCompact(skillsForPrompt.slice(0, mid))) {
+          lo = mid;
+        } else {
+          hi = mid - 1;
+        }
+      }
+      skillsForPrompt = skillsForPrompt.slice(0, lo);
+      truncated = true;
+    }
+  } else {
+    ({ skillsForPrompt, truncated, compact } = applySkillsPromptLimits({
+      skills: promptSkills,
+      config: params.config,
+    }));
+    if (!fitsFull(skillsForPrompt) && fitsCompact(skillsForPrompt)) {
+      compact = true;
+    }
+  }
+
+  const truncationNote = truncated
+    ? `⚠️ Skills truncated: included ${skillsForPrompt.length} of ${total}${compact ? " (compact format, descriptions omitted)" : ""}. Run \`openclaw skills check\` to audit.`
+    : compact
+      ? `⚠️ Skills catalog using compact format (descriptions omitted). Run \`openclaw skills check\` to audit.`
+      : "";
+  const promptBody = compact
+    ? formatSkillsCompact(skillsForPrompt)
+    : formatSkillsForPrompt(skillsForPrompt);
+  return [truncationNote, promptBody].filter(Boolean).join("\n");
+}
+
 export function buildWorkspaceSkillSnapshot(
   workspaceDir: string,
   opts?: WorkspaceSkillBuildOptions & { snapshotVersion?: number },
@@ -643,6 +703,7 @@ type WorkspaceSkillBuildOptions = {
   managedSkillsDir?: string;
   bundledSkillsDir?: string;
   entries?: SkillEntry[];
+  promptMode?: SkillsPromptMode;
   /** If provided, only include skills with these names */
   skillFilter?: string[];
   eligibility?: SkillEligibilityContext;
@@ -668,24 +729,13 @@ function resolveWorkspaceSkillPromptState(
   );
   const remoteNote = opts?.eligibility?.remote?.note?.trim();
   const resolvedSkills = promptEntries.map((entry) => entry.skill);
-  // Derive prompt-facing skills with compacted paths (e.g. ~/...) once.
-  // Budget checks and final render both use this same representation so the
-  // tier decision is based on the exact strings that end up in the prompt.
-  // resolvedSkills keeps canonical paths for snapshot / runtime consumers.
-  const promptSkills = compactSkillPaths(resolvedSkills);
-  const { skillsForPrompt, truncated, compact } = applySkillsPromptLimits({
-    skills: promptSkills,
-    config: opts?.config,
-  });
-  const truncationNote = truncated
-    ? `⚠️ Skills truncated: included ${skillsForPrompt.length} of ${resolvedSkills.length}${compact ? " (compact format, descriptions omitted)" : ""}. Run \`openclaw skills check\` to audit.`
-    : compact
-      ? `⚠️ Skills catalog using compact format (descriptions omitted). Run \`openclaw skills check\` to audit.`
-      : "";
   const prompt = [
     remoteNote,
-    truncationNote,
-    compact ? formatSkillsCompact(skillsForPrompt) : formatSkillsForPrompt(skillsForPrompt),
+    renderSkillsPrompt({
+      skills: resolvedSkills,
+      config: opts?.config,
+      promptMode: opts?.promptMode,
+    }),
   ]
     .filter(Boolean)
     .join("\n");
@@ -697,19 +747,35 @@ export function resolveSkillsPromptForRun(params: {
   entries?: SkillEntry[];
   config?: OpenClawConfig;
   workspaceDir: string;
+  promptMode?: SkillsPromptMode;
 }): string {
   const snapshotPrompt = params.skillsSnapshot?.prompt?.trim();
-  if (snapshotPrompt) {
+  if (params.promptMode === "off") {
+    return "";
+  }
+  if (
+    params.skillsSnapshot?.resolvedSkills &&
+    params.skillsSnapshot.resolvedSkills.length > 0 &&
+    ((params.promptMode ?? "auto") !== "auto" || !snapshotPrompt)
+  ) {
+    return renderSkillsPrompt({
+      skills: params.skillsSnapshot.resolvedSkills,
+      config: params.config,
+      promptMode: params.promptMode,
+    });
+  }
+  if (snapshotPrompt && (params.promptMode ?? "auto") === "auto") {
     return snapshotPrompt;
   }
   if (params.entries && params.entries.length > 0) {
     const prompt = buildWorkspaceSkillsPrompt(params.workspaceDir, {
       entries: params.entries,
       config: params.config,
+      promptMode: params.promptMode,
     });
     return prompt.trim() ? prompt : "";
   }
-  return "";
+  return snapshotPrompt ?? "";
 }
 
 export function loadWorkspaceSkillEntries(

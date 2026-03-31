@@ -18,7 +18,7 @@ import { detectImageReferences, loadImageFromRef } from "../pi-embedded-runner/r
 import type { SandboxFsBridge } from "../sandbox/fs-bridge.js";
 import { detectRuntimeShell } from "../shell-utils.js";
 import { buildSystemPromptParams } from "../system-prompt-params.js";
-import { buildAgentSystemPrompt } from "../system-prompt.js";
+import { buildAgentSystemPrompt, type PromptMode } from "../system-prompt.js";
 import { sanitizeImageBlocks } from "../tool-images.js";
 export { buildCliSupervisorScopeKey, resolveCliNoOutputTimeoutMs } from "./reliability.js";
 
@@ -32,6 +32,7 @@ export function buildSystemPrompt(params: {
   config?: OpenClawConfig;
   defaultThinkLevel?: ThinkLevel;
   extraSystemPrompt?: string;
+  systemPromptMode?: PromptMode;
   ownerNumbers?: string[];
   heartbeatPrompt?: string;
   docsPath?: string;
@@ -72,6 +73,7 @@ export function buildSystemPrompt(params: {
     reasoningTagHint: false,
     heartbeatPrompt: params.heartbeatPrompt,
     docsPath: params.docsPath,
+    promptMode: params.systemPromptMode,
     acpEnabled: params.config?.acp?.enabled !== false,
     runtimeInfo,
     toolNames: params.tools.map((tool) => tool.name),

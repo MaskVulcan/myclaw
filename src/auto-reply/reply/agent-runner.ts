@@ -60,6 +60,7 @@ import {
 import { createReplyMediaPathNormalizer } from "./reply-media-paths.js";
 import { createReplyToModeFilterForChannel, resolveReplyToMode } from "./reply-threading.js";
 import { incrementRunCompactionCount, persistRunSessionUsage } from "./session-run-accounting.js";
+import { maybeHandleVirtualForegroundTaskMessage } from "./task-aware-routing.js";
 import { createTypingSignaler } from "./typing-mode.js";
 import type { TypingController } from "./typing.js";
 
@@ -251,6 +252,23 @@ export async function runReplyAgent(params: {
     await touchActiveSessionEntry();
     typing.cleanup();
     return undefined;
+  }
+
+  const taskAwareReply = await maybeHandleVirtualForegroundTaskMessage({
+    commandBody,
+    followupRun,
+    sessionCtx,
+    sessionKey,
+    sessionEntry: activeSessionEntry,
+    sessionStore: activeSessionStore,
+    storePath,
+    isHeartbeat,
+  });
+  if (taskAwareReply) {
+    typing.markRunComplete();
+    typing.markDispatchIdle();
+    blockReplyPipeline?.stop();
+    return finalizeWithFollowup(taskAwareReply, queueKey, queuedRunFollowupTurn);
   }
 
   await typingSignals.signalRunStart();

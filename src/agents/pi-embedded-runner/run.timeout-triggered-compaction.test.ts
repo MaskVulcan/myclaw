@@ -152,6 +152,28 @@ describe("timeout-triggered compaction", () => {
     );
   });
 
+  it("forwards prompt and bootstrap controls into runEmbeddedAttempt", async () => {
+    mockedRunEmbeddedAttempt.mockResolvedValueOnce(makeAttemptResult({ promptError: null }));
+
+    await runEmbeddedPiAgent({
+      ...overflowBaseRunParams,
+      systemPromptMode: "none",
+      skillsPromptMode: "off",
+      bootstrapContextMode: "lightweight",
+      bootstrapContextRunKind: "default",
+    });
+
+    expect(mockedRunEmbeddedAttempt).toHaveBeenCalledTimes(1);
+    expect(mockedRunEmbeddedAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        systemPromptMode: "none",
+        skillsPromptMode: "off",
+        bootstrapContextMode: "lightweight",
+        bootstrapContextRunKind: "default",
+      }),
+    );
+  });
+
   it("falls through to normal handling when timeout compaction fails", async () => {
     // Timeout with high prompt usage
     mockedRunEmbeddedAttempt.mockResolvedValueOnce(

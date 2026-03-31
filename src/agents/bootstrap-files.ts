@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import type { OpenClawConfig } from "../config/config.js";
 import { getOrLoadBootstrapFiles } from "./bootstrap-cache.js";
 import { applyBootstrapHookOverrides } from "./bootstrap-hooks.js";
@@ -10,11 +11,51 @@ import {
 import {
   filterBootstrapFilesForSession,
   loadWorkspaceBootstrapFiles,
+  DEFAULT_BOOTSTRAP_FILENAME,
   type WorkspaceBootstrapFile,
 } from "./workspace.js";
 
 export type BootstrapContextMode = "full" | "lightweight";
 export type BootstrapContextRunKind = "default" | "heartbeat" | "cron";
+const ESTABLISHED_SESSION_TAIL_BYTES = 64 * 1024;
+
+async function shouldSuppressBootstrapForSession(sessionFile?: string): Promise<boolean> {
+  const filePath = sessionFile?.trim();
+  if (!filePath) {
+    return false;
+  }
+
+  let handle: fs.FileHandle | undefined;
+  try {
+    handle = await fs.open(filePath, "r");
+    const stat = await handle.stat();
+    if (stat.size <= 0) {
+      return false;
+    }
+
+    const bytesToRead = Math.min(stat.size, ESTABLISHED_SESSION_TAIL_BYTES);
+    const buffer = Buffer.alloc(bytesToRead);
+    await handle.read(buffer, 0, bytesToRead, stat.size - bytesToRead);
+
+    let tail = buffer.toString("utf-8");
+    if (bytesToRead < stat.size) {
+      const firstNewline = tail.indexOf("\n");
+      tail = firstNewline === -1 ? "" : tail.slice(firstNewline + 1);
+    }
+
+    if (!tail.includes('"type":"message"') || !tail.includes('"role":"assistant"')) {
+      return false;
+    }
+
+    return tail
+      .split("\n")
+      .some((line) => line.includes('"type":"message"') && line.includes('"role":"assistant"'));
+  } catch {
+    return false;
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+}
 
 export function makeBootstrapWarn(params: {
   sessionLabel: string;
@@ -66,6 +107,7 @@ export async function resolveBootstrapFilesForRun(params: {
   config?: OpenClawConfig;
   sessionKey?: string;
   sessionId?: string;
+  sessionFile?: string;
   agentId?: string;
   warn?: (message: string) => void;
   contextMode?: BootstrapContextMode;
@@ -92,7 +134,14 @@ export async function resolveBootstrapFilesForRun(params: {
     sessionId: params.sessionId,
     agentId: params.agentId,
   });
-  return sanitizeBootstrapFiles(updated, params.warn);
+  const sanitized = sanitizeBootstrapFiles(updated, params.warn);
+  if (
+    sanitized.some((file) => file.name === DEFAULT_BOOTSTRAP_FILENAME) &&
+    (await shouldSuppressBootstrapForSession(params.sessionFile))
+  ) {
+    return sanitized.filter((file) => file.name !== DEFAULT_BOOTSTRAP_FILENAME);
+  }
+  return sanitized;
 }
 
 export async function resolveBootstrapContextForRun(params: {
@@ -100,6 +149,7 @@ export async function resolveBootstrapContextForRun(params: {
   config?: OpenClawConfig;
   sessionKey?: string;
   sessionId?: string;
+  sessionFile?: string;
   agentId?: string;
   warn?: (message: string) => void;
   contextMode?: BootstrapContextMode;

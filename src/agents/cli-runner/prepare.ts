@@ -80,6 +80,7 @@ export async function prepareCliRunContext(
     sessionKey: params.sessionKey,
     sessionId: params.sessionId,
     warn: makeBootstrapWarn({ sessionLabel, warn: (message) => cliBackendLog.warn(message) }),
+    contextMode: params.bootstrapContextMode,
   });
   const bootstrapMaxChars = resolveBootstrapMaxChars(params.config);
   const bootstrapTotalMaxChars = resolveBootstrapTotalMaxChars(params.config);
@@ -118,6 +119,7 @@ export async function prepareCliRunContext(
     config: params.config,
     defaultThinkLevel: params.thinkLevel,
     extraSystemPrompt,
+    systemPromptMode: params.systemPromptMode,
     ownerNumbers: params.ownerNumbers,
     heartbeatPrompt,
     docsPath: docsPath ?? undefined,

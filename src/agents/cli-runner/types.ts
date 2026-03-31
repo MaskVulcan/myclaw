@@ -5,6 +5,7 @@ import type { CliSessionBinding } from "../../config/sessions.js";
 import type { SessionSystemPromptReport } from "../../config/sessions/types.js";
 import type { CliBackendConfig } from "../../config/types.js";
 import type { ResolvedCliBackend } from "../cli-backends.js";
+import type { PromptMode } from "../system-prompt.js";
 
 export type RunCliAgentParams = {
   sessionId: string;
@@ -20,6 +21,8 @@ export type RunCliAgentParams = {
   timeoutMs: number;
   runId: string;
   extraSystemPrompt?: string;
+  systemPromptMode?: PromptMode;
+  bootstrapContextMode?: "full" | "lightweight";
   streamParams?: import("../command/types.js").AgentStreamParams;
   ownerNumbers?: string[];
   cliSessionId?: string;

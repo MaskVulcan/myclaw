@@ -117,6 +117,46 @@ export type CliBackendConfig = {
   };
 };
 
+export type AgentSystemPromptMode = "full" | "minimal" | "none";
+
+export type AgentSkillsPromptMode = "auto" | "compact" | "off";
+
+export type AgentBootstrapContextMode = "full" | "lightweight";
+
+export type AgentStageRunConfig = {
+  /** Override model for this stage (provider/model or configured alias). */
+  model?: string;
+  /** Override thinking level for this stage. */
+  thinkLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "adaptive";
+  /** Override reasoning stream behavior for this stage. */
+  reasoningLevel?: "off" | "on" | "stream";
+  /** Override provider-specific fast mode for this stage. */
+  fastMode?: boolean;
+  /** Controls which system prompt sections are injected for this stage. */
+  systemPromptMode?: AgentSystemPromptMode;
+  /** Controls skill prompt injection for this stage. */
+  skillsPromptMode?: AgentSkillsPromptMode;
+  /** Controls bootstrap workspace context injection for this stage. */
+  bootstrapContextMode?: AgentBootstrapContextMode;
+  /** Disable tools during this stage. */
+  disableTools?: boolean;
+  /** Whether this stage should keep the run-level extra system prompt. */
+  inheritExtraSystemPrompt?: boolean;
+  /** Extra system prompt instructions appended for this stage only. */
+  extraSystemPrompt?: string;
+};
+
+export type AgentMultiStageRoutingConfig = {
+  /** Enable fast-pass routing before the normal high-quality run. */
+  enabled?: boolean;
+  /** Skip fast pass when inbound images are present. Default: true. */
+  skipImages?: boolean;
+  /** Fast, low-context first pass. */
+  fastPass?: AgentStageRunConfig;
+  /** Richer fallback pass used after escalation. */
+  escalationPass?: AgentStageRunConfig;
+};
+
 export type AgentDefaultsConfig = {
   /** Primary model and fallbacks (provider/model). Accepts string or {primary,fallbacks}. */
   model?: AgentModelConfig;
@@ -169,6 +209,8 @@ export type AgentDefaultsConfig = {
   contextTokens?: number;
   /** Optional CLI backends for text-only fallback (claude-cli, etc.). */
   cliBackends?: Record<string, CliBackendConfig>;
+  /** Optional staged routing: fast pass first, stronger pass on escalation. */
+  multiStageRouting?: AgentMultiStageRoutingConfig;
   /** Opt-in: prune old tool results from the LLM context to reduce token usage. */
   contextPruning?: AgentContextPruningConfig;
   /** Compaction tuning and pre-compaction memory flush behavior. */

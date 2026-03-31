@@ -1,4 +1,6 @@
 import { resolveRunModelFallbacksOverride } from "../../agents/agent-scope.js";
+import { buildModelAliasIndex, resolveModelRefFromString } from "../../agents/model-selection.js";
+import type { PromptMode } from "../../agents/system-prompt.js";
 import { getChannelPlugin } from "../../channels/plugins/index.js";
 import type { ChannelId, ChannelThreadingToolContext } from "../../channels/plugins/types.js";
 import { normalizeAnyChannelId, normalizeChannelId } from "../../channels/registry.js";
@@ -14,6 +16,149 @@ import { resolveOriginMessageProvider, resolveOriginMessageTo } from "./origin-r
 import type { FollowupRun } from "./queue.js";
 
 const BUN_FETCH_SOCKET_ERROR_RE = /socket connection was closed unexpectedly/i;
+
+type SkillsPromptMode = "auto" | "compact" | "off";
+
+type BootstrapContextMode = "full" | "lightweight";
+
+export const MULTI_STAGE_ESCALATION_MARKER = "[[openclaw_stage2]]";
+
+export type EmbeddedRunStagePlan = {
+  provider: string;
+  model: string;
+  explicitModel: boolean;
+  thinkLevel?: FollowupRun["run"]["thinkLevel"];
+  fastMode?: boolean;
+  reasoningLevel?: FollowupRun["run"]["reasoningLevel"];
+  systemPromptMode?: PromptMode;
+  skillsPromptMode?: SkillsPromptMode;
+  bootstrapContextMode?: BootstrapContextMode;
+  disableTools?: boolean;
+  inheritExtraSystemPrompt?: boolean;
+  extraSystemPrompt?: string;
+};
+
+export type MultiStageRoutingPlan = {
+  escalationMarker: string;
+  fastPass: EmbeddedRunStagePlan;
+  escalationPass: EmbeddedRunStagePlan;
+};
+
+function resolveStageModelRef(params: { rawModel: string | undefined; run: FollowupRun["run"] }): {
+  provider: string;
+  model: string;
+  explicitModel: boolean;
+} {
+  const rawModel = params.rawModel?.trim();
+  if (!rawModel) {
+    return {
+      provider: params.run.provider,
+      model: params.run.model,
+      explicitModel: false,
+    };
+  }
+  const aliasIndex = params.run.config
+    ? buildModelAliasIndex({
+        cfg: params.run.config,
+        defaultProvider: params.run.provider,
+      })
+    : undefined;
+  const resolved = resolveModelRefFromString({
+    raw: rawModel,
+    defaultProvider: params.run.provider,
+    aliasIndex,
+  });
+  if (!resolved) {
+    return {
+      provider: params.run.provider,
+      model: params.run.model,
+      explicitModel: false,
+    };
+  }
+  return {
+    provider: resolved.ref.provider,
+    model: resolved.ref.model,
+    explicitModel: true,
+  };
+}
+
+function joinSystemPromptSegments(...segments: Array<string | undefined>): string | undefined {
+  const joined = segments
+    .map((segment) => segment?.trim())
+    .filter(Boolean)
+    .join("\n\n");
+  return joined || undefined;
+}
+
+function buildFastPassInstruction(marker: string): string {
+  return [
+    "Fast-pass mode.",
+    "Answer directly only when the request is simple and you can respond confidently without tools, repo inspection, or long reasoning.",
+    "If you need file reads, tool use, broader context, careful deliberation, or you are uncertain, reply with the exact text below and nothing else.",
+    marker,
+  ].join("\n");
+}
+
+export function resolveMultiStageRoutingPlan(params: {
+  run: FollowupRun["run"];
+  hasImages?: boolean;
+  isHeartbeat?: boolean;
+}): MultiStageRoutingPlan | null {
+  const routing = params.run.config?.agents?.defaults?.multiStageRouting;
+  if (!routing?.enabled) {
+    return null;
+  }
+  if (params.isHeartbeat) {
+    return null;
+  }
+  if (params.hasImages && routing.skipImages !== false) {
+    return null;
+  }
+
+  const fastPassModel = resolveStageModelRef({
+    rawModel: routing.fastPass?.model,
+    run: params.run,
+  });
+  const escalationPassModel = resolveStageModelRef({
+    rawModel: routing.escalationPass?.model,
+    run: params.run,
+  });
+
+  return {
+    escalationMarker: MULTI_STAGE_ESCALATION_MARKER,
+    fastPass: {
+      provider: fastPassModel.provider,
+      model: fastPassModel.model,
+      explicitModel: fastPassModel.explicitModel,
+      thinkLevel: routing.fastPass?.thinkLevel ?? "low",
+      fastMode: routing.fastPass?.fastMode ?? true,
+      reasoningLevel: routing.fastPass?.reasoningLevel ?? "off",
+      systemPromptMode: routing.fastPass?.systemPromptMode ?? "none",
+      skillsPromptMode: routing.fastPass?.skillsPromptMode ?? "off",
+      bootstrapContextMode: routing.fastPass?.bootstrapContextMode ?? "lightweight",
+      disableTools: routing.fastPass?.disableTools ?? true,
+      inheritExtraSystemPrompt: routing.fastPass?.inheritExtraSystemPrompt ?? false,
+      extraSystemPrompt: joinSystemPromptSegments(
+        routing.fastPass?.extraSystemPrompt,
+        buildFastPassInstruction(MULTI_STAGE_ESCALATION_MARKER),
+      ),
+    },
+    escalationPass: {
+      provider: escalationPassModel.provider,
+      model: escalationPassModel.model,
+      explicitModel: escalationPassModel.explicitModel,
+      thinkLevel: routing.escalationPass?.thinkLevel ?? params.run.thinkLevel,
+      fastMode: routing.escalationPass?.fastMode ?? params.run.fastMode,
+      reasoningLevel: routing.escalationPass?.reasoningLevel ?? params.run.reasoningLevel,
+      systemPromptMode: routing.escalationPass?.systemPromptMode ?? "full",
+      skillsPromptMode: routing.escalationPass?.skillsPromptMode ?? "auto",
+      bootstrapContextMode: routing.escalationPass?.bootstrapContextMode ?? "full",
+      disableTools: routing.escalationPass?.disableTools ?? false,
+      inheritExtraSystemPrompt: routing.escalationPass?.inheritExtraSystemPrompt ?? true,
+      extraSystemPrompt: routing.escalationPass?.extraSystemPrompt?.trim() || undefined,
+    },
+  };
+}
 
 /**
  * Build provider-specific threading context for tool auto-injection.
@@ -131,6 +276,7 @@ export function buildEmbeddedRunBaseParams(params: {
     model: params.model,
     ...params.authProfile,
     thinkLevel: params.run.thinkLevel,
+    fastMode: params.run.fastMode,
     verboseLevel: params.run.verboseLevel,
     reasoningLevel: params.run.reasoningLevel,
     execOverrides: params.run.execOverrides,

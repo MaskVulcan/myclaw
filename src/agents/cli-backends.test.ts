@@ -76,16 +76,9 @@ beforeEach(() => {
           "workspace-write",
           "--skip-git-repo-check",
         ],
-        resumeArgs: [
-          "exec",
-          "resume",
-          "{sessionId}",
-          "--color",
-          "never",
-          "--sandbox",
-          "workspace-write",
-          "--skip-git-repo-check",
-        ],
+        resumeArgs: ["exec", "resume", "{sessionId}", "--json", "--skip-git-repo-check"],
+        output: "jsonl",
+        resumeOutput: "jsonl",
         reliability: {
           watchdog: {
             fresh: {
@@ -121,10 +114,12 @@ beforeEach(() => {
 });
 
 describe("resolveCliBackendConfig reliability merge", () => {
-  it("defaults codex-cli to workspace-write for fresh and resume runs", () => {
+  it("keeps codex-cli fresh runs on workspace-write and uses JSON resume args for newer codex versions", () => {
     const resolved = resolveCliBackendConfig("codex-cli");
 
     expect(resolved).not.toBeNull();
+    expect(resolved?.config.output).toBe("jsonl");
+    expect(resolved?.config.resumeOutput).toBe("jsonl");
     expect(resolved?.config.args).toEqual([
       "exec",
       "--json",
@@ -138,10 +133,7 @@ describe("resolveCliBackendConfig reliability merge", () => {
       "exec",
       "resume",
       "{sessionId}",
-      "--color",
-      "never",
-      "--sandbox",
-      "workspace-write",
+      "--json",
       "--skip-git-repo-check",
     ]);
   });

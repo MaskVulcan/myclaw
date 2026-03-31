@@ -327,6 +327,7 @@ export async function runEmbeddedAttempt(
       entries: shouldLoadSkillEntries ? skillEntries : undefined,
       config: params.config,
       workspaceDir: effectiveWorkspace,
+      promptMode: params.skillsPromptMode ?? (params.sessionKey ? "compact" : "auto"),
     });
 
     const sessionLabel = params.sessionKey ?? params.sessionId;
@@ -336,6 +337,7 @@ export async function runEmbeddedAttempt(
         config: params.config,
         sessionKey: params.sessionKey,
         sessionId: params.sessionId,
+        sessionFile: params.sessionFile,
         warn: makeBootstrapWarn({ sessionLabel, warn: (message) => log.warn(message) }),
         contextMode: params.bootstrapContextMode,
         runKind: params.bootstrapContextRunKind,
@@ -577,7 +579,7 @@ export async function runEmbeddedAttempt(
       },
     });
     const isDefaultAgent = sessionAgentId === defaultAgentId;
-    const promptMode = resolvePromptModeForSession(params.sessionKey);
+    const promptMode = params.systemPromptMode ?? resolvePromptModeForSession(params.sessionKey);
     const docsPath = await resolveOpenClawDocsPath({
       workspaceDir: effectiveWorkspace,
       argv1: process.argv[1],

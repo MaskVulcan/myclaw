@@ -38,22 +38,63 @@ export function resolveLiveSessionModelSelection(params: {
     return null;
   }
   const agentId = params.agentId?.trim();
+  const storePath = resolveStorePath(cfg.session?.store, {
+    agentId,
+  });
+  const entry = loadSessionStore(storePath, { skipCache: true })[sessionKey];
+  const persistedSelection = resolvePersistedLiveSessionModelSelection({
+    cfg,
+    sessionKey,
+    agentId,
+    defaultProvider: params.defaultProvider,
+    defaultModel: params.defaultModel,
+  });
+  if (persistedSelection) {
+    return persistedSelection;
+  }
   const defaultModelRef = agentId
     ? resolveDefaultModelForAgent({
         cfg,
         agentId,
       })
     : { provider: params.defaultProvider, model: params.defaultModel };
-  const storePath = resolveStorePath(cfg.session?.store, {
-    agentId,
-  });
-  const entry = loadSessionStore(storePath, { skipCache: true })[sessionKey];
-  const provider = entry?.providerOverride?.trim() || defaultModelRef.provider;
-  const model = entry?.modelOverride?.trim() || defaultModelRef.model;
+  const provider = defaultModelRef.provider;
+  const model = defaultModelRef.model;
   const authProfileId = entry?.authProfileOverride?.trim() || undefined;
   return {
     provider,
     model,
+    authProfileId,
+    authProfileIdSource: authProfileId ? entry?.authProfileOverrideSource : undefined,
+  };
+}
+
+export function resolvePersistedLiveSessionModelSelection(params: {
+  cfg?: { session?: { store?: string } } | undefined;
+  sessionKey?: string;
+  agentId?: string;
+  defaultProvider: string;
+  defaultModel: string;
+}): LiveSessionModelSelection | null {
+  const sessionKey = params.sessionKey?.trim();
+  const cfg = params.cfg;
+  if (!cfg || !sessionKey) {
+    return null;
+  }
+  const agentId = params.agentId?.trim();
+  const storePath = resolveStorePath(cfg.session?.store, {
+    agentId,
+  });
+  const entry = loadSessionStore(storePath, { skipCache: true })[sessionKey];
+  const providerOverride = entry?.providerOverride?.trim() || undefined;
+  const modelOverride = entry?.modelOverride?.trim() || undefined;
+  const authProfileId = entry?.authProfileOverride?.trim() || undefined;
+  if (!providerOverride && !modelOverride && !authProfileId) {
+    return null;
+  }
+  return {
+    provider: providerOverride || params.defaultProvider,
+    model: modelOverride || params.defaultModel,
     authProfileId,
     authProfileIdSource: authProfileId ? entry?.authProfileOverrideSource : undefined,
   };

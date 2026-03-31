@@ -188,13 +188,15 @@ OpenClaw 自带 `claude-cli` 的默认值：
 OpenClaw 也自带 `codex-cli` 的默认值：
 
 - `command: "codex"`
-- `args: ["exec","--json","--color","never","--sandbox","read-only","--skip-git-repo-check"]`
-- `resumeArgs: ["exec","resume","{sessionId}","--color","never","--sandbox","read-only","--skip-git-repo-check"]`
+- `args: ["exec","--json","--color","never","--sandbox","workspace-write","--skip-git-repo-check"]`
+- `resumeArgs: ["exec","resume","{sessionId}","--json","--skip-git-repo-check"]`
 - `output: "jsonl"`
-- `resumeOutput: "text"`
+- `resumeOutput: "jsonl"`
 - `modelArg: "--model"`
 - `imageArg: "--image"`
 - `sessionMode: "existing"`
+
+当前版本的 Codex CLI 在 `exec resume` 上接受 `--json`，但会拒绝只适用于 fresh run 的参数（例如 `--color`、`--sandbox`），所以 OpenClaw 对恢复会话使用了更窄的一组默认参数。
 
 仅在需要时覆盖（常见：绝对 `command` 路径）。
 
@@ -203,11 +205,11 @@ OpenClaw 也自带 `codex-cli` 的默认值：
 - **无 OpenClaw 工具**（CLI 后端永远不会收到工具调用）。某些 CLI 可能仍会运行它们自己的智能体工具。
 - **无流式传输**（CLI 输出被收集后返回）。
 - **结构化输出**取决于 CLI 的 JSON 格式。
-- **Codex CLI 会话**通过文本输出恢复（无 JSONL），这比初始的 `--json` 运行结构化程度低。OpenClaw 会话仍然正常工作。
+- **Codex CLI 会话**现在可以继续走 JSONL 恢复，但不同版本的 `resume` 参数面不完全一致；如果你使用较老或较新的 Codex CLI，优先先跑一遍 `codex exec resume --help` 核对。
 
 ## 故障排除
 
 - **找不到 CLI**：将 `command` 设置为完整路径。
 - **模型名称错误**：使用 `modelAliases` 将 `provider/model` 映射到 CLI 模型。
-- **无会话连续性**：确保设置了 `sessionArg` 且 `sessionMode` 不是 `none`（Codex CLI 目前无法使用 JSON 输出恢复）。
+- **无会话连续性**：确保设置了 `sessionArg` 且 `sessionMode` 不是 `none`；如果 Codex CLI 升级后恢复参数再次变化，按 `codex exec resume --help` 同步调整 `resumeArgs`。
 - **图像被忽略**：设置 `imageArg`（并验证 CLI 支持文件路径）。

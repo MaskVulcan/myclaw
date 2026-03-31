@@ -1,20 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { FollowupRun } from "./queue.js";
 
-const hoisted = vi.hoisted(() => {
-  const resolveRunModelFallbacksOverrideMock = vi.fn();
-  return { resolveRunModelFallbacksOverrideMock };
-});
-
-vi.mock("../../agents/agent-scope.js", () => ({
-  resolveRunModelFallbacksOverride: (...args: unknown[]) =>
-    hoisted.resolveRunModelFallbacksOverrideMock(...args),
-}));
-
 const {
+  MULTI_STAGE_ESCALATION_MARKER,
   buildThreadingToolContext,
   buildEmbeddedRunBaseParams,
   buildEmbeddedRunContexts,
+  resolveMultiStageRoutingPlan,
   resolveModelFallbackOptions,
   resolveProviderScopedAuthProfile,
 } = await import("./agent-runner-utils.js");
@@ -44,46 +36,47 @@ function makeRun(overrides: Partial<FollowupRun["run"]> = {}): FollowupRun["run"
 }
 
 describe("agent-runner-utils", () => {
-  beforeEach(() => {
-    hoisted.resolveRunModelFallbacksOverrideMock.mockClear();
-  });
-
   it("resolves model fallback options from run context", () => {
-    hoisted.resolveRunModelFallbacksOverrideMock.mockReturnValue(["fallback-model"]);
-    const run = makeRun();
+    const run = makeRun({
+      config: {
+        agents: {
+          list: [
+            {
+              id: "agent-1",
+              model: {
+                primary: "openai/gpt-4.1",
+                fallbacks: ["openai/gpt-4.1-mini"],
+              },
+            },
+          ],
+        },
+      },
+    });
 
     const resolved = resolveModelFallbackOptions(run);
 
-    expect(hoisted.resolveRunModelFallbacksOverrideMock).toHaveBeenCalledWith({
-      cfg: run.config,
-      agentId: run.agentId,
-      sessionKey: run.sessionKey,
-    });
     expect(resolved).toEqual({
       cfg: run.config,
       provider: run.provider,
       model: run.model,
       agentDir: run.agentDir,
-      fallbacksOverride: ["fallback-model"],
+      fallbacksOverride: ["openai/gpt-4.1-mini"],
     });
   });
 
-  it("passes through missing agentId for helper-based fallback resolution", () => {
-    hoisted.resolveRunModelFallbacksOverrideMock.mockReturnValue(["fallback-model"]);
-    const run = makeRun({ agentId: undefined });
+  it("allows helper-based fallback resolution when agentId is missing", () => {
+    const run = makeRun({
+      agentId: undefined,
+      sessionKey: undefined,
+    });
 
     const resolved = resolveModelFallbackOptions(run);
 
-    expect(hoisted.resolveRunModelFallbacksOverrideMock).toHaveBeenCalledWith({
-      cfg: run.config,
-      agentId: undefined,
-      sessionKey: run.sessionKey,
-    });
-    expect(resolved.fallbacksOverride).toEqual(["fallback-model"]);
+    expect(resolved.fallbacksOverride).toBeUndefined();
   });
 
   it("builds embedded run base params with auth profile and run metadata", () => {
-    const run = makeRun({ enforceFinalTag: true });
+    const run = makeRun({ enforceFinalTag: true, fastMode: true });
     const authProfile = resolveProviderScopedAuthProfile({
       provider: "openai",
       primaryProvider: "openai",
@@ -112,6 +105,7 @@ describe("agent-runner-utils", () => {
       authProfileId: "profile-openai",
       authProfileIdSource: "user",
       thinkLevel: run.thinkLevel,
+      fastMode: run.fastMode,
       verboseLevel: run.verboseLevel,
       reasoningLevel: run.reasoningLevel,
       execOverrides: run.execOverrides,
@@ -213,5 +207,88 @@ describe("agent-runner-utils", () => {
       currentChannelId: "channel:123456789012345678",
       currentMessageId: "msg-9",
     });
+  });
+
+  it("resolves a staged routing plan with lean fast-pass defaults", () => {
+    const run = makeRun({
+      provider: "codex-vip",
+      model: "gpt-5.4",
+      thinkLevel: "medium",
+      fastMode: false,
+      config: {
+        agents: {
+          defaults: {
+            multiStageRouting: {
+              enabled: true,
+              fastPass: {
+                model: "codex-vip/gpt-5.2",
+              },
+              escalationPass: {
+                model: "codex-vip/gpt-5.4",
+                thinkLevel: "xhigh",
+                fastMode: false,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const plan = resolveMultiStageRoutingPlan({
+      run,
+      hasImages: false,
+      isHeartbeat: false,
+    });
+
+    expect(plan).toMatchObject({
+      escalationMarker: MULTI_STAGE_ESCALATION_MARKER,
+      fastPass: {
+        provider: "codex-vip",
+        model: "gpt-5.2",
+        explicitModel: true,
+        thinkLevel: "low",
+        fastMode: true,
+        systemPromptMode: "none",
+        skillsPromptMode: "off",
+        bootstrapContextMode: "lightweight",
+        disableTools: true,
+        inheritExtraSystemPrompt: false,
+      },
+      escalationPass: {
+        provider: "codex-vip",
+        model: "gpt-5.4",
+        explicitModel: true,
+        thinkLevel: "xhigh",
+        fastMode: false,
+        systemPromptMode: "full",
+        skillsPromptMode: "auto",
+        bootstrapContextMode: "full",
+        disableTools: false,
+        inheritExtraSystemPrompt: true,
+      },
+    });
+    expect(plan?.fastPass.extraSystemPrompt).toContain(MULTI_STAGE_ESCALATION_MARKER);
+  });
+
+  it("skips staged routing when images are present", () => {
+    const run = makeRun({
+      config: {
+        agents: {
+          defaults: {
+            multiStageRouting: {
+              enabled: true,
+            },
+          },
+        },
+      },
+    });
+
+    expect(
+      resolveMultiStageRoutingPlan({
+        run,
+        hasImages: true,
+        isHeartbeat: false,
+      }),
+    ).toBeNull();
   });
 });

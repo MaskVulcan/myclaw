@@ -6,6 +6,7 @@ import {
   inferUniqueProviderFromConfiguredModels,
   parseModelRef,
   buildModelAliasIndex,
+  isCliProvider,
   normalizeModelSelection,
   normalizeProviderId,
   normalizeProviderIdForAuth,
@@ -117,6 +118,15 @@ describe("model-selection", () => {
       expect(normalizeProviderId("bedrock")).toBe("amazon-bedrock");
       expect(normalizeProviderId("aws-bedrock")).toBe("amazon-bedrock");
       expect(normalizeProviderId("amazon-bedrock")).toBe("amazon-bedrock");
+    });
+  });
+
+  describe("isCliProvider", () => {
+    it("recognizes bundled cli backends without active runtime registration", () => {
+      expect(isCliProvider("claude-cli")).toBe(true);
+      expect(isCliProvider("google-gemini-cli")).toBe(true);
+      expect(isCliProvider("codex-cli")).toBe(true);
+      expect(isCliProvider("anthropic")).toBe(false);
     });
   });
 

@@ -62,6 +62,10 @@ vi.mock("../../runtime.js", async () => {
   };
 });
 
+vi.mock("./task-aware-routing.js", () => ({
+  maybeHandleVirtualForegroundTaskMessage: vi.fn(async () => null),
+}));
+
 vi.mock("./queue.js", async () => {
   const actual = await vi.importActual<typeof import("./queue.js")>("./queue.js");
   return {
@@ -1580,6 +1584,7 @@ describe("runReplyAgent fallback reasoning tags", () => {
     sessionEntry?: SessionEntry;
     sessionKey?: string;
     agentCfgContextTokens?: number;
+    config?: Record<string, unknown>;
   }) {
     const typing = createMockTypingController();
     const sessionCtx = {
@@ -1602,7 +1607,7 @@ describe("runReplyAgent fallback reasoning tags", () => {
         messageProvider: "whatsapp",
         sessionFile: "/tmp/session.jsonl",
         workspaceDir: "/tmp",
-        config: {},
+        config: params?.config ?? {},
         skillsSnapshot: {},
         provider: "anthropic",
         model: "claude",
@@ -1650,8 +1655,8 @@ describe("runReplyAgent fallback reasoning tags", () => {
     });
     runWithModelFallbackMock.mockImplementationOnce(
       async ({ run }: RunWithModelFallbackParams) => ({
-        result: await run("google-gemini-cli", "gemini-3"),
-        provider: "google-gemini-cli",
+        result: await run("google-generative-ai", "gemini-3"),
+        provider: "google-generative-ai",
         model: "gemini-3",
       }),
     );
@@ -1663,6 +1668,18 @@ describe("runReplyAgent fallback reasoning tags", () => {
   });
 
   it("enforces <final> during memory flush on fallback providers", async () => {
+    const memoryState = await import("../../plugins/memory-state.js");
+    const previousMemoryFlushPlanResolver = memoryState.getMemoryFlushPlanResolver();
+    const previousMemoryPromptBuilder = memoryState.getMemoryPromptSectionBuilder();
+    const previousMemoryRuntime = memoryState.getMemoryRuntime();
+    memoryState.registerMemoryFlushPlanResolver(() => ({
+      softThresholdTokens: 4_000,
+      forceFlushTranscriptBytes: Number.POSITIVE_INFINITY,
+      reserveTokensFloor: 20_000,
+      prompt: "Pre-compaction memory flush.",
+      systemPrompt: "Write memory only.",
+      relativePath: "memory/active.md",
+    }));
     runEmbeddedPiAgentMock.mockImplementation(async (params: EmbeddedPiAgentParams) => {
       if (params.prompt?.includes("Pre-compaction memory flush.")) {
         return { payloads: [], meta: {} };
@@ -1675,14 +1692,35 @@ describe("runReplyAgent fallback reasoning tags", () => {
       model: "gemini-3",
     }));
 
-    await createRun({
-      sessionEntry: {
-        sessionId: "session",
-        updatedAt: Date.now(),
-        totalTokens: 1_000_000,
-        compactionCount: 0,
-      },
-    });
+    try {
+      await createRun({
+        config: {
+          agents: {
+            defaults: {
+              compaction: {
+                memoryFlush: {
+                  prompt: "Pre-compaction memory flush.",
+                  systemPrompt: "Write memory only.",
+                },
+              },
+            },
+          },
+        },
+        sessionEntry: {
+          sessionId: "session",
+          updatedAt: Date.now(),
+          totalTokens: 1_000_000,
+          totalTokensFresh: true,
+          compactionCount: 0,
+        },
+      });
+    } finally {
+      memoryState.restoreMemoryPluginState({
+        promptBuilder: previousMemoryPromptBuilder,
+        flushPlanResolver: previousMemoryFlushPlanResolver,
+        runtime: previousMemoryRuntime,
+      });
+    }
 
     const flushCall = runEmbeddedPiAgentMock.mock.calls.find(([params]) =>
       (params as EmbeddedPiAgentParams | undefined)?.prompt?.includes(

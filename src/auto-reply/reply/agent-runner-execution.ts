@@ -7,7 +7,10 @@ import {
 import { resolveBootstrapWarningSignaturesSeen } from "../../agents/bootstrap-budget.js";
 import { runCliAgent } from "../../agents/cli-runner.js";
 import { getCliSessionBinding } from "../../agents/cli-session.js";
-import { LiveSessionModelSwitchError } from "../../agents/live-model-switch.js";
+import {
+  resolvePersistedLiveSessionModelSelection,
+  LiveSessionModelSwitchError,
+} from "../../agents/live-model-switch.js";
 import { runWithModelFallback, isFallbackSummaryError } from "../../agents/model-fallback.js";
 import { isCliProvider } from "../../agents/model-selection.js";
 import {
@@ -30,6 +33,7 @@ import {
 } from "../../config/sessions.js";
 import { logVerbose } from "../../globals.js";
 import { emitAgentEvent, registerAgentRunContext } from "../../infra/agent-events.js";
+import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { defaultRuntime } from "../../runtime.js";
 import {
   isMarkdownCapableMessageChannel,
@@ -48,12 +52,15 @@ import {
 import type { GetReplyOptions, ReplyPayload } from "../types.js";
 import {
   buildEmbeddedRunExecutionParams,
+  resolveMultiStageRoutingPlan,
   resolveModelFallbackOptions,
+  type EmbeddedRunStagePlan,
 } from "./agent-runner-utils.js";
 import { type BlockReplyPipeline } from "./block-reply-pipeline.js";
 import type { FollowupRun } from "./queue.js";
 import { createBlockReplyDeliveryHandler } from "./reply-delivery.js";
 import { createReplyMediaPathNormalizer } from "./reply-media-paths.runtime.js";
+import { extractReplyToTag } from "./reply-tags.js";
 import type { TypingSignaler } from "./typing-mode.js";
 
 export type RuntimeFallbackAttempt = {
@@ -79,6 +86,8 @@ export type AgentRunLoopResult =
       directlySentBlockKeys?: Set<string>;
     }
   | { kind: "final"; payload: ReplyPayload };
+
+const multiStageLog = createSubsystemLogger("gateway/multi-stage-routing");
 
 /**
  * Build a human-friendly rate-limit message from a FallbackSummaryError.
@@ -110,6 +119,121 @@ function isPureTransientRateLimitSummary(err: unknown): boolean {
       return reason === "rate_limit" || reason === "overloaded";
     })
   );
+}
+
+type SessionFileSnapshot = {
+  exists: boolean;
+  contents?: string;
+};
+
+function normalizeEscalationReplyText(text?: string): string {
+  const cleaned = extractReplyToTag(text).cleaned.trim();
+  return cleaned.replace(/\s+/g, " ");
+}
+
+function shouldEscalateStageResult(params: {
+  runResult: Awaited<ReturnType<typeof runEmbeddedPiAgent>>;
+  marker: string;
+}): boolean {
+  const visibleTexts =
+    params.runResult.payloads
+      ?.filter((payload) => !payload.isError && !payload.isReasoning)
+      .map((payload) => normalizeEscalationReplyText(payload.text))
+      .filter(Boolean) ?? [];
+  if (visibleTexts.length === 0) {
+    return true;
+  }
+  return visibleTexts.every((text) => text === params.marker);
+}
+
+function resolveStageLiveModelSelectionOverride(params: {
+  run: FollowupRun["run"];
+  sessionKey?: string;
+  provider: string;
+  model: string;
+}): {
+  provider: string;
+  model: string;
+  authProfileId?: string;
+  authProfileIdSource?: "auto" | "user";
+} | null {
+  const nextSelection = resolvePersistedLiveSessionModelSelection({
+    cfg: params.run.config,
+    sessionKey: params.sessionKey ?? params.run.sessionKey,
+    agentId: params.run.agentId,
+    defaultProvider: params.provider,
+    defaultModel: params.model,
+  });
+  if (!nextSelection) {
+    return null;
+  }
+  if (nextSelection.provider === params.provider && nextSelection.model === params.model) {
+    return null;
+  }
+  return nextSelection;
+}
+
+function applyLiveSelectionToRun(
+  run: FollowupRun["run"],
+  selection: {
+    provider: string;
+    model: string;
+    authProfileId?: string;
+    authProfileIdSource?: "auto" | "user";
+  },
+): void {
+  run.provider = selection.provider;
+  run.model = selection.model;
+  run.authProfileId = selection.authProfileId;
+  run.authProfileIdSource = selection.authProfileId ? selection.authProfileIdSource : undefined;
+}
+
+function resolveEscalationPlanForLiveSelection(params: {
+  plan: EmbeddedRunStagePlan;
+  liveSelection?: {
+    provider: string;
+    model: string;
+    authProfileId?: string;
+    authProfileIdSource?: "auto" | "user";
+  } | null;
+}): EmbeddedRunStagePlan {
+  if (!params.liveSelection) {
+    return params.plan;
+  }
+  if (
+    params.plan.provider === params.liveSelection.provider &&
+    params.plan.model === params.liveSelection.model
+  ) {
+    return params.plan;
+  }
+  return {
+    ...params.plan,
+    provider: params.liveSelection.provider,
+    model: params.liveSelection.model,
+    explicitModel: true,
+  };
+}
+
+async function captureSessionFileSnapshot(sessionFile: string): Promise<SessionFileSnapshot> {
+  try {
+    return {
+      exists: true,
+      contents: await fs.promises.readFile(sessionFile, "utf8"),
+    };
+  } catch {
+    return { exists: false };
+  }
+}
+
+async function restoreSessionFileSnapshot(
+  sessionFile: string,
+  snapshot: SessionFileSnapshot,
+): Promise<void> {
+  if (!snapshot.exists) {
+    await fs.promises.rm(sessionFile, { force: true }).catch(() => {});
+    return;
+  }
+  await fs.promises.writeFile(sessionFile, snapshot.contents ?? "", "utf8");
 }
 
 export async function runAgentTurnWithFallback(params: {
@@ -255,324 +379,569 @@ export async function runAgentTurnWithFallback(params: {
           })
         : undefined;
       const onToolResult = params.opts?.onToolResult;
-      const fallbackResult = await runWithModelFallback({
-        ...resolveModelFallbackOptions(params.followupRun.run),
-        runId,
-        run: (provider, model, runOptions) => {
-          // Notify that model selection is complete (including after fallback).
-          // This allows responsePrefix template interpolation with the actual model.
-          params.opts?.onModelSelected?.({
-            provider,
-            model,
-            thinkLevel: params.followupRun.run.thinkLevel,
-          });
-
-          if (isCliProvider(provider, params.followupRun.run.config)) {
-            const startedAt = Date.now();
-            notifyAgentRunStart();
-            emitAgentEvent({
-              runId,
-              stream: "lifecycle",
-              data: {
-                phase: "start",
-                startedAt,
-              },
-            });
-            const cliSessionBinding = getCliSessionBinding(
-              params.getActiveSessionEntry(),
-              provider,
-            );
-            const authProfileId =
-              provider === params.followupRun.run.provider
-                ? params.followupRun.run.authProfileId
-                : undefined;
-            return (async () => {
-              let lifecycleTerminalEmitted = false;
-              try {
-                const result = await runCliAgent({
-                  sessionId: params.followupRun.run.sessionId,
-                  sessionKey: params.sessionKey,
-                  agentId: params.followupRun.run.agentId,
-                  sessionFile: params.followupRun.run.sessionFile,
-                  workspaceDir: params.followupRun.run.workspaceDir,
-                  config: params.followupRun.run.config,
-                  prompt: params.commandBody,
-                  provider,
-                  model,
-                  thinkLevel: params.followupRun.run.thinkLevel,
-                  timeoutMs: params.followupRun.run.timeoutMs,
-                  runId,
-                  extraSystemPrompt: params.followupRun.run.extraSystemPrompt,
-                  ownerNumbers: params.followupRun.run.ownerNumbers,
-                  cliSessionId: cliSessionBinding?.sessionId,
-                  cliSessionBinding,
-                  authProfileId,
-                  bootstrapPromptWarningSignaturesSeen,
-                  bootstrapPromptWarningSignature:
-                    bootstrapPromptWarningSignaturesSeen[
-                      bootstrapPromptWarningSignaturesSeen.length - 1
-                    ],
-                  images: params.opts?.images,
-                });
-                bootstrapPromptWarningSignaturesSeen = resolveBootstrapWarningSignaturesSeen(
-                  result.meta?.systemPromptReport,
-                );
-
-                // CLI backends don't emit streaming assistant events, so we need to
-                // emit one with the final text so server-chat can populate its buffer
-                // and send the response to TUI/WebSocket clients.
-                const cliText = result.payloads?.[0]?.text?.trim();
-                if (cliText) {
-                  emitAgentEvent({
-                    runId,
-                    stream: "assistant",
-                    data: { text: cliText },
-                  });
-                }
-
-                emitAgentEvent({
-                  runId,
-                  stream: "lifecycle",
-                  data: {
-                    phase: "end",
-                    startedAt,
-                    endedAt: Date.now(),
-                  },
-                });
-                lifecycleTerminalEmitted = true;
-
-                return result;
-              } catch (err) {
-                emitAgentEvent({
-                  runId,
-                  stream: "lifecycle",
-                  data: {
-                    phase: "error",
-                    startedAt,
-                    endedAt: Date.now(),
-                    error: String(err),
-                  },
-                });
-                lifecycleTerminalEmitted = true;
-                throw err;
-              } finally {
-                // Defensive backstop: never let a CLI run complete without a terminal
-                // lifecycle event, otherwise downstream consumers can hang.
-                if (!lifecycleTerminalEmitted) {
-                  emitAgentEvent({
-                    runId,
-                    stream: "lifecycle",
-                    data: {
-                      phase: "error",
-                      startedAt,
-                      endedAt: Date.now(),
-                      error: "CLI run completed without lifecycle terminal event",
-                    },
-                  });
-                }
-              }
-            })();
-          }
-          const { embeddedContext, senderContext, runBaseParams } = buildEmbeddedRunExecutionParams(
-            {
-              run: params.followupRun.run,
-              sessionCtx: params.sessionCtx,
-              hasRepliedRef: params.opts?.hasRepliedRef,
-              provider,
-              runId,
-              allowTransientCooldownProbe: runOptions?.allowTransientCooldownProbe,
-              model,
-            },
-          );
-          return (async () => {
-            let attemptCompactionCount = 0;
-            try {
-              const result = await runEmbeddedPiAgent({
-                ...embeddedContext,
-                allowGatewaySubagentBinding: true,
-                trigger: params.isHeartbeat ? "heartbeat" : "user",
-                groupId: resolveGroupSessionKey(params.sessionCtx)?.id,
-                groupChannel:
-                  params.sessionCtx.GroupChannel?.trim() ?? params.sessionCtx.GroupSubject?.trim(),
-                groupSpace: params.sessionCtx.GroupSpace?.trim() ?? undefined,
-                ...senderContext,
-                ...runBaseParams,
-                prompt: params.commandBody,
-                extraSystemPrompt: params.followupRun.run.extraSystemPrompt,
-                toolResultFormat: (() => {
-                  const channel = resolveMessageChannel(
-                    params.sessionCtx.Surface,
-                    params.sessionCtx.Provider,
-                  );
-                  if (!channel) {
-                    return "markdown";
-                  }
-                  return isMarkdownCapableMessageChannel(channel) ? "markdown" : "plain";
-                })(),
-                suppressToolErrorWarnings: params.opts?.suppressToolErrorWarnings,
-                bootstrapContextMode: params.opts?.bootstrapContextMode,
-                bootstrapContextRunKind: params.opts?.isHeartbeat ? "heartbeat" : "default",
-                images: params.opts?.images,
-                abortSignal: params.opts?.abortSignal,
-                blockReplyBreak: params.resolvedBlockStreamingBreak,
-                blockReplyChunking: params.blockReplyChunking,
-                onPartialReply: async (payload) => {
-                  const textForTyping = await handlePartialForTyping(payload);
-                  if (!params.opts?.onPartialReply || textForTyping === undefined) {
-                    return;
-                  }
-                  await params.opts.onPartialReply({
-                    text: textForTyping,
-                    mediaUrls: payload.mediaUrls,
-                  });
-                },
-                onAssistantMessageStart: async () => {
-                  await params.typingSignals.signalMessageStart();
-                  await params.opts?.onAssistantMessageStart?.();
-                },
-                onReasoningStream:
-                  params.typingSignals.shouldStartOnReasoning || params.opts?.onReasoningStream
-                    ? async (payload) => {
-                        await params.typingSignals.signalReasoningDelta();
-                        await params.opts?.onReasoningStream?.({
-                          text: payload.text,
-                          mediaUrls: payload.mediaUrls,
-                        });
-                      }
-                    : undefined,
-                onReasoningEnd: params.opts?.onReasoningEnd,
-                onAgentEvent: async (evt) => {
-                  // Signal run start only after the embedded agent emits real activity.
-                  const hasLifecyclePhase =
-                    evt.stream === "lifecycle" && typeof evt.data.phase === "string";
-                  if (evt.stream !== "lifecycle" || hasLifecyclePhase) {
-                    notifyAgentRunStart();
-                  }
-                  // Trigger typing when tools start executing.
-                  // Must await to ensure typing indicator starts before tool summaries are emitted.
-                  if (evt.stream === "tool") {
-                    const phase = typeof evt.data.phase === "string" ? evt.data.phase : "";
-                    const name = typeof evt.data.name === "string" ? evt.data.name : undefined;
-                    if (phase === "start" || phase === "update") {
-                      await params.typingSignals.signalToolStart();
-                      await params.opts?.onToolStart?.({ name, phase });
-                    }
-                  }
-                  // Track auto-compaction and notify higher layers.
-                  if (evt.stream === "compaction") {
-                    const phase = typeof evt.data.phase === "string" ? evt.data.phase : "";
-                    if (phase === "start") {
-                      if (params.opts?.onCompactionStart) {
-                        await params.opts.onCompactionStart();
-                      } else if (params.opts?.onBlockReply) {
-                        // Send directly via opts.onBlockReply (bypassing the
-                        // pipeline) so the notice does not cause final payloads
-                        // to be discarded on non-streaming model paths.
-                        const currentMessageId =
-                          params.sessionCtx.MessageSidFull ?? params.sessionCtx.MessageSid;
-                        const noticePayload = params.applyReplyToMode({
-                          text: "🧹 Compacting context...",
-                          replyToId: currentMessageId,
-                          replyToCurrent: true,
-                          isCompactionNotice: true,
-                        });
-                        try {
-                          await params.opts.onBlockReply(noticePayload);
-                        } catch (err) {
-                          // Non-critical notice delivery failure should not
-                          // bubble out of the fire-and-forget event handler.
-                          logVerbose(
-                            `compaction start notice delivery failed (non-fatal): ${String(err)}`,
-                          );
-                        }
-                      }
-                    }
-                    const completed = evt.data?.completed === true;
-                    if (phase === "end" && completed) {
-                      attemptCompactionCount += 1;
-                      await params.opts?.onCompactionEnd?.();
-                    }
-                  }
-                },
-                // Always pass onBlockReply so flushBlockReplyBuffer works before tool execution,
-                // even when regular block streaming is disabled. The handler sends directly
-                // via opts.onBlockReply when the pipeline isn't available.
-                onBlockReply: blockReplyHandler,
-                onBlockReplyFlush:
-                  params.blockStreamingEnabled && blockReplyPipeline
-                    ? async () => {
-                        await blockReplyPipeline.flush({ force: true });
-                      }
-                    : undefined,
-                shouldEmitToolResult: params.shouldEmitToolResult,
-                shouldEmitToolOutput: params.shouldEmitToolOutput,
-                bootstrapPromptWarningSignaturesSeen,
-                bootstrapPromptWarningSignature:
-                  bootstrapPromptWarningSignaturesSeen[
-                    bootstrapPromptWarningSignaturesSeen.length - 1
-                  ],
-                onToolResult: onToolResult
-                  ? (() => {
-                      // Serialize tool result delivery to preserve message ordering.
-                      // Without this, concurrent tool callbacks race through typing signals
-                      // and message sends, causing out-of-order delivery to the user.
-                      // See: https://github.com/openclaw/openclaw/issues/11044
-                      let toolResultChain: Promise<void> = Promise.resolve();
-                      return (payload: ReplyPayload) => {
-                        toolResultChain = toolResultChain
-                          .then(async () => {
-                            const { text, skip } = normalizeStreamingText(payload);
-                            if (skip) {
-                              return;
-                            }
-                            if (text !== undefined) {
-                              await params.typingSignals.signalTextDelta(text);
-                            }
-                            await onToolResult({
-                              ...payload,
-                              text,
-                            });
-                          })
-                          .catch((err) => {
-                            // Keep chain healthy after an error so later tool results still deliver.
-                            logVerbose(`tool result delivery failed: ${String(err)}`);
-                          });
-                        const task = toolResultChain.finally(() => {
-                          params.pendingToolTasks.delete(task);
-                        });
-                        params.pendingToolTasks.add(task);
-                      };
-                    })()
-                  : undefined,
-              });
-              bootstrapPromptWarningSignaturesSeen = resolveBootstrapWarningSignaturesSeen(
-                result.meta?.systemPromptReport,
-              );
-              const resultCompactionCount = Math.max(
-                0,
-                result.meta?.agentMeta?.compactionCount ?? 0,
-              );
-              attemptCompactionCount = Math.max(attemptCompactionCount, resultCompactionCount);
-              return result;
-            } finally {
-              autoCompactionCount += attemptCompactionCount;
-            }
-          })();
-        },
+      const multiStagePlan = resolveMultiStageRoutingPlan({
+        run: params.followupRun.run,
+        hasImages: Boolean(params.opts?.images?.length),
+        isHeartbeat: params.isHeartbeat,
       });
-      runResult = fallbackResult.result;
-      fallbackProvider = fallbackResult.provider;
-      fallbackModel = fallbackResult.model;
-      fallbackAttempts = Array.isArray(fallbackResult.attempts)
-        ? fallbackResult.attempts.map((attempt) => ({
-            provider: String(attempt.provider ?? ""),
-            model: String(attempt.model ?? ""),
-            error: String(attempt.error ?? ""),
-            reason: attempt.reason ? String(attempt.reason) : undefined,
-            status: typeof attempt.status === "number" ? attempt.status : undefined,
-            code: attempt.code ? String(attempt.code) : undefined,
-          }))
-        : [];
+
+      const executeStage = async (stageParams: {
+        runId: string;
+        visible: boolean;
+        plan?: EmbeddedRunStagePlan;
+      }) => {
+        const effectivePlan = stageParams.plan;
+        const stageName = stageParams.visible ? "escalation-pass" : "fast-pass";
+        const effectiveThinkLevel = effectivePlan?.thinkLevel ?? params.followupRun.run.thinkLevel;
+        const effectiveFastMode = effectivePlan?.fastMode ?? params.followupRun.run.fastMode;
+        const effectiveReasoningLevel =
+          effectivePlan?.reasoningLevel ?? params.followupRun.run.reasoningLevel;
+        const inheritRunExtraSystemPrompt = effectivePlan?.inheritExtraSystemPrompt ?? true;
+        const effectiveExtraSystemPrompt = [
+          inheritRunExtraSystemPrompt ? params.followupRun.run.extraSystemPrompt : undefined,
+          effectivePlan?.extraSystemPrompt,
+        ]
+          .map((value) => value?.trim())
+          .filter(Boolean)
+          .join("\n\n");
+        let stageBootstrapPromptWarningSignaturesSeen = [...bootstrapPromptWarningSignaturesSeen];
+        let stageAutoCompactionCount = 0;
+        const stageStartedAt = Date.now();
+
+        if (effectivePlan) {
+          multiStageLog.info(`${stageName}: start`, {
+            sessionKey: params.sessionKey ?? params.followupRun.run.sessionId,
+            provider: effectivePlan.provider,
+            model: effectivePlan.model,
+            thinkLevel: effectiveThinkLevel,
+            fastMode: effectiveFastMode,
+            reasoningLevel: effectiveReasoningLevel,
+            systemPromptMode: effectivePlan.systemPromptMode ?? "default",
+            skillsPromptMode: effectivePlan.skillsPromptMode ?? "default",
+            bootstrapContextMode:
+              effectivePlan.bootstrapContextMode ?? params.opts?.bootstrapContextMode ?? "default",
+            disableTools: effectivePlan.disableTools ?? false,
+            inheritExtraSystemPrompt: inheritRunExtraSystemPrompt,
+            extraSystemPromptChars: effectiveExtraSystemPrompt.length,
+            commandChars: params.commandBody.length,
+          });
+        }
+
+        try {
+          const fallbackResult = await runWithModelFallback<
+            Awaited<ReturnType<typeof runEmbeddedPiAgent>>
+          >({
+            ...(effectivePlan?.explicitModel
+              ? {
+                  cfg: params.followupRun.run.config,
+                  provider: effectivePlan.provider,
+                  model: effectivePlan.model,
+                  agentDir: params.followupRun.run.agentDir,
+                  fallbacksOverride: [],
+                }
+              : resolveModelFallbackOptions(params.followupRun.run)),
+            runId: stageParams.runId,
+            run: (provider, model, runOptions) => {
+              if (isCliProvider(provider, params.followupRun.run.config)) {
+                const startedAt = Date.now();
+                notifyAgentRunStart();
+                emitAgentEvent({
+                  runId: stageParams.runId,
+                  stream: "lifecycle",
+                  data: {
+                    phase: "start",
+                    startedAt,
+                  },
+                });
+                const cliSessionBinding = getCliSessionBinding(
+                  params.getActiveSessionEntry(),
+                  provider,
+                );
+                const authProfileId =
+                  provider === params.followupRun.run.provider
+                    ? params.followupRun.run.authProfileId
+                    : undefined;
+                return (async () => {
+                  let lifecycleTerminalEmitted = false;
+                  try {
+                    const result = await runCliAgent({
+                      sessionId: params.followupRun.run.sessionId,
+                      sessionKey: params.sessionKey,
+                      agentId: params.followupRun.run.agentId,
+                      sessionFile: params.followupRun.run.sessionFile,
+                      workspaceDir: params.followupRun.run.workspaceDir,
+                      config: params.followupRun.run.config,
+                      prompt: params.commandBody,
+                      provider,
+                      model,
+                      thinkLevel: effectiveThinkLevel,
+                      timeoutMs: params.followupRun.run.timeoutMs,
+                      runId: stageParams.runId,
+                      extraSystemPrompt: effectiveExtraSystemPrompt || undefined,
+                      systemPromptMode: effectivePlan?.systemPromptMode,
+                      bootstrapContextMode:
+                        effectivePlan?.bootstrapContextMode ?? params.opts?.bootstrapContextMode,
+                      ownerNumbers: params.followupRun.run.ownerNumbers,
+                      cliSessionId: cliSessionBinding?.sessionId,
+                      cliSessionBinding,
+                      authProfileId,
+                      bootstrapPromptWarningSignaturesSeen:
+                        stageBootstrapPromptWarningSignaturesSeen,
+                      bootstrapPromptWarningSignature:
+                        stageBootstrapPromptWarningSignaturesSeen[
+                          stageBootstrapPromptWarningSignaturesSeen.length - 1
+                        ],
+                      images: params.opts?.images,
+                    });
+                    stageBootstrapPromptWarningSignaturesSeen =
+                      resolveBootstrapWarningSignaturesSeen(result.meta?.systemPromptReport);
+
+                    const cliText = result.payloads?.[0]?.text?.trim();
+                    if (cliText) {
+                      emitAgentEvent({
+                        runId: stageParams.runId,
+                        stream: "assistant",
+                        data: { text: cliText },
+                      });
+                    }
+
+                    emitAgentEvent({
+                      runId: stageParams.runId,
+                      stream: "lifecycle",
+                      data: {
+                        phase: "end",
+                        startedAt,
+                        endedAt: Date.now(),
+                      },
+                    });
+                    lifecycleTerminalEmitted = true;
+
+                    return result;
+                  } catch (err) {
+                    emitAgentEvent({
+                      runId: stageParams.runId,
+                      stream: "lifecycle",
+                      data: {
+                        phase: "error",
+                        startedAt,
+                        endedAt: Date.now(),
+                        error: String(err),
+                      },
+                    });
+                    lifecycleTerminalEmitted = true;
+                    throw err;
+                  } finally {
+                    if (!lifecycleTerminalEmitted) {
+                      emitAgentEvent({
+                        runId: stageParams.runId,
+                        stream: "lifecycle",
+                        data: {
+                          phase: "error",
+                          startedAt,
+                          endedAt: Date.now(),
+                          error: "CLI run completed without lifecycle terminal event",
+                        },
+                      });
+                    }
+                  }
+                })();
+              }
+              const { embeddedContext, senderContext, runBaseParams } =
+                buildEmbeddedRunExecutionParams({
+                  run: params.followupRun.run,
+                  sessionCtx: params.sessionCtx,
+                  hasRepliedRef: params.opts?.hasRepliedRef,
+                  provider,
+                  runId: stageParams.runId,
+                  allowTransientCooldownProbe: runOptions?.allowTransientCooldownProbe,
+                  model,
+                });
+              return (async () => {
+                let attemptCompactionCount = 0;
+                try {
+                  const result = await runEmbeddedPiAgent({
+                    ...embeddedContext,
+                    allowGatewaySubagentBinding: true,
+                    trigger: params.isHeartbeat ? "heartbeat" : "user",
+                    groupId: resolveGroupSessionKey(params.sessionCtx)?.id,
+                    groupChannel:
+                      params.sessionCtx.GroupChannel?.trim() ??
+                      params.sessionCtx.GroupSubject?.trim(),
+                    groupSpace: params.sessionCtx.GroupSpace?.trim() ?? undefined,
+                    ...senderContext,
+                    ...runBaseParams,
+                    thinkLevel: effectiveThinkLevel,
+                    fastMode: effectiveFastMode,
+                    reasoningLevel: effectiveReasoningLevel,
+                    prompt: params.commandBody,
+                    extraSystemPrompt: effectiveExtraSystemPrompt || undefined,
+                    systemPromptMode: effectivePlan?.systemPromptMode,
+                    skillsPromptMode: effectivePlan?.skillsPromptMode,
+                    disableTools: effectivePlan?.disableTools,
+                    toolResultFormat: (() => {
+                      const channel = resolveMessageChannel(
+                        params.sessionCtx.Surface,
+                        params.sessionCtx.Provider,
+                      );
+                      if (!channel) {
+                        return "markdown";
+                      }
+                      return isMarkdownCapableMessageChannel(channel) ? "markdown" : "plain";
+                    })(),
+                    suppressToolErrorWarnings: params.opts?.suppressToolErrorWarnings,
+                    bootstrapContextMode:
+                      effectivePlan?.bootstrapContextMode ?? params.opts?.bootstrapContextMode,
+                    bootstrapContextRunKind: params.opts?.isHeartbeat ? "heartbeat" : "default",
+                    images: params.opts?.images,
+                    abortSignal: params.opts?.abortSignal,
+                    blockReplyBreak: params.resolvedBlockStreamingBreak,
+                    blockReplyChunking: params.blockReplyChunking,
+                    onPartialReply: stageParams.visible
+                      ? async (payload) => {
+                          const textForTyping = await handlePartialForTyping(payload);
+                          if (!params.opts?.onPartialReply || textForTyping === undefined) {
+                            return;
+                          }
+                          await params.opts.onPartialReply({
+                            text: textForTyping,
+                            mediaUrls: payload.mediaUrls,
+                          });
+                        }
+                      : undefined,
+                    onAssistantMessageStart: stageParams.visible
+                      ? async () => {
+                          await params.typingSignals.signalMessageStart();
+                          await params.opts?.onAssistantMessageStart?.();
+                        }
+                      : undefined,
+                    onReasoningStream:
+                      stageParams.visible &&
+                      (params.typingSignals.shouldStartOnReasoning ||
+                        params.opts?.onReasoningStream)
+                        ? async (payload) => {
+                            await params.typingSignals.signalReasoningDelta();
+                            await params.opts?.onReasoningStream?.({
+                              text: payload.text,
+                              mediaUrls: payload.mediaUrls,
+                            });
+                          }
+                        : undefined,
+                    onReasoningEnd: stageParams.visible ? params.opts?.onReasoningEnd : undefined,
+                    onAgentEvent: async (evt) => {
+                      const hasLifecyclePhase =
+                        evt.stream === "lifecycle" && typeof evt.data.phase === "string";
+                      if (evt.stream !== "lifecycle" || hasLifecyclePhase) {
+                        notifyAgentRunStart();
+                      }
+                      if (evt.stream === "compaction") {
+                        const phase = typeof evt.data.phase === "string" ? evt.data.phase : "";
+                        const completed = evt.data?.completed === true;
+                        if (!stageParams.visible) {
+                          if (phase === "end" && completed) {
+                            attemptCompactionCount += 1;
+                          }
+                          return;
+                        }
+                        if (phase === "start") {
+                          if (params.opts?.onCompactionStart) {
+                            await params.opts.onCompactionStart();
+                          } else if (params.opts?.onBlockReply) {
+                            const currentMessageId =
+                              params.sessionCtx.MessageSidFull ?? params.sessionCtx.MessageSid;
+                            const noticePayload = params.applyReplyToMode({
+                              text: "🧹 Compacting context...",
+                              replyToId: currentMessageId,
+                              replyToCurrent: true,
+                              isCompactionNotice: true,
+                            });
+                            try {
+                              await params.opts.onBlockReply(noticePayload);
+                            } catch (err) {
+                              logVerbose(
+                                `compaction start notice delivery failed (non-fatal): ${String(err)}`,
+                              );
+                            }
+                          }
+                        }
+                        if (phase === "end" && completed) {
+                          attemptCompactionCount += 1;
+                          await params.opts?.onCompactionEnd?.();
+                        }
+                        return;
+                      }
+                      if (!stageParams.visible || evt.stream !== "tool") {
+                        return;
+                      }
+                      const phase = typeof evt.data.phase === "string" ? evt.data.phase : "";
+                      const name = typeof evt.data.name === "string" ? evt.data.name : undefined;
+                      if (phase === "start" || phase === "update") {
+                        await params.typingSignals.signalToolStart();
+                        await params.opts?.onToolStart?.({ name, phase });
+                      }
+                    },
+                    onBlockReply: stageParams.visible ? blockReplyHandler : undefined,
+                    onBlockReplyFlush:
+                      stageParams.visible && params.blockStreamingEnabled && blockReplyPipeline
+                        ? async () => {
+                            await blockReplyPipeline.flush({ force: true });
+                          }
+                        : undefined,
+                    shouldEmitToolResult: params.shouldEmitToolResult,
+                    shouldEmitToolOutput: params.shouldEmitToolOutput,
+                    bootstrapPromptWarningSignaturesSeen: stageBootstrapPromptWarningSignaturesSeen,
+                    bootstrapPromptWarningSignature:
+                      stageBootstrapPromptWarningSignaturesSeen[
+                        stageBootstrapPromptWarningSignaturesSeen.length - 1
+                      ],
+                    onToolResult:
+                      stageParams.visible && onToolResult
+                        ? (() => {
+                            let toolResultChain: Promise<void> = Promise.resolve();
+                            return (payload: ReplyPayload) => {
+                              toolResultChain = toolResultChain
+                                .then(async () => {
+                                  const { text, skip } = normalizeStreamingText(payload);
+                                  if (skip) {
+                                    return;
+                                  }
+                                  if (text !== undefined) {
+                                    await params.typingSignals.signalTextDelta(text);
+                                  }
+                                  await onToolResult({
+                                    ...payload,
+                                    text,
+                                  });
+                                })
+                                .catch((err) => {
+                                  logVerbose(`tool result delivery failed: ${String(err)}`);
+                                });
+                              const task = toolResultChain.finally(() => {
+                                params.pendingToolTasks.delete(task);
+                              });
+                              params.pendingToolTasks.add(task);
+                            };
+                          })()
+                        : undefined,
+                  });
+                  stageBootstrapPromptWarningSignaturesSeen = resolveBootstrapWarningSignaturesSeen(
+                    result.meta?.systemPromptReport,
+                  );
+                  const resultCompactionCount = Math.max(
+                    0,
+                    result.meta?.agentMeta?.compactionCount ?? 0,
+                  );
+                  attemptCompactionCount = Math.max(attemptCompactionCount, resultCompactionCount);
+                  return result;
+                } finally {
+                  stageAutoCompactionCount += attemptCompactionCount;
+                }
+              })();
+            },
+          });
+          const durationMs = Date.now() - stageStartedAt;
+          if (effectivePlan) {
+            multiStageLog.info(`${stageName}: completed`, {
+              sessionKey: params.sessionKey ?? params.followupRun.run.sessionId,
+              provider: fallbackResult.provider,
+              model: fallbackResult.model,
+              durationMs,
+              fallbackAttempts: fallbackResult.attempts.length,
+              autoCompactionCount: stageAutoCompactionCount,
+            });
+          }
+
+          return {
+            fallbackResult,
+            stageBootstrapPromptWarningSignaturesSeen,
+            stageAutoCompactionCount,
+            thinkLevel: effectiveThinkLevel,
+            durationMs,
+          };
+        } catch (err) {
+          if (effectivePlan) {
+            multiStageLog.warn(`${stageName}: failed`, {
+              sessionKey: params.sessionKey ?? params.followupRun.run.sessionId,
+              provider: effectivePlan.provider,
+              model: effectivePlan.model,
+              durationMs: Date.now() - stageStartedAt,
+              error: String(err),
+            });
+          }
+          throw err;
+        }
+      };
+
+      const commitStageResult = (stageResult: Awaited<ReturnType<typeof executeStage>>) => {
+        runResult = stageResult.fallbackResult.result;
+        fallbackProvider = stageResult.fallbackResult.provider;
+        fallbackModel = stageResult.fallbackResult.model;
+        fallbackAttempts = Array.isArray(stageResult.fallbackResult.attempts)
+          ? stageResult.fallbackResult.attempts.map((attempt) => ({
+              provider: String(attempt.provider ?? ""),
+              model: String(attempt.model ?? ""),
+              error: String(attempt.error ?? ""),
+              reason: attempt.reason ? String(attempt.reason) : undefined,
+              status: typeof attempt.status === "number" ? attempt.status : undefined,
+              code: attempt.code ? String(attempt.code) : undefined,
+            }))
+          : [];
+        bootstrapPromptWarningSignaturesSeen =
+          stageResult.stageBootstrapPromptWarningSignaturesSeen;
+        autoCompactionCount += stageResult.stageAutoCompactionCount;
+        params.opts?.onModelSelected?.({
+          provider: stageResult.fallbackResult.provider,
+          model: stageResult.fallbackResult.model,
+          thinkLevel: stageResult.thinkLevel,
+        });
+      };
+
+      if (multiStagePlan) {
+        const fastPassLiveSelection = resolveStageLiveModelSelectionOverride({
+          run: params.followupRun.run,
+          sessionKey: params.sessionKey,
+          provider: multiStagePlan.fastPass.provider,
+          model: multiStagePlan.fastPass.model,
+        });
+        if (fastPassLiveSelection) {
+          applyLiveSelectionToRun(params.followupRun.run, fastPassLiveSelection);
+          const escalationPlan = resolveEscalationPlanForLiveSelection({
+            plan: multiStagePlan.escalationPass,
+            liveSelection: fastPassLiveSelection,
+          });
+          multiStageLog.warn("fast-pass: skipped due to live session switch", {
+            sessionKey: params.sessionKey ?? params.followupRun.run.sessionId,
+            fastPassProvider: multiStagePlan.fastPass.provider,
+            fastPassModel: multiStagePlan.fastPass.model,
+            liveProvider: fastPassLiveSelection.provider,
+            liveModel: fastPassLiveSelection.model,
+            escalationProvider: escalationPlan.provider,
+            escalationModel: escalationPlan.model,
+          });
+          const escalationResult = await executeStage({
+            runId,
+            visible: true,
+            plan: escalationPlan,
+          });
+          multiStageLog.info("escalation-pass: accepted", {
+            sessionKey: params.sessionKey ?? params.followupRun.run.sessionId,
+            provider: escalationResult.fallbackResult.provider,
+            model: escalationResult.fallbackResult.model,
+            durationMs: escalationResult.durationMs,
+          });
+          commitStageResult(escalationResult);
+        } else {
+          const sessionFileSnapshot = await captureSessionFileSnapshot(
+            params.followupRun.run.sessionFile,
+          );
+          const bootstrapSignaturesBeforeFastPass = [...bootstrapPromptWarningSignaturesSeen];
+          try {
+            const fastPassResult = await executeStage({
+              runId: `${runId}:fast-pass`,
+              visible: false,
+              plan: multiStagePlan.fastPass,
+            });
+            if (
+              !shouldEscalateStageResult({
+                runResult: fastPassResult.fallbackResult.result,
+                marker: multiStagePlan.escalationMarker,
+              })
+            ) {
+              multiStageLog.info("fast-pass: accepted", {
+                sessionKey: params.sessionKey ?? params.followupRun.run.sessionId,
+                provider: fastPassResult.fallbackResult.provider,
+                model: fastPassResult.fallbackResult.model,
+                durationMs: fastPassResult.durationMs,
+              });
+              commitStageResult(fastPassResult);
+            } else {
+              multiStageLog.info("fast-pass: escalating", {
+                sessionKey: params.sessionKey ?? params.followupRun.run.sessionId,
+                provider: fastPassResult.fallbackResult.provider,
+                model: fastPassResult.fallbackResult.model,
+                durationMs: fastPassResult.durationMs,
+                reason: "marker_or_empty_visible_reply",
+              });
+              await restoreSessionFileSnapshot(
+                params.followupRun.run.sessionFile,
+                sessionFileSnapshot,
+              );
+              bootstrapPromptWarningSignaturesSeen = bootstrapSignaturesBeforeFastPass;
+
+              const escalationResult = await executeStage({
+                runId,
+                visible: true,
+                plan: multiStagePlan.escalationPass,
+              });
+              multiStageLog.info("escalation-pass: accepted", {
+                sessionKey: params.sessionKey ?? params.followupRun.run.sessionId,
+                provider: escalationResult.fallbackResult.provider,
+                model: escalationResult.fallbackResult.model,
+                durationMs: escalationResult.durationMs,
+              });
+              commitStageResult(escalationResult);
+            }
+          } catch (err) {
+            if (err instanceof Error && err.name === "AbortError") {
+              throw err;
+            }
+            let liveSelectionOverride: {
+              provider: string;
+              model: string;
+              authProfileId?: string;
+              authProfileIdSource?: "auto" | "user";
+            } | null = null;
+            if (err instanceof LiveSessionModelSwitchError) {
+              liveSelectionOverride = {
+                provider: err.provider,
+                model: err.model,
+                authProfileId: err.authProfileId,
+                authProfileIdSource: err.authProfileIdSource,
+              };
+              applyLiveSelectionToRun(params.followupRun.run, liveSelectionOverride);
+              fallbackProvider = err.provider;
+              fallbackModel = err.model;
+              multiStageLog.warn("fast-pass: escalating after live session switch", {
+                sessionKey: params.sessionKey ?? params.followupRun.run.sessionId,
+                provider: err.provider,
+                model: err.model,
+              });
+            } else {
+              logVerbose(`fast-pass stage failed, escalating: ${String(err)}`);
+              multiStageLog.warn("fast-pass: escalating after error", {
+                sessionKey: params.sessionKey ?? params.followupRun.run.sessionId,
+                error: String(err),
+              });
+            }
+            await restoreSessionFileSnapshot(
+              params.followupRun.run.sessionFile,
+              sessionFileSnapshot,
+            );
+            bootstrapPromptWarningSignaturesSeen = bootstrapSignaturesBeforeFastPass;
+            const escalationPlan = resolveEscalationPlanForLiveSelection({
+              plan: multiStagePlan.escalationPass,
+              liveSelection: liveSelectionOverride,
+            });
+            const escalationResult = await executeStage({
+              runId,
+              visible: true,
+              plan: escalationPlan,
+            });
+            multiStageLog.info("escalation-pass: accepted", {
+              sessionKey: params.sessionKey ?? params.followupRun.run.sessionId,
+              provider: escalationResult.fallbackResult.provider,
+              model: escalationResult.fallbackResult.model,
+              durationMs: escalationResult.durationMs,
+            });
+            commitStageResult(escalationResult);
+          }
+        }
+      } else {
+        const fallbackResult = await executeStage({
+          runId,
+          visible: true,
+        });
+        commitStageResult(fallbackResult);
+      }
 
       // Some embedded runs surface context overflow as an error payload instead of throwing.
       // Treat those as a session-level failure and auto-recover by starting a fresh session.

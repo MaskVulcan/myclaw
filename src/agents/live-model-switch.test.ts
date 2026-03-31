@@ -81,10 +81,25 @@ describe("live model switch", () => {
       authProfileId: "profile-gpt",
       authProfileIdSource: "user",
     });
-    expect(state.resolveDefaultModelForAgentMock).toHaveBeenCalledWith({
-      cfg: { session: { store: "/tmp/custom-store.json" } },
+    expect(state.resolveDefaultModelForAgentMock).not.toHaveBeenCalled();
+    expect(state.resolveStorePathMock).toHaveBeenCalledWith("/tmp/custom-store.json", {
       agentId: "reply",
     });
+  });
+
+  it("ignores agent defaults when no session override is persisted", async () => {
+    const { resolvePersistedLiveSessionModelSelection } = await loadModule();
+
+    expect(
+      resolvePersistedLiveSessionModelSelection({
+        cfg: { session: { store: "/tmp/custom-store.json" } },
+        sessionKey: "main",
+        agentId: "reply",
+        defaultProvider: "openai",
+        defaultModel: "gpt-5.2",
+      }),
+    ).toBeNull();
+    expect(state.resolveDefaultModelForAgentMock).not.toHaveBeenCalled();
     expect(state.resolveStorePathMock).toHaveBeenCalledWith("/tmp/custom-store.json", {
       agentId: "reply",
     });

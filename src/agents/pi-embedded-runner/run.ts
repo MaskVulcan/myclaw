@@ -27,7 +27,7 @@ import {
 import {
   hasDifferentLiveSessionModelSelection,
   LiveSessionModelSwitchError,
-  resolveLiveSessionModelSelection,
+  resolvePersistedLiveSessionModelSelection,
   consumeLiveSessionModelSwitch,
 } from "../live-model-switch.js";
 import {
@@ -235,7 +235,7 @@ export async function runEmbeddedPiAgent(
         authProfileIdSource: params.authProfileIdSource,
       });
       const resolvePersistedLiveSelection = () =>
-        resolveLiveSessionModelSelection({
+        resolvePersistedLiveSessionModelSelection({
           cfg: params.config,
           sessionKey: params.sessionKey,
           agentId: workspaceResolution.agentId,
@@ -514,6 +514,10 @@ export async function runEmbeddedPiAgent(
             verboseLevel: params.verboseLevel,
             reasoningLevel: params.reasoningLevel,
             toolResultFormat: resolvedToolResultFormat,
+            systemPromptMode: params.systemPromptMode,
+            skillsPromptMode: params.skillsPromptMode,
+            bootstrapContextMode: params.bootstrapContextMode,
+            bootstrapContextRunKind: params.bootstrapContextRunKind,
             execOverrides: params.execOverrides,
             bashElevated: params.bashElevated,
             timeoutMs: params.timeoutMs,

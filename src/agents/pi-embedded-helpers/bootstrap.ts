@@ -3,7 +3,7 @@ import path from "node:path";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { OpenClawConfig } from "../../config/config.js";
 import { truncateUtf16Safe } from "../../utils.js";
-import type { WorkspaceBootstrapFile } from "../workspace.js";
+import { DEFAULT_AGENTS_FILENAME, type WorkspaceBootstrapFile } from "../workspace.js";
 import type { EmbeddedContextFile } from "./types.js";
 
 type ContentBlockWithSignature = {
@@ -88,6 +88,17 @@ export const DEFAULT_BOOTSTRAP_PROMPT_TRUNCATION_WARNING_MODE = "once";
 const MIN_BOOTSTRAP_FILE_BUDGET_CHARS = 64;
 const BOOTSTRAP_HEAD_RATIO = 0.7;
 const BOOTSTRAP_TAIL_RATIO = 0.2;
+const AGENTS_COMPACT_LINE_MAX_CHARS = 160;
+const AGENTS_MARKDOWN_COMPACTION_PASSES = [
+  { maxSections: 24, maxBodyLinesPerSection: 5, lineMaxChars: AGENTS_COMPACT_LINE_MAX_CHARS },
+  { maxSections: 18, maxBodyLinesPerSection: 3, lineMaxChars: 120 },
+  { maxSections: 12, maxBodyLinesPerSection: 2, lineMaxChars: 96 },
+] as const;
+
+type MarkdownSection = {
+  heading?: string;
+  lines: string[];
+};
 
 type TrimBootstrapResult = {
   content: string;
@@ -137,6 +148,16 @@ function trimBootstrapContent(
     };
   }
 
+  const compactedMarkdown = compactAgentsBootstrapContent(trimmed, fileName, maxChars);
+  if (compactedMarkdown) {
+    return {
+      content: compactedMarkdown,
+      truncated: true,
+      maxChars,
+      originalLength: trimmed.length,
+    };
+  }
+
   const headChars = Math.floor(maxChars * BOOTSTRAP_HEAD_RATIO);
   const tailChars = Math.floor(maxChars * BOOTSTRAP_TAIL_RATIO);
   const head = trimmed.slice(0, headChars);
@@ -155,6 +176,167 @@ function trimBootstrapContent(
     maxChars,
     originalLength: trimmed.length,
   };
+}
+
+function compactLine(line: string, maxChars: number): string {
+  const normalized = line.trim().replace(/\s+/g, " ");
+  if (normalized.length <= maxChars) {
+    return normalized;
+  }
+  if (maxChars <= 1) {
+    return truncateUtf16Safe(normalized, Math.max(0, maxChars));
+  }
+  return `${truncateUtf16Safe(normalized, maxChars - 1)}...`;
+}
+
+function compactParagraph(line: string, maxChars: number): string {
+  const normalized = line.trim().replace(/\s+/g, " ");
+  if (normalized.length <= maxChars) {
+    return normalized;
+  }
+  const firstSentence = normalized.split(/(?<=[.!?])\s+/u)[0] ?? normalized;
+  if (firstSentence.length <= maxChars) {
+    return firstSentence;
+  }
+  return compactLine(firstSentence, maxChars);
+}
+
+function isBulletLine(line: string): boolean {
+  return /^\s*(?:[-*+]|\d+\.)\s+/.test(line);
+}
+
+function isCompactRuleLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) {
+    return false;
+  }
+  if (/^>\s+/.test(trimmed)) {
+    return true;
+  }
+  if (/^\*\*[^*]+\*\*:?\s*$/.test(trimmed)) {
+    return true;
+  }
+  if (/^`[^`]+`/.test(trimmed)) {
+    return true;
+  }
+  return trimmed.endsWith(":") && trimmed.length <= 100;
+}
+
+function splitMarkdownSections(content: string): MarkdownSection[] {
+  const sections: MarkdownSection[] = [];
+  const lines = content.split(/\r?\n/u);
+  let current: MarkdownSection = { lines: [] };
+  let inFence = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("```")) {
+      inFence = !inFence;
+      continue;
+    }
+    if (!inFence && /^#{1,6}\s+/.test(trimmed)) {
+      if (current.heading || current.lines.length > 0) {
+        sections.push(current);
+      }
+      current = { heading: trimmed, lines: [] };
+      continue;
+    }
+    current.lines.push(line);
+  }
+  if (current.heading || current.lines.length > 0) {
+    sections.push(current);
+  }
+  return sections;
+}
+
+function buildCompactMarkdownSection(
+  section: MarkdownSection,
+  opts: { maxBodyLinesPerSection: number; lineMaxChars: number },
+): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+  if (section.heading) {
+    const heading = compactLine(section.heading, opts.lineMaxChars);
+    result.push(heading);
+    seen.add(heading);
+  }
+
+  let keptParagraph = false;
+  let inFence = false;
+  for (const rawLine of section.lines) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) {
+      continue;
+    }
+    if (trimmed.startsWith("```")) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) {
+      continue;
+    }
+
+    let candidate = "";
+    if (isBulletLine(rawLine) || isCompactRuleLine(rawLine)) {
+      candidate = compactLine(trimmed, opts.lineMaxChars);
+    } else if (!keptParagraph) {
+      candidate = compactParagraph(trimmed, opts.lineMaxChars);
+      keptParagraph = true;
+    } else {
+      continue;
+    }
+
+    if (!candidate || seen.has(candidate)) {
+      continue;
+    }
+    result.push(candidate);
+    seen.add(candidate);
+    const bodyLines = section.heading ? result.length - 1 : result.length;
+    if (bodyLines >= opts.maxBodyLinesPerSection) {
+      break;
+    }
+  }
+
+  return result;
+}
+
+function buildCompactedMarkdown(
+  sections: MarkdownSection[],
+  opts: { maxSections: number; maxBodyLinesPerSection: number; lineMaxChars: number },
+): string {
+  const header = [
+    `[Compacted summary of ${DEFAULT_AGENTS_FILENAME}; read the file directly if exact wording matters.]`,
+    "",
+  ];
+  const sectionBlocks: string[] = [];
+  for (const section of sections.slice(0, opts.maxSections)) {
+    const lines = buildCompactMarkdownSection(section, opts);
+    if (lines.length === 0) {
+      continue;
+    }
+    sectionBlocks.push(lines.join("\n"));
+  }
+  return [...header, ...sectionBlocks].join("\n\n").trimEnd();
+}
+
+function compactAgentsBootstrapContent(
+  content: string,
+  fileName: string,
+  maxChars: number,
+): string | undefined {
+  if (fileName !== DEFAULT_AGENTS_FILENAME) {
+    return undefined;
+  }
+  const sections = splitMarkdownSections(content);
+  if (sections.length === 0) {
+    return undefined;
+  }
+  for (const pass of AGENTS_MARKDOWN_COMPACTION_PASSES) {
+    const compacted = buildCompactedMarkdown(sections, pass);
+    if (compacted.length > 0 && compacted.length <= maxChars && compacted.length < content.length) {
+      return compacted;
+    }
+  }
+  return undefined;
 }
 
 function clampToBudget(content: string, budget: number): string {

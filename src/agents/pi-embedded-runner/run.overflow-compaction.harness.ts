@@ -332,9 +332,13 @@ export async function loadRunOverflowCompactionHarness(): Promise<{
     ensureRuntimePluginsLoaded: mockedEnsureRuntimePluginsLoaded,
   }));
 
-  vi.doMock("../../plugins/provider-runtime.js", () => ({
-    prepareProviderRuntimeAuth: mockedPrepareProviderRuntimeAuth,
-  }));
+  vi.doMock("../../plugins/provider-runtime.js", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("../../plugins/provider-runtime.js")>();
+    return {
+      ...actual,
+      prepareProviderRuntimeAuth: mockedPrepareProviderRuntimeAuth,
+    };
+  });
 
   vi.doMock("../auth-profiles.js", () => ({
     isProfileInCooldown: vi.fn(() => false),
@@ -429,9 +433,13 @@ export async function loadRunOverflowCompactionHarness(): Promise<{
     resolveContextWindowInfo: mockedResolveContextWindowInfo,
   }));
 
-  vi.doMock("../../process/command-queue.js", () => ({
-    enqueueCommandInLane: vi.fn((_lane: string, task: () => unknown) => task()),
-  }));
+  vi.doMock("../../process/command-queue.js", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("../../process/command-queue.js")>();
+    return {
+      ...actual,
+      enqueueCommandInLane: vi.fn((_lane: string, task: () => unknown) => task()),
+    };
+  });
 
   vi.doMock("../../utils/message-channel.js", () => ({
     isMarkdownCapableMessageChannel: vi.fn(() => true),

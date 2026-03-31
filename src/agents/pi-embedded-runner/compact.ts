@@ -426,6 +426,7 @@ export async function compactEmbeddedPiSessionDirect(
       entries: shouldLoadSkillEntries ? skillEntries : undefined,
       config: params.config,
       workspaceDir: effectiveWorkspace,
+      promptMode: params.sessionKey ? "compact" : "auto",
     });
 
     const sessionLabel = params.sessionKey ?? params.sessionId;
@@ -435,6 +436,7 @@ export async function compactEmbeddedPiSessionDirect(
       config: params.config,
       sessionKey: params.sessionKey,
       sessionId: params.sessionId,
+      sessionFile: params.sessionFile,
       warn: makeBootstrapWarn({
         sessionLabel,
         warn: (message) => log.warn(message),

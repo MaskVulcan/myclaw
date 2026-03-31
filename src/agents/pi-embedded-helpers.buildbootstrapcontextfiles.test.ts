@@ -59,6 +59,50 @@ describe("buildBootstrapContextFiles", () => {
     expect(warnings[0]).toContain("TOOLS.md");
     expect(warnings[0]).toContain("limit 200");
   });
+
+  it("compacts oversized AGENTS.md into a structured summary before fallback truncation", () => {
+    const content = [
+      "# AGENTS.md - Your Workspace",
+      "",
+      "This folder is home. Treat it that way.",
+      "",
+      "## Session Startup",
+      "1. Read `SOUL.md`.",
+      "2. Read `USER.md`.",
+      "3. Read `memory/YYYY-MM-DD.md` for recent context.",
+      "4. In main session also read `MEMORY.md`.",
+      "",
+      "Long explanatory paragraph that should not survive in full because it is verbose and mostly narrative. ".repeat(
+        10,
+      ),
+      "",
+      "## Red Lines",
+      "- Don't exfiltrate private data.",
+      "- Don't run destructive commands without asking.",
+      "- Prefer recoverable operations.",
+      "",
+      "Another long explanatory paragraph that should get collapsed during compaction. ".repeat(8),
+      "",
+      "## Heartbeats",
+      "- Keep `HEARTBEAT.md` small.",
+      "- Reply `HEARTBEAT_OK` when nothing needs attention.",
+      "- Batch periodic checks instead of spamming.",
+    ].join("\n");
+    const warnings: string[] = [];
+
+    const [result] = buildBootstrapContextFiles([makeFile({ name: "AGENTS.md", content })], {
+      maxChars: 520,
+      warn: (message) => warnings.push(message),
+    });
+
+    expect(result?.content).toContain("[Compacted summary of AGENTS.md");
+    expect(result?.content).toContain("## Heartbeats");
+    expect(result?.content).not.toContain("[...truncated, read AGENTS.md for full content...]");
+    expect(result?.content.length).toBeLessThanOrEqual(520);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("AGENTS.md");
+  });
+
   it("keeps content under the default limit", () => {
     const long = "a".repeat(DEFAULT_BOOTSTRAP_MAX_CHARS - 10);
     const files = [makeFile({ content: long })];
