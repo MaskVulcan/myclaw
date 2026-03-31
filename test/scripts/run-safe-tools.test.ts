@@ -102,6 +102,53 @@ describe("safe tooling wrappers", () => {
     }
   });
 
+  it("soft-skips strict tsgo when the memory floor is not met", () => {
+    const result = runScript("run-tsgo-safe.mjs", {
+      OPENCLAW_TSGO_ALLOW_FALLBACK: "1",
+      OPENCLAW_TSGO_MIN_AVAILABLE_MB: "999999",
+      OPENCLAW_TSGO_STRICT: "1",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain("aborted before start");
+    expect(result.stderr).toContain("memory guard");
+  });
+
+  it("falls back to non-type-aware oxlint on strict memory pressure", () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "openclaw-oxlint-memory-"));
+    try {
+      const fakeOxlint = writeExecutable(
+        dir,
+        "fake-oxlint",
+        [
+          "#!/usr/bin/env bash",
+          'for arg in "$@"; do',
+          '  if [ "$arg" = "--type-aware" ]; then',
+          "    echo 'unexpected-type-aware-run' >&2",
+          "    exit 99",
+          "  fi",
+          "done",
+          "echo 'oxlint-memory-fallback-ok' >&2",
+          "exit 0",
+        ].join("\n") + "\n",
+      );
+      const result = runScript("run-oxlint-safe.mjs", {
+        OPENCLAW_OXLINT_ALLOW_FALLBACK: "0",
+        OPENCLAW_OXLINT_BIN: fakeOxlint,
+        OPENCLAW_OXLINT_MEMORY_PRESSURE_ALLOW_FALLBACK: "1",
+        OPENCLAW_OXLINT_MIN_AVAILABLE_MB: "999999",
+      });
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).toContain("aborted before start");
+      expect(result.stderr).toContain("retrying without --type-aware");
+      expect(result.stderr).toContain("oxlint-memory-fallback-ok");
+      expect(result.stderr).not.toContain("unexpected-type-aware-run");
+    } finally {
+      rmSync(dir, { force: true, recursive: true });
+    }
+  });
+
   it("fails when type-aware oxlint times out and fallback is disabled", () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "openclaw-oxlint-strict-"));
     try {

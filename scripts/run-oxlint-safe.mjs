@@ -5,6 +5,7 @@ import {
   hasFlag,
   insertArgsBeforeDoubleDash,
   parseBooleanEnv,
+  parseNonNegativeIntEnv,
   parsePositiveIntEnv,
   resolveToolCommand,
   runBoundedCommand,
@@ -54,24 +55,63 @@ async function main() {
     DEFAULT_FALLBACK_TIMEOUT_MS,
   );
   const allowFallback = parseBooleanEnv("OPENCLAW_OXLINT_ALLOW_FALLBACK", true);
+  const memoryPressureAllowsFallback = parseBooleanEnv(
+    "OPENCLAW_OXLINT_MEMORY_PRESSURE_ALLOW_FALLBACK",
+    !allowFallback,
+  );
   const enableTypeAware = parseBooleanEnv("OPENCLAW_LINT_TYPE_AWARE", true);
   const threads = parsePositiveIntEnv("OPENCLAW_OXLINT_THREADS", defaultOxlintThreads());
+  const minAvailableMemoryMb = parseNonNegativeIntEnv(
+    "OPENCLAW_OXLINT_MIN_AVAILABLE_MB",
+    !allowFallback && enableTypeAware ? 768 : 0,
+  );
+  const maxTreeRssMb = parseNonNegativeIntEnv(
+    "OPENCLAW_OXLINT_MAX_RSS_MB",
+    !allowFallback && enableTypeAware ? 2048 : 0,
+  );
+  const memoryPollIntervalMs = parsePositiveIntEnv("OPENCLAW_OXLINT_MEMORY_POLL_MS", 1_000);
+  const memoryGuard =
+    minAvailableMemoryMb > 0 || maxTreeRssMb > 0
+      ? {
+          enabled: true,
+          maxTreeRssKb: maxTreeRssMb > 0 ? maxTreeRssMb * 1024 : 0,
+          minAvailableMemoryKb: minAvailableMemoryMb > 0 ? minAvailableMemoryMb * 1024 : 0,
+          pollIntervalMs: memoryPollIntervalMs,
+        }
+      : null;
 
   const threadedArgs = withDefaultThreads(originalArgs, threads);
   const primaryArgs = enableTypeAware ? withTypeAwareEnabled(threadedArgs) : threadedArgs;
-  const primaryResult = await runOxlint(command, primaryArgs, timeoutMs, "oxlint --type-aware");
+  const primaryResult = await runBoundedCommand({
+    args: primaryArgs,
+    command,
+    label: "oxlint --type-aware",
+    memoryGuard,
+    timeoutMs,
+  });
 
   if (primaryResult.code === 0) {
     process.exit(0);
   }
 
+  const canFallback =
+    allowFallback || (primaryResult.memoryPressure != null && memoryPressureAllowsFallback);
   if (
     !enableTypeAware ||
-    !allowFallback ||
-    (!primaryResult.timedOut && primaryResult.error == null && primaryResult.signal == null)
+    !canFallback ||
+    (primaryResult.memoryPressure == null &&
+      !primaryResult.timedOut &&
+      primaryResult.error == null &&
+      primaryResult.signal == null)
   ) {
     if (primaryResult.error != null) {
       console.error(`[openclaw] Failed to start oxlint: ${primaryResult.error.message}`);
+    }
+    if (primaryResult.memoryPressure != null) {
+      console.error(
+        "[openclaw] strict type-aware oxlint hit memory pressure locally; skipping hard failure.",
+      );
+      process.exit(0);
     }
     process.exit(toExitCode(primaryResult));
   }

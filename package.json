@@ -1086,7 +1086,7 @@
     "lint:plugins:no-monolithic-plugin-sdk-entry-imports": "node --import tsx scripts/check-no-monolithic-plugin-sdk-entry-imports.ts",
     "lint:plugins:no-register-http-handler": "node scripts/check-no-register-http-handler.mjs",
     "lint:plugins:plugin-sdk-subpaths-exported": "node scripts/check-plugin-sdk-subpath-exports.mjs",
-    "lint:strict": "OPENCLAW_OXLINT_ALLOW_FALLBACK=0 OPENCLAW_OXLINT_TIMEOUT_MS=600000 node scripts/run-oxlint-safe.mjs --threads=1",
+    "lint:strict": "OPENCLAW_OXLINT_ALLOW_FALLBACK=0 OPENCLAW_OXLINT_MEMORY_PRESSURE_ALLOW_FALLBACK=1 OPENCLAW_OXLINT_MIN_AVAILABLE_MB=768 OPENCLAW_OXLINT_MAX_RSS_MB=2048 OPENCLAW_OXLINT_TIMEOUT_MS=600000 node scripts/run-oxlint-safe.mjs --threads=1",
     "lint:swift": "swiftlint lint --config .swiftlint.yml && (cd apps/ios && swiftlint lint --config .swiftlint.yml)",
     "lint:tmp:channel-agnostic-boundaries": "node scripts/check-channel-agnostic-boundaries.mjs",
     "lint:tmp:no-random-messaging": "node scripts/check-no-random-messaging-tmp.mjs",
@@ -1184,7 +1184,7 @@
     "tui": "node scripts/run-node.mjs tui",
     "tui:dev": "OPENCLAW_PROFILE=dev node scripts/run-node.mjs --dev tui",
     "typecheck": "node scripts/run-tsgo-safe.mjs",
-    "typecheck:strict": "OPENCLAW_TSGO_STRICT=1 OPENCLAW_TSGO_ALLOW_FALLBACK=1 OPENCLAW_TSGO_TIMEOUT_MS=600000 OPENCLAW_TSC_TIMEOUT_MS=600000 node scripts/run-tsgo-safe.mjs",
+    "typecheck:strict": "OPENCLAW_TSGO_STRICT=1 OPENCLAW_TSGO_ALLOW_FALLBACK=1 OPENCLAW_TSGO_MIN_AVAILABLE_MB=768 OPENCLAW_TSGO_MAX_RSS_MB=1536 OPENCLAW_TSGO_TIMEOUT_MS=600000 OPENCLAW_TSC_TIMEOUT_MS=600000 node scripts/run-tsgo-safe.mjs",
     "ui:build": "node scripts/ui.js build",
     "ui:dev": "node scripts/ui.js dev",
     "ui:install": "node scripts/ui.js install"

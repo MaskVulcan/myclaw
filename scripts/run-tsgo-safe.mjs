@@ -2,6 +2,7 @@
 
 import {
   parseBooleanEnv,
+  parseNonNegativeIntEnv,
   parsePositiveIntEnv,
   resolveToolCommand,
   runBoundedCommand,
@@ -40,6 +41,9 @@ async function runTscFallback(args, timeoutMs) {
 }
 
 function shouldSoftSkip(result, strictMode) {
+  if (result.memoryPressure != null) {
+    return true;
+  }
   if (strictMode) {
     return false;
   }
@@ -48,8 +52,9 @@ function shouldSoftSkip(result, strictMode) {
 
 function exitWithResultOrSoftSkip(result, strictMode, label) {
   if (shouldSoftSkip(result, strictMode)) {
+    const reason = result.memoryPressure != null ? "memory guard" : "a resource limit";
     console.error(
-      `[openclaw] ${label} hit a resource limit locally; skipping hard failure. ` +
+      `[openclaw] ${label} hit ${reason} locally; skipping hard failure. ` +
         "Set OPENCLAW_TSGO_STRICT=1 to fail instead.",
     );
     process.exit(0);
@@ -68,6 +73,10 @@ async function main() {
     DEFAULT_FALLBACK_TIMEOUT_MS,
   );
   const allowFallback = parseBooleanEnv("OPENCLAW_TSGO_ALLOW_FALLBACK", false);
+  const memoryPressureAllowsFallback = parseBooleanEnv(
+    "OPENCLAW_TSGO_MEMORY_PRESSURE_ALLOW_FALLBACK",
+    false,
+  );
   const preferTsc = parseBooleanEnv("OPENCLAW_TSGO_PREFER_TSC", false);
   const defaultStrictMode =
     process.env.CI != null &&
@@ -75,6 +84,21 @@ async function main() {
     process.env.CI !== "0" &&
     process.env.CI.toLowerCase() !== "false";
   const strictMode = parseBooleanEnv("OPENCLAW_TSGO_STRICT", defaultStrictMode);
+  const minAvailableMemoryMb = parseNonNegativeIntEnv(
+    "OPENCLAW_TSGO_MIN_AVAILABLE_MB",
+    strictMode ? 768 : 0,
+  );
+  const maxTreeRssMb = parseNonNegativeIntEnv("OPENCLAW_TSGO_MAX_RSS_MB", strictMode ? 1536 : 0);
+  const memoryPollIntervalMs = parsePositiveIntEnv("OPENCLAW_TSGO_MEMORY_POLL_MS", 1_000);
+  const memoryGuard =
+    minAvailableMemoryMb > 0 || maxTreeRssMb > 0
+      ? {
+          enabled: true,
+          maxTreeRssKb: maxTreeRssMb > 0 ? maxTreeRssMb * 1024 : 0,
+          minAvailableMemoryKb: minAvailableMemoryMb > 0 ? minAvailableMemoryMb * 1024 : 0,
+          pollIntervalMs: memoryPollIntervalMs,
+        }
+      : null;
 
   if (preferTsc) {
     const fallbackResult = await runTscFallback(tscArgs, fallbackTimeoutMs);
@@ -87,6 +111,7 @@ async function main() {
     args: tsgoArgs,
     command,
     label: "tsgo",
+    memoryGuard,
     timeoutMs,
   });
 
@@ -94,7 +119,18 @@ async function main() {
     process.exit(0);
   }
 
-  if (!allowFallback || (!result.timedOut && result.error == null && result.signal == null)) {
+  if (result.memoryPressure != null && !memoryPressureAllowsFallback) {
+    exitWithResultOrSoftSkip(result, strictMode, "tsgo");
+    return;
+  }
+
+  if (
+    !allowFallback ||
+    (result.memoryPressure == null &&
+      !result.timedOut &&
+      result.error == null &&
+      result.signal == null)
+  ) {
     if (result.error != null) {
       console.error(`[openclaw] Failed to start tsgo: ${result.error.message}`);
     }
