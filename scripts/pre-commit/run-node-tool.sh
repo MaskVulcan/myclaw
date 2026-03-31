@@ -11,6 +11,21 @@ fi
 tool="$1"
 shift
 
+case "$tool" in
+  oxlint)
+    SAFE_OXLINT_SCRIPT="$ROOT_DIR/scripts/run-oxlint-safe.mjs"
+    if [[ -f "$SAFE_OXLINT_SCRIPT" ]] && command -v node >/dev/null 2>&1; then
+      exec node "$SAFE_OXLINT_SCRIPT" "$@"
+    fi
+    ;;
+  tsgo)
+    SAFE_TSGO_SCRIPT="$ROOT_DIR/scripts/run-tsgo-safe.mjs"
+    if [[ -f "$SAFE_TSGO_SCRIPT" ]] && command -v node >/dev/null 2>&1; then
+      exec node "$SAFE_TSGO_SCRIPT" "$@"
+    fi
+    ;;
+esac
+
 if [[ -f "$ROOT_DIR/pnpm-lock.yaml" ]] && command -v pnpm >/dev/null 2>&1; then
   exec pnpm exec "$tool" "$@"
 fi
