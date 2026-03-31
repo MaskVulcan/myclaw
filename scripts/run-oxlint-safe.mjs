@@ -10,7 +10,7 @@ import {
   runBoundedCommand,
 } from "./lib/run-bounded-command.mjs";
 
-const DEFAULT_TIMEOUT_MS = 15_000;
+const DEFAULT_TIMEOUT_MS = 8_000;
 const DEFAULT_FALLBACK_TIMEOUT_MS = 60_000;
 
 function toExitCode(result) {

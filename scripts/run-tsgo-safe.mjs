@@ -7,7 +7,7 @@ import {
   runBoundedCommand,
 } from "./lib/run-bounded-command.mjs";
 
-const DEFAULT_TIMEOUT_MS = 20_000;
+const DEFAULT_TIMEOUT_MS = 5_000;
 const DEFAULT_FALLBACK_TIMEOUT_MS = 180_000;
 
 function defaultTsgoArgs(args) {
