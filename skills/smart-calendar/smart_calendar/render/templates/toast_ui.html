@@ -128,7 +128,7 @@
 <div id="capture-root">
   <div id="app-wrapper">
     <div id="header">
-      <h1>📅 {{ title }}</h1>
+      <h1>{{ title }}</h1>
       <span class="date-range">{{ date_range }}</span>
     </div>
     {% if categories %}
@@ -136,7 +136,7 @@
       {% for cat_name, cat_info in categories.items() %}
       <span class="legend-item">
         <span class="legend-dot" style="background: {{ cat_info.color }};"></span>
-        {{ cat_info.icon }} {{ cat_name }}
+        {{ cat_name }}
       </span>
       {% endfor %}
     </div>
@@ -166,7 +166,7 @@ const events = [
   {
     id: {{ event.id | tojson }},
     calendarId: {{ event.category | tojson }},
-    title: {{ (event.icon ~ ' ' ~ event.title) | tojson }},
+    title: {{ event.title | tojson }},
     start: {{ event.start_iso | tojson }},
     end: {{ event.end_iso | tojson }},
     category: 'time',

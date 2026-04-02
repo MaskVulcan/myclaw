@@ -93,6 +93,13 @@
     border-radius: 50%;
     display: inline-block;
   }
+  .category-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    flex: 0 0 10px;
+  }
   #content {
     padding: 22px;
     display: flex;
@@ -221,7 +228,7 @@
         {% for cat_name, cat_info in categories.items() %}
         <span class="summary-pill">
           <span class="summary-dot" style="background: {{ cat_info.color }};"></span>
-          {{ cat_info.icon }} {{ cat_name }}
+          {{ cat_name }}
         </span>
         {% endfor %}
       </div>
@@ -239,21 +246,24 @@
         </div>
         <div class="event-main">
           <div class="event-top">
-            <div class="event-title">{{ event.icon }} {{ event.title }}</div>
-            <div class="event-category">{{ event.icon }} {{ event.category }}</div>
+            <div class="event-title">{{ event.title }}</div>
+            <div class="event-category">
+              <span class="category-dot" style="background: {{ event.color }};"></span>
+              {{ event.category }}
+            </div>
           </div>
           {% if event.location or event.participants %}
           <div class="meta-row">
             {% if event.location %}
-            <span class="meta-pill">📍 {{ event.location }}</span>
+            <span class="meta-pill">地点 {{ event.location }}</span>
             {% endif %}
             {% if event.participants %}
-            <span class="meta-pill">👥 {{ event.participants | join("、") }}</span>
+            <span class="meta-pill">参与人 {{ event.participants | join("、") }}</span>
             {% endif %}
           </div>
           {% endif %}
           {% if event.notes %}
-          <div class="notes">📝 {{ event.notes }}</div>
+          <div class="notes">备注 {{ event.notes }}</div>
           {% endif %}
         </div>
       </section>
