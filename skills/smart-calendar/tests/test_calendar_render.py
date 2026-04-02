@@ -145,6 +145,7 @@ class TestRenderHtml:
         assert "高铁去香港" in html
         assert "张总" in html
         assert "defaultView:" not in html
+        assert "twemoji.min.js" in html
 
     def test_html_dynamic_hours(self, render):
         """事件时间影响显示的小时范围"""
@@ -152,6 +153,7 @@ class TestRenderHtml:
         html = render.render_html(events)
         # 07:00 的事件应使 hourStart 变为 7
         assert "hourStart: 7" in html
+        assert "twemoji.min.js" in html
 
     def test_light_category_uses_readable_text_color(self, render):
         """浅色类别会自动转成可读的前景/强调色"""

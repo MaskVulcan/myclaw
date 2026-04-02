@@ -282,6 +282,10 @@ class CalendarRender:
                         state="attached",
                         timeout=10000,
                     )
+                page.wait_for_function(
+                    "window.__smartCalendarRenderReady === true",
+                    timeout=10000,
+                )
                 page.wait_for_timeout(350)
             except Exception:
                 page.wait_for_timeout(1500)

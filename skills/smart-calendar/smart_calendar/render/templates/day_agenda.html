@@ -93,6 +93,13 @@
     border-radius: 50%;
     display: inline-block;
   }
+  .emoji-inline img.emoji,
+  img.emoji {
+    width: 1.1em;
+    height: 1.1em;
+    margin: 0 0.08em;
+    vertical-align: -0.18em;
+  }
   .category-dot {
     width: 10px;
     height: 10px;
@@ -218,7 +225,7 @@
 <div id="capture-root">
   <div id="app-wrapper">
     <div id="header">
-      <span class="eyebrow">日程安排</span>
+      <span class="eyebrow emoji-inline">📅 日程安排</span>
       <div class="header-main">
         <h1 class="header-title">{{ title }}</h1>
         <div class="header-date">{{ date_range }}</div>
@@ -226,9 +233,9 @@
       <div class="summary-row">
         <span class="summary-pill">共 {{ total_events }} 项安排</span>
         {% for cat_name, cat_info in categories.items() %}
-        <span class="summary-pill">
+        <span class="summary-pill emoji-inline">
           <span class="summary-dot" style="background: {{ cat_info.color }};"></span>
-          {{ cat_name }}
+          {{ cat_info.icon }} {{ cat_name }}
         </span>
         {% endfor %}
       </div>
@@ -246,24 +253,24 @@
         </div>
         <div class="event-main">
           <div class="event-top">
-            <div class="event-title">{{ event.title }}</div>
-            <div class="event-category">
+            <div class="event-title emoji-inline">{{ event.icon }} {{ event.title }}</div>
+            <div class="event-category emoji-inline">
               <span class="category-dot" style="background: {{ event.color }};"></span>
-              {{ event.category }}
+              {{ event.icon }} {{ event.category }}
             </div>
           </div>
           {% if event.location or event.participants %}
           <div class="meta-row">
             {% if event.location %}
-            <span class="meta-pill">地点 {{ event.location }}</span>
+            <span class="meta-pill emoji-inline">📍 {{ event.location }}</span>
             {% endif %}
             {% if event.participants %}
-            <span class="meta-pill">参与人 {{ event.participants | join("、") }}</span>
+            <span class="meta-pill emoji-inline">👥 {{ event.participants | join("、") }}</span>
             {% endif %}
           </div>
           {% endif %}
           {% if event.notes %}
-          <div class="notes">备注 {{ event.notes }}</div>
+          <div class="notes emoji-inline">📝 {{ event.notes }}</div>
           {% endif %}
         </div>
       </section>
@@ -277,5 +284,32 @@
     </div>
   </div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/twemoji.min.js"></script>
+<script>
+window.__smartCalendarRenderReady = false;
+
+function waitForEmojiImages(root) {
+  const images = Array.from(root.querySelectorAll('img.emoji'));
+  return Promise.all(images.map((image) => {
+    if (image.complete) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      image.addEventListener('load', resolve, { once: true });
+      image.addEventListener('error', resolve, { once: true });
+    });
+  }));
+}
+
+async function finalizeRender() {
+  if (window.twemoji) {
+    twemoji.parse(document.body, { folder: 'svg', ext: '.svg' });
+    await waitForEmojiImages(document.body);
+  }
+  window.__smartCalendarRenderReady = true;
+}
+
+finalizeRender();
+</script>
 </body>
 </html>

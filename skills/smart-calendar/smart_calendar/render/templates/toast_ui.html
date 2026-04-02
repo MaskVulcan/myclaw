@@ -74,6 +74,13 @@
     border-radius: 50%;
     display: inline-block;
   }
+  .emoji-inline img.emoji,
+  img.emoji {
+    width: 1.05em;
+    height: 1.05em;
+    margin: 0 0.08em;
+    vertical-align: -0.16em;
+  }
   #calendar-container {
     height: {{ height }}px;
     padding: 0 18px 18px;
@@ -128,15 +135,15 @@
 <div id="capture-root">
   <div id="app-wrapper">
     <div id="header">
-      <h1>{{ title }}</h1>
+      <h1 class="emoji-inline">📅 {{ title }}</h1>
       <span class="date-range">{{ date_range }}</span>
     </div>
     {% if categories %}
     <div id="legend">
       {% for cat_name, cat_info in categories.items() %}
-      <span class="legend-item">
+      <span class="legend-item emoji-inline">
         <span class="legend-dot" style="background: {{ cat_info.color }};"></span>
-        {{ cat_name }}
+        {{ cat_info.icon }} {{ cat_name }}
       </span>
       {% endfor %}
     </div>
@@ -146,8 +153,31 @@
 </div>
 
 <script src="https://uicdn.toast.com/calendar/latest/toastui-calendar.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/twemoji.min.js"></script>
 <script>
 const Calendar = tui.Calendar;
+window.__smartCalendarRenderReady = false;
+
+function waitForEmojiImages(root) {
+  const images = Array.from(root.querySelectorAll('img.emoji'));
+  return Promise.all(images.map((image) => {
+    if (image.complete) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      image.addEventListener('load', resolve, { once: true });
+      image.addEventListener('error', resolve, { once: true });
+    });
+  }));
+}
+
+async function finalizeRender() {
+  if (window.twemoji) {
+    twemoji.parse(document.body, { folder: 'svg', ext: '.svg' });
+    await waitForEmojiImages(document.body);
+  }
+  window.__smartCalendarRenderReady = true;
+}
 
 const calendars = [
   {% for cat_name, cat_info in categories.items() %}
@@ -166,7 +196,7 @@ const events = [
   {
     id: {{ event.id | tojson }},
     calendarId: {{ event.category | tojson }},
-    title: {{ event.title | tojson }},
+    title: {{ (event.icon ~ ' ' ~ event.title) | tojson }},
     start: {{ event.start_iso | tojson }},
     end: {{ event.end_iso | tojson }},
     category: 'time',
@@ -220,6 +250,11 @@ const cal = new Calendar('#calendar-container', {
 
 cal.setDate(new Date('{{ focus_date }}'));
 cal.createEvents(events);
+requestAnimationFrame(() => {
+  requestAnimationFrame(() => {
+    finalizeRender();
+  });
+});
 </script>
 </body>
 </html>
