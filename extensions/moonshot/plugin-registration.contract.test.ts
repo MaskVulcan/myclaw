@@ -3,6 +3,7 @@ import { describePluginRegistrationContract } from "../../test/helpers/extension
 describePluginRegistrationContract({
   pluginId: "moonshot",
   providerIds: ["moonshot"],
+  cliBackendIds: ["kimi-cli"],
   webSearchProviderIds: ["kimi"],
   mediaUnderstandingProviderIds: ["moonshot"],
   requireDescribeImages: true,

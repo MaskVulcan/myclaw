@@ -2,6 +2,7 @@
   "id": "moonshot",
   "enabledByDefault": true,
   "providers": ["moonshot"],
+  "cliBackends": ["kimi-cli"],
   "providerAuthEnvVars": {
     "moonshot": ["MOONSHOT_API_KEY"]
   },

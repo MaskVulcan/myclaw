@@ -142,6 +142,50 @@ describe("runCliAgent spawn path", () => {
     expect(input.scopeKey).toContain("thread-123");
   });
 
+  it("places Kimi prompt text directly after --prompt when spawning the CLI", async () => {
+    const runCliAgent = await setupCliRunnerTestModule();
+    supervisorSpawnMock.mockResolvedValueOnce(
+      createManagedRun({
+        reason: "exit",
+        exitCode: 0,
+        exitSignal: null,
+        durationMs: 50,
+        stdout: "pong",
+        stderr: "",
+        timedOut: false,
+        noOutputTimedOut: false,
+      }),
+    );
+
+    await runCliAgent({
+      sessionId: "s1",
+      sessionFile: "/tmp/session.jsonl",
+      workspaceDir: "/tmp",
+      prompt: "Reply with exactly: pong",
+      provider: "kimi-cli",
+      model: "k2p5",
+      timeoutMs: 1_000,
+      runId: "run-kimi-prompt-placement",
+    });
+
+    const input = supervisorSpawnMock.mock.calls[0]?.[0] as { argv?: string[] };
+    const argv = input.argv ?? [];
+    expect(argv[0]).toBe("kimi");
+    expect(argv[1]).toBe("--quiet");
+    expect(argv[2]).toBe("--no-thinking");
+    expect(argv[3]).toBe("--max-steps-per-turn");
+    expect(argv[4]).toBe("1");
+    expect(argv[5]).toBe("--prompt");
+    expect(argv[6]).toBe("Reply with exactly: pong");
+    expect(argv[7]).toBe("--model");
+    expect(argv[8]).toBe("kimi-k2.5");
+    const sessionFlagIndex = argv.indexOf("--session");
+    expect(sessionFlagIndex).toBeGreaterThan(0);
+    expect(argv[sessionFlagIndex + 1]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
+  });
+
   it("sanitizes dangerous backend env overrides before spawn", async () => {
     const runCliAgent = await setupCliRunnerTestModule();
     mockSuccessfulCliRun();

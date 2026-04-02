@@ -117,4 +117,39 @@ describe("buildCliArgs", () => {
       }),
     ).toEqual(["exec", "resume", "thread-123", "--model", "gpt-5.4"]);
   });
+
+  it("injects prompt placeholders in place for CLIs that require prompt values adjacent to flags", () => {
+    expect(
+      buildCliArgs({
+        backend: {
+          command: "kimi",
+          modelArg: "--model",
+          sessionArg: "--session",
+        },
+        baseArgs: [
+          "--quiet",
+          "--no-thinking",
+          "--max-steps-per-turn",
+          "1",
+          "--prompt",
+          "{{Prompt}}",
+        ],
+        modelId: "kimi-k2.5",
+        sessionId: "session-123",
+        promptArg: "Reply with exactly: pong",
+        useResume: false,
+      }),
+    ).toEqual([
+      "--quiet",
+      "--no-thinking",
+      "--max-steps-per-turn",
+      "1",
+      "--prompt",
+      "Reply with exactly: pong",
+      "--model",
+      "kimi-k2.5",
+      "--session",
+      "session-123",
+    ]);
+  });
 });

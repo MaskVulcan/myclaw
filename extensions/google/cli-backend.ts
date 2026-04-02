@@ -15,8 +15,8 @@ export function buildGoogleGeminiCliBackend(): CliBackendPlugin {
     id: "google-gemini-cli",
     config: {
       command: "gemini",
-      args: ["--prompt", "--output-format", "json"],
-      resumeArgs: ["--resume", "{sessionId}", "--prompt", "--output-format", "json"],
+      args: ["--prompt", "{{Prompt}}", "--output-format", "json"],
+      resumeArgs: ["--resume", "{sessionId}", "--prompt", "{{Prompt}}", "--output-format", "json"],
       output: "json",
       input: "arg",
       modelArg: "--model",

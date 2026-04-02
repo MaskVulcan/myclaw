@@ -25,6 +25,12 @@ describe("buildPromptSection", () => {
     expect(result).toContain(
       "Citations: include Source: <path#line> when it helps the user verify memory snippets.",
     );
+    expect(result).toContain(
+      "If Project Context includes a session-scoped memory file for the current conversation, prefer that file over shared MEMORY.md for user-specific preferences, defaults, or follow-up notes.",
+    );
+    expect(result).toContain(
+      "When the current turn establishes durable user-specific preferences, defaults, principles, persona facts, or ongoing goals, update that session-scoped memory file instead of leaving the fact only in chat history.",
+    );
     expect(result.at(-1)).toBe("");
   });
 

@@ -4,6 +4,7 @@ import {
   resolveMoonshotThinkingType,
 } from "openclaw/plugin-sdk/provider-moonshot";
 import { applyMoonshotNativeStreamingUsageCompat } from "./api.js";
+import { buildKimiCliBackend } from "./cli-backend.js";
 import { moonshotMediaUnderstandingProvider } from "./media-understanding-provider.js";
 import {
   applyMoonshotConfig,
@@ -67,6 +68,7 @@ export default defineSingleProviderPluginEntry({
     },
   },
   register(api) {
+    api.registerCliBackend(buildKimiCliBackend());
     api.registerMediaUnderstandingProvider(moonshotMediaUnderstandingProvider);
     api.registerWebSearchProvider(createKimiWebSearchProvider());
   },

@@ -183,6 +183,8 @@ load local files from plain paths (Claude Code CLI behavior).
 Input modes:
 
 - `input: "arg"` (default) passes the prompt as the last CLI arg.
+- If your CLI requires the prompt value immediately after a flag such as
+  `--prompt`, put `{{Prompt}}` directly inside `args` / `resumeArgs`.
 - `input: "stdin"` sends the prompt via stdin.
 - If the prompt is very long and `maxPromptArgChars` is set, stdin is used.
 
@@ -217,11 +219,24 @@ resume argv narrower than the fresh-run argv.
 The bundled Google plugin also registers a default for `google-gemini-cli`:
 
 - `command: "gemini"`
-- `args: ["--prompt", "--output-format", "json"]`
-- `resumeArgs: ["--resume", "{sessionId}", "--prompt", "--output-format", "json"]`
+- `args: ["--prompt", "{{Prompt}}", "--output-format", "json"]`
+- `resumeArgs: ["--resume", "{sessionId}", "--prompt", "{{Prompt}}", "--output-format", "json"]`
 - `modelArg: "--model"`
 - `sessionMode: "existing"`
 - `sessionIdFields: ["session_id", "sessionId"]`
+
+The bundled Moonshot plugin also registers a default for `kimi-cli`:
+
+- `command: "kimi"`
+- `args: ["--quiet", "--no-thinking", "--max-steps-per-turn", "1", "--prompt", "{{Prompt}}"]`
+- `output: "text"`
+- `input: "arg"`
+- `modelArg: "--model"`
+- `sessionArg: "--session"`
+- `sessionMode: "always"`
+- `modelAliases.default: "kimi-k2.5"`
+- `modelAliases.k2p5: "kimi-k2.5"`
+- `modelAliases.coding: "kimi-code/kimi-for-coding"`
 
 Override only if needed (common: absolute `command` path).
 

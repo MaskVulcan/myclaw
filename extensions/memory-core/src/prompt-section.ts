@@ -23,7 +23,12 @@ export const buildPromptSection: MemoryPromptSectionBuilder = ({
       "Before answering anything about prior work, decisions, dates, people, preferences, or todos that already point to a specific memory file or note: run memory_get to pull only the needed lines. If low confidence after reading them, say you checked.";
   }
 
-  const lines = ["## Memory Recall", toolGuidance];
+  const lines = [
+    "## Memory Recall",
+    toolGuidance,
+    "If Project Context includes a session-scoped memory file for the current conversation, prefer that file over shared MEMORY.md for user-specific preferences, defaults, or follow-up notes.",
+    "When the current turn establishes durable user-specific preferences, defaults, principles, persona facts, or ongoing goals, update that session-scoped memory file instead of leaving the fact only in chat history.",
+  ];
   if (citationsMode === "off") {
     lines.push(
       "Citations are disabled: do not mention file paths or line numbers in replies unless the user explicitly asks.",

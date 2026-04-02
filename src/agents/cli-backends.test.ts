@@ -101,12 +101,37 @@ beforeEach(() => {
       bundleMcp: false,
       config: {
         command: "gemini",
-        args: ["--prompt", "--output-format", "json"],
-        resumeArgs: ["--resume", "{sessionId}", "--prompt", "--output-format", "json"],
+        args: ["--prompt", "{{Prompt}}", "--output-format", "json"],
+        resumeArgs: [
+          "--resume",
+          "{sessionId}",
+          "--prompt",
+          "{{Prompt}}",
+          "--output-format",
+          "json",
+        ],
         modelArg: "--model",
         sessionMode: "existing",
         sessionIdFields: ["session_id", "sessionId"],
         modelAliases: { pro: "gemini-3.1-pro-preview" },
+      },
+    }),
+    createBackendEntry({
+      pluginId: "moonshot",
+      id: "kimi-cli",
+      config: {
+        command: "kimi",
+        args: ["--quiet", "--no-thinking", "--max-steps-per-turn", "1", "--prompt", "{{Prompt}}"],
+        output: "text",
+        input: "arg",
+        modelArg: "--model",
+        sessionArg: "--session",
+        sessionMode: "always",
+        modelAliases: {
+          default: "kimi-k2.5",
+          k2p5: "kimi-k2.5",
+          coding: "kimi-code/kimi-for-coding",
+        },
       },
     }),
   ];
@@ -282,17 +307,42 @@ describe("resolveCliBackendConfig claude-cli defaults", () => {
   });
 });
 
+describe("resolveCliBackendConfig kimi-cli defaults", () => {
+  it("uses arg input with explicit session ids so Kimi CLI can resume without a separate resume command", () => {
+    const resolved = resolveCliBackendConfig("kimi-cli");
+
+    expect(resolved).not.toBeNull();
+    expect(resolved?.config.command).toBe("kimi");
+    expect(resolved?.config.input).toBe("arg");
+    expect(resolved?.config.output).toBe("text");
+    expect(resolved?.config.args).toEqual([
+      "--quiet",
+      "--no-thinking",
+      "--max-steps-per-turn",
+      "1",
+      "--prompt",
+      "{{Prompt}}",
+    ]);
+    expect(resolved?.config.sessionArg).toBe("--session");
+    expect(resolved?.config.sessionMode).toBe("always");
+    expect(resolved?.config.resumeArgs).toBeUndefined();
+    expect(resolved?.config.modelAliases?.k2p5).toBe("kimi-k2.5");
+    expect(resolved?.config.modelAliases?.coding).toBe("kimi-code/kimi-for-coding");
+  });
+});
+
 describe("resolveCliBackendConfig google-gemini-cli defaults", () => {
   it("uses Gemini CLI json args and existing-session resume mode", () => {
     const resolved = resolveCliBackendConfig("google-gemini-cli");
 
     expect(resolved).not.toBeNull();
     expect(resolved?.bundleMcp).toBe(false);
-    expect(resolved?.config.args).toEqual(["--prompt", "--output-format", "json"]);
+    expect(resolved?.config.args).toEqual(["--prompt", "{{Prompt}}", "--output-format", "json"]);
     expect(resolved?.config.resumeArgs).toEqual([
       "--resume",
       "{sessionId}",
       "--prompt",
+      "{{Prompt}}",
       "--output-format",
       "json",
     ]);

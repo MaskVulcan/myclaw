@@ -23,6 +23,7 @@ import { sanitizeImageBlocks } from "../tool-images.js";
 export { buildCliSupervisorScopeKey, resolveCliNoOutputTimeoutMs } from "./reliability.js";
 
 const CLI_RUN_QUEUE = new KeyedAsyncQueue();
+const CLI_PROMPT_PLACEHOLDER = "{{Prompt}}";
 export function enqueueCliRun<T>(key: string, task: () => Promise<T>): Promise<T> {
   return CLI_RUN_QUEUE.enqueue(key, task);
 }
@@ -250,7 +251,17 @@ export function buildCliArgs(params: {
   promptArg?: string;
   useResume: boolean;
 }): string[] {
-  const args: string[] = [...params.baseArgs];
+  let promptConsumed = false;
+  const args: string[] = params.baseArgs.flatMap((entry) => {
+    if (entry !== CLI_PROMPT_PLACEHOLDER) {
+      return [entry];
+    }
+    if (params.promptArg === undefined) {
+      return [];
+    }
+    promptConsumed = true;
+    return [params.promptArg];
+  });
   if (params.backend.modelArg && params.modelId) {
     args.push(params.backend.modelArg, params.modelId);
   }
@@ -279,7 +290,7 @@ export function buildCliArgs(params: {
       }
     }
   }
-  if (params.promptArg !== undefined) {
+  if (params.promptArg !== undefined && !promptConsumed) {
     args.push(params.promptArg);
   }
   return args;

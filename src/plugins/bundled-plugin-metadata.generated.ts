@@ -9885,6 +9885,7 @@ export const GENERATED_BUNDLED_PLUGIN_METADATA = [
     },
     publicSurfaceArtifacts: [
       "api.js",
+      "cli-backend.js",
       "media-understanding-provider.js",
       "onboard.js",
       "provider-catalog.js",
@@ -9921,6 +9922,7 @@ export const GENERATED_BUNDLED_PLUGIN_METADATA = [
       },
       enabledByDefault: true,
       providers: ["moonshot"],
+      cliBackends: ["kimi-cli"],
       providerAuthEnvVars: {
         moonshot: ["MOONSHOT_API_KEY"],
       },
