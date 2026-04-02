@@ -75,6 +75,7 @@ import {
 } from "./heartbeat-wake.js";
 import type { OutboundSendDeps } from "./outbound/deliver.js";
 import { deliverOutboundPayloads } from "./outbound/deliver.js";
+import { enqueuePendingWeixinReminder } from "./outbound/pending-weixin-reminders.js";
 import { buildOutboundSessionContext } from "./outbound/session-context.js";
 import {
   resolveHeartbeatDeliveryTarget,
@@ -90,6 +91,7 @@ export type HeartbeatDeps = OutboundSendDeps &
   };
 
 const log = createSubsystemLogger("gateway/heartbeat");
+const WEIXIN_PROACTIVE_SEND_REJECTED_RE = /\bret=-2\b/i;
 
 export { areHeartbeatsEnabled, setHeartbeatsEnabled };
 export {
@@ -894,26 +896,74 @@ export async function runHeartbeatOnce(opts: {
       }
     }
 
-    await deliverOutboundPayloads({
-      cfg,
-      channel: delivery.channel,
-      to: delivery.to,
-      accountId: deliveryAccountId,
-      session: outboundSession,
-      threadId: delivery.threadId,
-      payloads: [
-        ...reasoningPayloads,
-        ...(shouldSkipMain
-          ? []
-          : [
-              {
-                text: normalized.text,
-                mediaUrls,
-              },
-            ]),
-      ],
-      deps: opts.deps,
-    });
+    const outboundPayloads = [
+      ...reasoningPayloads,
+      ...(shouldSkipMain
+        ? []
+        : [
+            {
+              text: normalized.text,
+              mediaUrls,
+            },
+          ]),
+    ];
+
+    try {
+      await deliverOutboundPayloads({
+        cfg,
+        channel: delivery.channel,
+        to: delivery.to,
+        accountId: deliveryAccountId,
+        session: outboundSession,
+        threadId: delivery.threadId,
+        payloads: outboundPayloads,
+        deps: opts.deps,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const shouldQueuePendingReminder =
+        delivery.channel === "openclaw-weixin" &&
+        Boolean(delivery.to) &&
+        Boolean(deliveryAccountId) &&
+        WEIXIN_PROACTIVE_SEND_REJECTED_RE.test(message);
+
+      if (!shouldQueuePendingReminder || !delivery.to || !deliveryAccountId) {
+        throw error;
+      }
+
+      const queued = await enqueuePendingWeixinReminder({
+        accountId: deliveryAccountId,
+        to: delivery.to,
+        sessionKey,
+        reason: message,
+        createdAt: startedAt,
+        payloads: outboundPayloads.map((payload) => ({
+          text: typeof payload.text === "string" ? payload.text : undefined,
+          mediaUrls: Array.isArray(payload.mediaUrls) ? payload.mediaUrls : [],
+        })),
+      });
+
+      if (!queued) {
+        throw error;
+      }
+
+      emitHeartbeatEvent({
+        status: "skipped",
+        reason: "weixin-context-pending",
+        to: delivery.to,
+        preview: previewText?.slice(0, 200),
+        durationMs: Date.now() - startedAt,
+        hasMedia: mediaUrls.length > 0,
+        channel: delivery.channel,
+        accountId: delivery.accountId,
+      });
+      log.warn("heartbeat: queued pending Weixin reminder after proactive send rejection", {
+        accountId: deliveryAccountId,
+        to: delivery.to,
+        queuedId: queued.id,
+      });
+      return { status: "ran", durationMs: Date.now() - startedAt };
+    }
 
     // Record last delivered heartbeat payload for dedupe.
     if (!shouldSkipMain && normalized.text.trim()) {

@@ -904,6 +904,47 @@ function formatIsoDate(value: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+function resolveReminderDateParts(value: Date): { year: number; month: number; day: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: REMINDER_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
+  const year = Number(parts.find((part) => part.type === "year")?.value ?? "0");
+  const month = Number(parts.find((part) => part.type === "month")?.value ?? "0");
+  const day = Number(parts.find((part) => part.type === "day")?.value ?? "0");
+  return { year, month, day };
+}
+
+function formatReminderDigestDate(nowMs: number, dayOffset: number): string {
+  const baseParts = resolveReminderDateParts(new Date(nowMs));
+  const target = new Date(
+    Date.UTC(baseParts.year, baseParts.month - 1, baseParts.day + dayOffset, 12),
+  );
+  const parts = resolveReminderDateParts(target);
+  const weekdayKey = new Intl.DateTimeFormat("en-US", {
+    timeZone: REMINDER_TIMEZONE,
+    weekday: "short",
+  }).format(target);
+  const weekdayMap: Record<string, string> = {
+    Sun: "周日",
+    Mon: "周一",
+    Tue: "周二",
+    Wed: "周三",
+    Thu: "周四",
+    Fri: "周五",
+    Sat: "周六",
+  };
+  return `${parts.month}月${parts.day}日 ${weekdayMap[weekdayKey] ?? weekdayKey}`;
+}
+
+function expandCronReminderAbsoluteDate(text: string, nowMs: number): string {
+  return text
+    .replace(/今天的日程/g, `${formatReminderDigestDate(nowMs, 0)}的日程`)
+    .replace(/明天的日程/g, `${formatReminderDigestDate(nowMs, 1)}的日程`);
+}
+
 function buildFutureRange(days: number, now = new Date()): string {
   const start = new Date(now);
   start.setHours(12, 0, 0, 0);
@@ -1423,7 +1464,11 @@ export async function tryHandleBundledSkillFastpass(
   deps: CalendarCliDeps = {},
 ): Promise<BundledSkillFastpassResult> {
   const { ctx } = params;
-  const sourceText = resolveSourceText(ctx);
+  const rawSourceText = resolveSourceText(ctx);
+  const sourceText =
+    ctx.Provider === "cron-event"
+      ? expandCronReminderAbsoluteDate(rawSourceText, deps.nowMs?.() ?? Date.now())
+      : rawSourceText;
   const intent = resolveCalendarIntent(sourceText);
   if (!intent) {
     return { handled: false };
