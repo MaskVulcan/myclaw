@@ -600,6 +600,7 @@ describe("runAgentTurnWithFallback", () => {
   it("skips fast-pass when the live session is already pinned to a different model", async () => {
     state.resolveMultiStageRoutingPlanMock.mockReturnValue({
       escalationMarker: "[[openclaw_stage2]]",
+      bypassFastPassReason: undefined,
       fastPass: {
         provider: "openai",
         model: "gpt-5.2",
@@ -683,5 +684,88 @@ describe("runAgentTurnWithFallback", () => {
     });
     expect(followupRun.run.provider).toBe("openai");
     expect(followupRun.run.model).toBe("gpt-5.4");
+  });
+
+  it("skips fast-pass when the local heuristic marks the message as complex", async () => {
+    state.resolveMultiStageRoutingPlanMock.mockReturnValue({
+      escalationMarker: "[[openclaw_stage2]]",
+      bypassFastPassReason: "complex_keyword",
+      fastPass: {
+        provider: "openai",
+        model: "gpt-5.2",
+        explicitModel: true,
+        thinkLevel: "low",
+        fastMode: true,
+        systemPromptMode: "none",
+        skillsPromptMode: "off",
+        bootstrapContextMode: "lightweight",
+        disableTools: true,
+        inheritExtraSystemPrompt: false,
+      },
+      escalationPass: {
+        provider: "openai",
+        model: "gpt-5.4",
+        explicitModel: true,
+        thinkLevel: "xhigh",
+        fastMode: false,
+        systemPromptMode: "full",
+        skillsPromptMode: "auto",
+        bootstrapContextMode: "full",
+        disableTools: false,
+        inheritExtraSystemPrompt: true,
+      },
+    });
+    state.runWithModelFallbackMock.mockImplementation(
+      async (params: {
+        provider?: string;
+        model?: string;
+        run: (provider: string, model: string) => Promise<unknown>;
+      }) => ({
+        result: await params.run(params.provider ?? "anthropic", params.model ?? "claude"),
+        provider: params.provider ?? "anthropic",
+        model: params.model ?? "claude",
+        attempts: [],
+      }),
+    );
+    state.runEmbeddedPiAgentMock.mockImplementationOnce(async () => ({
+      payloads: [{ text: "strong answer" }],
+      meta: {},
+    }));
+
+    const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
+    const followupRun = createFollowupRun();
+    const result = await runAgentTurnWithFallback({
+      commandBody: "你看看日志，分析下为什么这么慢",
+      followupRun,
+      sessionCtx: {
+        Provider: "whatsapp",
+        MessageSid: "msg",
+      } as unknown as TemplateContext,
+      opts: {},
+      typingSignals: createMockTypingSignaler(),
+      blockReplyPipeline: null,
+      blockStreamingEnabled: false,
+      resolvedBlockStreamingBreak: "message_end",
+      applyReplyToMode: (payload) => payload,
+      shouldEmitToolResult: () => true,
+      shouldEmitToolOutput: () => false,
+      pendingToolTasks: new Set(),
+      resetSessionAfterCompactionFailure: async () => false,
+      resetSessionAfterRoleOrderingConflict: async () => false,
+      isHeartbeat: false,
+      sessionKey: "main",
+      getActiveSessionEntry: () => undefined,
+      resolvedVerboseLevel: "off",
+    });
+
+    expect(result.kind).toBe("success");
+    expect(state.runEmbeddedPiAgentMock).toHaveBeenCalledTimes(1);
+    expect(state.runEmbeddedPiAgentMock.mock.calls[0]?.[0]).toMatchObject({
+      provider: "openai",
+      model: "gpt-5.4",
+      runId: expect.any(String),
+      thinkLevel: "xhigh",
+      fastMode: false,
+    });
   });
 });

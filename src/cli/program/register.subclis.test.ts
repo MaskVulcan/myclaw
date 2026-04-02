@@ -18,6 +18,14 @@ const { nodesAction, registerNodesCli } = vi.hoisted(() => {
   return { nodesAction: action, registerNodesCli: register };
 });
 
+const { calendarAction, registerCalendarCli } = vi.hoisted(() => {
+  const action = vi.fn();
+  const register = vi.fn((program: Command) => {
+    program.command("calendar").action(action);
+  });
+  return { calendarAction: action, registerCalendarCli: register };
+});
+
 const configModule = vi.hoisted(() => ({
   loadConfig: vi.fn(),
   readConfigFileSnapshot: vi.fn(),
@@ -25,9 +33,15 @@ const configModule = vi.hoisted(() => ({
 
 vi.mock("../acp-cli.js", () => ({ registerAcpCli }));
 vi.mock("../nodes-cli.js", () => ({ registerNodesCli }));
+vi.mock("../calendar-cli.js", () => ({ registerCalendarCli }));
 vi.mock("../../config/config.js", () => configModule);
 
-const mockedModuleIds = ["../acp-cli.js", "../nodes-cli.js", "../../config/config.js"];
+const mockedModuleIds = [
+  "../acp-cli.js",
+  "../nodes-cli.js",
+  "../calendar-cli.js",
+  "../../config/config.js",
+];
 
 const { loadValidatedConfigForPluginRegistration, registerSubCliByName, registerSubCliCommands } =
   await import("./register.subclis.js");
@@ -63,6 +77,8 @@ describe("registerSubCliCommands", () => {
     acpAction.mockClear();
     registerNodesCli.mockClear();
     nodesAction.mockClear();
+    registerCalendarCli.mockClear();
+    calendarAction.mockClear();
     configModule.loadConfig.mockReset();
     configModule.readConfigFileSnapshot.mockReset();
   });
@@ -141,5 +157,16 @@ describe("registerSubCliCommands", () => {
     await program.parseAsync(["acp"], { from: "user" });
     expect(registerAcpCli).toHaveBeenCalledTimes(1);
     expect(acpAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("registers and dispatches the calendar passthrough command", async () => {
+    const program = createRegisteredProgram(["node", "openclaw", "calendar"], "openclaw");
+
+    expect(program.commands.map((cmd) => cmd.name())).toEqual(["calendar"]);
+
+    await program.parseAsync(["calendar"], { from: "user" });
+
+    expect(registerCalendarCli).toHaveBeenCalledTimes(1);
+    expect(calendarAction).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+pick_python() {
+  if [[ -n "${PYTHON_BIN:-}" ]]; then
+    printf '%s\n' "$PYTHON_BIN"
+    return 0
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    printf '%s\n' "python3"
+    return 0
+  fi
+  if command -v python >/dev/null 2>&1; then
+    printf '%s\n' "python"
+    return 0
+  fi
+  echo "python3 or python is required to run document-processing-pipeline" >&2
+  return 1
+}
+
+STATE_ROOT="${OPENCLAW_STATE_DIR:-${OPENCLAW_HOME:-$HOME/.openclaw}}"
+RUNTIME_DIR="${DOCUMENT_PROCESSING_PIPELINE_RUNTIME_DIR:-$STATE_ROOT/skills-runtime/document-processing-pipeline}"
+VENV_DIR="${DOCUMENT_PROCESSING_PIPELINE_VENV_DIR:-$RUNTIME_DIR/.venv}"
+PYTHON_CMD="$(pick_python)"
+
+mkdir -p "$RUNTIME_DIR"
+
+if [[ ! -x "$VENV_DIR/bin/python" ]]; then
+  "$PYTHON_CMD" -m venv --system-site-packages "$VENV_DIR"
+fi
+
+export DOCUMENT_PROCESSING_PIPELINE_COMMAND="$0"
+export PYTHONPATH="$BASE_DIR${PYTHONPATH:+:$PYTHONPATH}"
+
+exec "$VENV_DIR/bin/python" -m document_processing_pipeline "$@"

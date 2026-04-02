@@ -40,9 +40,39 @@ export type EmbeddedRunStagePlan = {
 
 export type MultiStageRoutingPlan = {
   escalationMarker: string;
+  bypassFastPassReason?: string;
   fastPass: EmbeddedRunStagePlan;
   escalationPass: EmbeddedRunStagePlan;
 };
+
+const FAST_PASS_COMPLEX_ACTION_RE =
+  /(?:分析|排查|定位|设计|方案|优化|对比|比较|同步|迁移|回滚|重构|修复|benchmark|profile|部署|重启|提交|commit|push|pull|rebase|merge|lint|eslint|tsgo|typecheck|trace|debug)/i;
+
+const FAST_PASS_COMPLEX_INSPECTION_RE =
+  /(?:看|看看|查|查下|检查).*(?:日志|log|报错|错误|异常|配置|内存|延迟|耗时|性能|history|memory|recall|prompt|model|repo|仓库|上下文|context|session|embedding|token)/i;
+
+const FAST_PASS_COMPLEX_QUESTION_RE =
+  /(?:为什么|为何|怎么|如何|为啥|why|how).*(?:慢|卡|失败|报错|错误|异常|配置|代理|proxy|模型|model|prompt|会话|session|上下文|context|历史|history|记忆|memory|recall|embedding|token|性能|延迟|耗时|内存|repo|仓库|服务|gateway|worker|agent|systemd)/i;
+
+const FAST_PASS_COMPLEX_FOLLOWUP_RE =
+  /^(?:继续|接着|继续处理|继续优化|我发了|我又发了|还是慢|没反应|看下日志|看看日志|查日志|看日志|重启服务|看下原因|看看原因)$/i;
+
+const FAST_PASS_STRUCTURED_MESSAGE_RE = /```|`|https?:\/\/|www\.|[#*_{}[\]<>]/i;
+
+const FAST_PASS_SIMPLE_FILE_NOUN_RE =
+  /(?:\.(?:pdf|docx?|pptx|xlsx|csv|txt|md|markdown|html?|xml|json|eml|rtf|odt)\b|pdf|docx|word|pptx|powerpoint|xlsx|excel|csv|markdown|html|xml|json|文档|文件|合同|发票|表格|幻灯片|课件|简历)/i;
+
+const FAST_PASS_SIMPLE_FILE_ACTION_RE =
+  /(?:翻译|提取|抽取|转换|转成|导出|导入|整理|读取|打开|合并|拆分|分割|压缩|解压|ocr|识别|总结|摘要|改写|重写|编辑|比较|对比|查找|替换|生成|导出成|导出为|extract|convert|translate|summari[sz]e|rewrite|edit|compare|merge|split|ocr|read|open)/i;
+
+const FAST_PASS_SIMPLE_SCHEDULE_NOUN_RE =
+  /(?:日程|日历|行程|安排|会议|约会|提醒|待办|计划|calendar|schedule|meeting|event|agenda|todo|reminder)/i;
+
+const FAST_PASS_SIMPLE_SCHEDULE_ACTION_RE =
+  /(?:添加|新增|安排|创建|记下|记个|提醒我|查询|查看|看下|看看|显示|列出|发我|告诉我|总结|汇总|生成图|生成图片|编辑|修改|更新|删除|取消|完成|add|create|schedule|show|list|view|edit|update|delete|remove|cancel|complete|render|image|summary)/i;
+
+const FAST_PASS_SIMPLE_SCHEDULE_EVENT_RE =
+  /(?:(?:今天|明天|后天|大后天|今晚|今早|本周|这周|下周|本月|这个月|下个月|\d{4}[-/年]\d{1,2}[-/月]\d{1,2}|周[一二三四五六日天]).{0,24}(?:开会|会议|见面|约会|提醒|行程|日程|安排|review|meeting|event))/i;
 
 function resolveStageModelRef(params: { rawModel: string | undefined; run: FollowupRun["run"] }): {
   provider: string;
@@ -93,16 +123,96 @@ function joinSystemPromptSegments(...segments: Array<string | undefined>): strin
 function buildFastPassInstruction(marker: string): string {
   return [
     "Fast-pass mode.",
-    "Answer directly only when the request is simple and you can respond confidently without tools, repo inspection, or long reasoning.",
-    "If you need file reads, tool use, broader context, careful deliberation, or you are uncertain, reply with the exact text below and nothing else.",
+    "Handle direct simple requests and lightweight one-step tasks when you can do so confidently.",
+    "Treat straightforward file-handling and schedule-management requests as eligible for fast-pass triage; if they actually need filesystem/calendar/tool execution, emit the escalation marker immediately instead of guessing.",
+    "Keep the visible reply concise, plain-text, and directly useful.",
+    "Do not self-introduce or mention provider/model details.",
+    "Avoid markdown code fences, long tutorials, and broad explanations unless the user explicitly asked for them.",
+    "If the task is obviously complex, multi-step, debugging/performance/config/history/design work, depends heavily on broader context, or you are uncertain, reply with the exact text below and nothing else.",
     marker,
   ].join("\n");
+}
+
+function resolveFastPassSourceText(params: {
+  commandBody?: string;
+  sessionCtx?: TemplateContext;
+}): string {
+  return (
+    params.sessionCtx?.BodyForCommands ??
+    params.sessionCtx?.CommandBody ??
+    params.sessionCtx?.RawBody ??
+    params.sessionCtx?.Body ??
+    params.commandBody ??
+    ""
+  );
+}
+
+function isFastPassPreferredFileTask(normalized: string): boolean {
+  return (
+    FAST_PASS_SIMPLE_FILE_NOUN_RE.test(normalized) &&
+    FAST_PASS_SIMPLE_FILE_ACTION_RE.test(normalized)
+  );
+}
+
+function isFastPassPreferredScheduleTask(normalized: string): boolean {
+  if (
+    FAST_PASS_SIMPLE_SCHEDULE_NOUN_RE.test(normalized) &&
+    FAST_PASS_SIMPLE_SCHEDULE_ACTION_RE.test(normalized)
+  ) {
+    return true;
+  }
+  return FAST_PASS_SIMPLE_SCHEDULE_EVENT_RE.test(normalized);
+}
+
+function prefersFastPassSkillPrompt(normalized: string): boolean {
+  return isFastPassPreferredFileTask(normalized) || isFastPassPreferredScheduleTask(normalized);
+}
+
+function resolveFastPassBypassReason(params: {
+  commandBody?: string;
+  sessionCtx?: TemplateContext;
+}): string | undefined {
+  const raw = resolveFastPassSourceText(params);
+  const normalized = raw.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return undefined;
+  }
+  if (raw.split(/\r?\n/).filter((line) => line.trim().length > 0).length > 1) {
+    return "multiline";
+  }
+  if (/(?:&&|\|\||;|；)/.test(normalized)) {
+    return "compound_command";
+  }
+  if (normalized.length > 160) {
+    return "long_message";
+  }
+  if (FAST_PASS_COMPLEX_FOLLOWUP_RE.test(normalized)) {
+    return "operational_followup";
+  }
+  if (FAST_PASS_COMPLEX_QUESTION_RE.test(normalized)) {
+    return "complex_question";
+  }
+  if (isFastPassPreferredFileTask(normalized) || isFastPassPreferredScheduleTask(normalized)) {
+    return undefined;
+  }
+  if (FAST_PASS_STRUCTURED_MESSAGE_RE.test(normalized)) {
+    return "structured_or_link";
+  }
+  if (FAST_PASS_COMPLEX_ACTION_RE.test(normalized)) {
+    return "complex_action";
+  }
+  if (FAST_PASS_COMPLEX_INSPECTION_RE.test(normalized)) {
+    return "complex_inspection";
+  }
+  return undefined;
 }
 
 export function resolveMultiStageRoutingPlan(params: {
   run: FollowupRun["run"];
   hasImages?: boolean;
   isHeartbeat?: boolean;
+  commandBody?: string;
+  sessionCtx?: TemplateContext;
 }): MultiStageRoutingPlan | null {
   const routing = params.run.config?.agents?.defaults?.multiStageRouting;
   if (!routing?.enabled) {
@@ -123,9 +233,21 @@ export function resolveMultiStageRoutingPlan(params: {
     rawModel: routing.escalationPass?.model,
     run: params.run,
   });
+  const sourceText = resolveFastPassSourceText({
+    commandBody: params.commandBody,
+    sessionCtx: params.sessionCtx,
+  });
+  const normalizedSourceText = sourceText.replace(/\s+/g, " ").trim();
+  const fastPassSkillsPromptMode =
+    routing.fastPass?.skillsPromptMode ??
+    (prefersFastPassSkillPrompt(normalizedSourceText) ? "compact" : "off");
 
   return {
     escalationMarker: MULTI_STAGE_ESCALATION_MARKER,
+    bypassFastPassReason: resolveFastPassBypassReason({
+      commandBody: params.commandBody,
+      sessionCtx: params.sessionCtx,
+    }),
     fastPass: {
       provider: fastPassModel.provider,
       model: fastPassModel.model,
@@ -134,7 +256,7 @@ export function resolveMultiStageRoutingPlan(params: {
       fastMode: routing.fastPass?.fastMode ?? true,
       reasoningLevel: routing.fastPass?.reasoningLevel ?? "off",
       systemPromptMode: routing.fastPass?.systemPromptMode ?? "none",
-      skillsPromptMode: routing.fastPass?.skillsPromptMode ?? "off",
+      skillsPromptMode: fastPassSkillsPromptMode,
       bootstrapContextMode: routing.fastPass?.bootstrapContextMode ?? "lightweight",
       disableTools: routing.fastPass?.disableTools ?? true,
       inheritExtraSystemPrompt: routing.fastPass?.inheritExtraSystemPrompt ?? false,

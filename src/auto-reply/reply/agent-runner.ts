@@ -63,6 +63,7 @@ import { incrementRunCompactionCount, persistRunSessionUsage } from "./session-r
 import { maybeHandleVirtualForegroundTaskMessage } from "./task-aware-routing.js";
 import { createTypingSignaler } from "./typing-mode.js";
 import type { TypingController } from "./typing.js";
+import { maybeEnqueueWeixinScopedMemoryCapture } from "./weixin-scoped-memory-capture.js";
 
 const BLOCK_REPLY_SEND_TIMEOUT_MS = 15_000;
 
@@ -557,6 +558,12 @@ export async function runReplyAgent(params: {
       cliSessionId,
       cliSessionBinding,
       usageIsContextSnapshot: isCliProvider(providerUsed, cfg),
+    });
+
+    maybeEnqueueWeixinScopedMemoryCapture({
+      followupRun,
+      sessionCtx,
+      payloads: payloadArray,
     });
 
     // Drain any late tool/block deliveries before deciding there's "nothing to send".

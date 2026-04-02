@@ -133,4 +133,20 @@ describe("tryRouteCli", () => {
     });
     expect(ensurePluginRegistryLoadedMock).toHaveBeenCalledWith({ scope: "channels" });
   });
+
+  it("skips banner and config guard for local bundled CLI routes", async () => {
+    findRoutedCommandMock.mockReturnValue({
+      skipBanner: true,
+      skipConfigGuard: true,
+      run: runRouteMock,
+    });
+
+    await expect(tryRouteCli(["node", "openclaw", "calendar", "show", "--week"])).resolves.toBe(
+      true,
+    );
+
+    expect(emitCliBannerMock).not.toHaveBeenCalled();
+    expect(ensureConfigReadyMock).not.toHaveBeenCalled();
+    expect(ensurePluginRegistryLoadedMock).not.toHaveBeenCalled();
+  });
 });

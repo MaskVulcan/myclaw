@@ -124,6 +124,16 @@ export const SUB_CLI_DESCRIPTORS = [
     hasSubcommands: true,
   },
   {
+    name: "calendar",
+    description: "Run the bundled smart-calendar CLI",
+    hasSubcommands: false,
+  },
+  {
+    name: "docpipe",
+    description: "Run the bundled document-processing pipeline CLI",
+    hasSubcommands: false,
+  },
+  {
     name: "update",
     description: "Update OpenClaw and inspect update channel status",
     hasSubcommands: true,

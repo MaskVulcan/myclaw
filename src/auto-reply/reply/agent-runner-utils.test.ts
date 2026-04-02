@@ -268,6 +268,195 @@ describe("agent-runner-utils", () => {
       },
     });
     expect(plan?.fastPass.extraSystemPrompt).toContain(MULTI_STAGE_ESCALATION_MARKER);
+    expect(plan?.fastPass.extraSystemPrompt).toContain(
+      "Handle direct simple requests and lightweight one-step tasks",
+    );
+    expect(plan?.fastPass.extraSystemPrompt).toContain("Keep the visible reply concise");
+    expect(plan?.bypassFastPassReason).toBeUndefined();
+  });
+
+  it("bypasses fast-pass for complex or context-dependent requests", () => {
+    const run = makeRun({
+      config: {
+        agents: {
+          defaults: {
+            multiStageRouting: {
+              enabled: true,
+            },
+          },
+        },
+      },
+    });
+
+    const plan = resolveMultiStageRoutingPlan({
+      run,
+      hasImages: false,
+      isHeartbeat: false,
+      sessionCtx: {
+        BodyForCommands: "你看看日志，分析下为什么这么慢",
+      },
+    });
+
+    expect(plan?.bypassFastPassReason).toBe("complex_question");
+  });
+
+  it("keeps fast-pass enabled for trivial greetings", () => {
+    const run = makeRun({
+      config: {
+        agents: {
+          defaults: {
+            multiStageRouting: {
+              enabled: true,
+            },
+          },
+        },
+      },
+    });
+
+    const plan = resolveMultiStageRoutingPlan({
+      run,
+      hasImages: false,
+      isHeartbeat: false,
+      sessionCtx: {
+        BodyForCommands: "在吗",
+      },
+    });
+
+    expect(plan?.bypassFastPassReason).toBeUndefined();
+  });
+
+  it("keeps fast-pass enabled for simple one-step inspection requests", () => {
+    const run = makeRun({
+      config: {
+        agents: {
+          defaults: {
+            multiStageRouting: {
+              enabled: true,
+            },
+          },
+        },
+      },
+    });
+
+    const plan = resolveMultiStageRoutingPlan({
+      run,
+      hasImages: false,
+      isHeartbeat: false,
+      sessionCtx: {
+        BodyForCommands: "看下 package.json 版本",
+      },
+    });
+
+    expect(plan?.bypassFastPassReason).toBeUndefined();
+  });
+
+  it("keeps fast-pass enabled for direct file-processing requests with inline file refs", () => {
+    const run = makeRun({
+      config: {
+        agents: {
+          defaults: {
+            multiStageRouting: {
+              enabled: true,
+            },
+          },
+        },
+      },
+    });
+
+    const plan = resolveMultiStageRoutingPlan({
+      run,
+      hasImages: false,
+      isHeartbeat: false,
+      sessionCtx: {
+        BodyForCommands: "把 `contract.docx` 转成 markdown",
+      },
+    });
+
+    expect(plan?.bypassFastPassReason).toBeUndefined();
+  });
+
+  it("keeps fast-pass enabled for direct schedule-management requests", () => {
+    const run = makeRun({
+      config: {
+        agents: {
+          defaults: {
+            multiStageRouting: {
+              enabled: true,
+            },
+          },
+        },
+      },
+    });
+
+    const plan = resolveMultiStageRoutingPlan({
+      run,
+      hasImages: false,
+      isHeartbeat: false,
+      sessionCtx: {
+        BodyForCommands: "明天下午3点和张总开会，帮我记个日程",
+      },
+    });
+
+    expect(plan?.bypassFastPassReason).toBeUndefined();
+  });
+
+  it("injects compact skills prompts for direct file and schedule fast-pass candidates", () => {
+    const run = makeRun({
+      config: {
+        agents: {
+          defaults: {
+            multiStageRouting: {
+              enabled: true,
+            },
+          },
+        },
+      },
+    });
+
+    const filePlan = resolveMultiStageRoutingPlan({
+      run,
+      hasImages: false,
+      isHeartbeat: false,
+      sessionCtx: {
+        BodyForCommands: "把 contract.pdf 总结一下",
+      },
+    });
+    const schedulePlan = resolveMultiStageRoutingPlan({
+      run,
+      hasImages: false,
+      isHeartbeat: false,
+      sessionCtx: {
+        BodyForCommands: "发我未来七天的日程",
+      },
+    });
+
+    expect(filePlan?.fastPass.skillsPromptMode).toBe("compact");
+    expect(schedulePlan?.fastPass.skillsPromptMode).toBe("compact");
+  });
+
+  it("still bypasses fast-pass for explanatory file-processing questions", () => {
+    const run = makeRun({
+      config: {
+        agents: {
+          defaults: {
+            multiStageRouting: {
+              enabled: true,
+            },
+          },
+        },
+      },
+    });
+
+    const plan = resolveMultiStageRoutingPlan({
+      run,
+      hasImages: false,
+      isHeartbeat: false,
+      sessionCtx: {
+        BodyForCommands: "为什么这个 pdf 提取失败",
+      },
+    });
+
+    expect(plan?.bypassFastPassReason).toBe("complex_question");
   });
 
   it("skips staged routing when images are present", () => {

@@ -7,6 +7,8 @@ const modelsListCommandMock = vi.hoisted(() => vi.fn(async () => {}));
 const modelsStatusCommandMock = vi.hoisted(() => vi.fn(async () => {}));
 const runDaemonStatusMock = vi.hoisted(() => vi.fn(async () => {}));
 const statusJsonCommandMock = vi.hoisted(() => vi.fn(async () => {}));
+const runCalendarCliFromArgvMock = vi.hoisted(() => vi.fn(() => true));
+const runDocpipeCliFromArgvMock = vi.hoisted(() => vi.fn(() => true));
 
 vi.mock("../config-cli.js", () => ({
   runConfigGet: runConfigGetMock,
@@ -24,6 +26,14 @@ vi.mock("../daemon-cli/status.js", () => ({
 
 vi.mock("../../commands/status-json.js", () => ({
   statusJsonCommand: statusJsonCommandMock,
+}));
+
+vi.mock("../calendar-cli.js", () => ({
+  runCalendarCliFromArgv: runCalendarCliFromArgvMock,
+}));
+
+vi.mock("../docpipe-cli.js", () => ({
+  runDocpipeCliFromArgv: runDocpipeCliFromArgvMock,
 }));
 
 describe("program routes", () => {
@@ -193,6 +203,22 @@ describe("program routes", () => {
 
   it("does not match unknown routes", () => {
     expect(findRoutedCommand(["definitely-not-real"])).toBeNull();
+  });
+
+  it("routes calendar passthrough commands to the bundled CLI", async () => {
+    const route = expectRoute(["calendar"]);
+    const argv = ["node", "openclaw", "calendar", "show", "--week"];
+
+    await expect(route?.run(argv)).resolves.toBe(true);
+    expect(runCalendarCliFromArgvMock).toHaveBeenCalledWith(argv);
+  });
+
+  it("routes docpipe passthrough commands to the bundled CLI", async () => {
+    const route = expectRoute(["docpipe"]);
+    const argv = ["node", "openclaw", "docpipe", "doctor"];
+
+    await expect(route?.run(argv)).resolves.toBe(true);
+    expect(runDocpipeCliFromArgvMock).toHaveBeenCalledWith(argv);
   });
 
   it("returns false for config get route when path argument is missing", async () => {

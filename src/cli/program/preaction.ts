@@ -37,7 +37,14 @@ const PLUGIN_REQUIRED_COMMANDS = new Set([
   "status",
   "health",
 ]);
-const CONFIG_GUARD_BYPASS_COMMANDS = new Set(["backup", "doctor", "completion", "secrets"]);
+const CONFIG_GUARD_BYPASS_COMMANDS = new Set([
+  "backup",
+  "doctor",
+  "completion",
+  "secrets",
+  "calendar",
+  "docpipe",
+]);
 let configGuardModulePromise: Promise<typeof import("./config-guard.js")> | undefined;
 let pluginRegistryModulePromise: Promise<typeof import("../plugin-registry.js")> | undefined;
 
@@ -129,6 +136,8 @@ export function registerPreActionHooks(program: Command, programVersion: string)
     }
     const hideBanner =
       isTruthyEnvValue(process.env.OPENCLAW_HIDE_BANNER) ||
+      commandPath[0] === "calendar" ||
+      commandPath[0] === "docpipe" ||
       commandPath[0] === "update" ||
       commandPath[0] === "completion" ||
       (commandPath[0] === "plugins" && commandPath[1] === "update");

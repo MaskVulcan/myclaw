@@ -143,6 +143,8 @@ describe("registerPreActionHooks", () => {
     program.command("doctor").action(() => {});
     program.command("completion").action(() => {});
     program.command("secrets").action(() => {});
+    program.command("calendar").action(() => {});
+    program.command("docpipe").action(() => {});
     program
       .command("agents")
       .command("list")
@@ -259,6 +261,26 @@ describe("registerPreActionHooks", () => {
       commandPath: ["channels", "add"],
     });
     expect(ensurePluginRegistryLoadedMock).not.toHaveBeenCalled();
+  });
+
+  it("bypasses config guard and banner for local bundled CLIs", async () => {
+    await runPreAction({
+      parseArgv: ["calendar"],
+      processArgv: ["node", "openclaw", "calendar", "show", "--week"],
+    });
+
+    expect(emitCliBannerMock).not.toHaveBeenCalled();
+    expect(ensureConfigReadyMock).not.toHaveBeenCalled();
+
+    vi.clearAllMocks();
+
+    await runPreAction({
+      parseArgv: ["docpipe"],
+      processArgv: ["node", "openclaw", "docpipe", "doctor"],
+    });
+
+    expect(emitCliBannerMock).not.toHaveBeenCalled();
+    expect(ensureConfigReadyMock).not.toHaveBeenCalled();
   });
 
   it("only allows invalid config for explicit Matrix reinstall requests", async () => {

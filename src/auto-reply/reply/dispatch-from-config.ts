@@ -52,6 +52,9 @@ let getReplyFromConfigRuntimePromise: Promise<
 > | null = null;
 let abortRuntimePromise: Promise<typeof import("./abort.runtime.js")> | null = null;
 let dispatchAcpRuntimePromise: Promise<typeof import("./dispatch-acp.runtime.js")> | null = null;
+let bundledSkillFastpassRuntimePromise: Promise<
+  typeof import("./bundled-skill-fastpass.runtime.js")
+> | null = null;
 let ttsRuntimePromise: Promise<typeof import("../../tts/tts.runtime.js")> | null = null;
 
 function loadRouteReplyRuntime() {
@@ -72,6 +75,11 @@ function loadAbortRuntime() {
 function loadDispatchAcpRuntime() {
   dispatchAcpRuntimePromise ??= import("./dispatch-acp.runtime.js");
   return dispatchAcpRuntimePromise;
+}
+
+function loadBundledSkillFastpassRuntime() {
+  bundledSkillFastpassRuntimePromise ??= import("./bundled-skill-fastpass.runtime.js");
+  return bundledSkillFastpassRuntimePromise;
 }
 
 function loadTtsRuntime() {
@@ -585,6 +593,28 @@ export async function dispatchReplyFromConfig(params: {
         markIdle("message_completed");
         return { queuedFinal, counts };
       }
+    }
+
+    const bundledSkillFastpassRuntime = await loadBundledSkillFastpassRuntime();
+    const bundledSkillFastpass = await bundledSkillFastpassRuntime.tryHandleBundledSkillFastpass({
+      ctx,
+      cfg,
+    });
+    if (bundledSkillFastpass.handled) {
+      let queuedFinal = false;
+      let routedFinalCount = 0;
+      if (bundledSkillFastpass.payload) {
+        const handledReply = await sendFinalPayload(bundledSkillFastpass.payload);
+        queuedFinal = handledReply.queuedFinal;
+        routedFinalCount += handledReply.routedFinalCount;
+      }
+      const counts = dispatcher.getQueuedCounts();
+      counts.final += routedFinalCount;
+      recordProcessed("completed", {
+        reason: bundledSkillFastpass.reason ?? "bundled_skill_fastpass",
+      });
+      markIdle("message_completed");
+      return { queuedFinal, counts };
     }
 
     // Forum topics are threaded conversations within a group — verbose tool

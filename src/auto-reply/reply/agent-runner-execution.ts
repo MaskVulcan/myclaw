@@ -383,6 +383,8 @@ export async function runAgentTurnWithFallback(params: {
         run: params.followupRun.run,
         hasImages: Boolean(params.opts?.images?.length),
         isHeartbeat: params.isHeartbeat,
+        commandBody: params.commandBody,
+        sessionCtx: params.sessionCtx,
       });
 
       const executeStage = async (stageParams: {
@@ -802,20 +804,23 @@ export async function runAgentTurnWithFallback(params: {
           provider: multiStagePlan.fastPass.provider,
           model: multiStagePlan.fastPass.model,
         });
-        if (fastPassLiveSelection) {
-          applyLiveSelectionToRun(params.followupRun.run, fastPassLiveSelection);
+        if (fastPassLiveSelection || multiStagePlan.bypassFastPassReason) {
+          if (fastPassLiveSelection) {
+            applyLiveSelectionToRun(params.followupRun.run, fastPassLiveSelection);
+          }
           const escalationPlan = resolveEscalationPlanForLiveSelection({
             plan: multiStagePlan.escalationPass,
             liveSelection: fastPassLiveSelection,
           });
-          multiStageLog.warn("fast-pass: skipped due to live session switch", {
+          multiStageLog.info("fast-pass: skipped", {
             sessionKey: params.sessionKey ?? params.followupRun.run.sessionId,
             fastPassProvider: multiStagePlan.fastPass.provider,
             fastPassModel: multiStagePlan.fastPass.model,
-            liveProvider: fastPassLiveSelection.provider,
-            liveModel: fastPassLiveSelection.model,
+            liveProvider: fastPassLiveSelection?.provider,
+            liveModel: fastPassLiveSelection?.model,
             escalationProvider: escalationPlan.provider,
             escalationModel: escalationPlan.model,
+            reason: multiStagePlan.bypassFastPassReason ?? "live_session_switch",
           });
           const escalationResult = await executeStage({
             runId,

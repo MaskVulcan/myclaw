@@ -11,6 +11,8 @@ import {
 export type RouteSpec = {
   match: (path: string[]) => boolean;
   loadPlugins?: boolean | ((argv: string[]) => boolean);
+  skipBanner?: boolean;
+  skipConfigGuard?: boolean;
   run: (argv: string[]) => Promise<boolean>;
 };
 
@@ -293,6 +295,26 @@ const routeModelsStatus: RouteSpec = {
   },
 };
 
+const routeCalendar: RouteSpec = {
+  match: (path) => path[0] === "calendar",
+  skipBanner: true,
+  skipConfigGuard: true,
+  run: async (argv) => {
+    const { runCalendarCliFromArgv } = await import("../calendar-cli.js");
+    return runCalendarCliFromArgv(argv);
+  },
+};
+
+const routeDocpipe: RouteSpec = {
+  match: (path) => path[0] === "docpipe",
+  skipBanner: true,
+  skipConfigGuard: true,
+  run: async (argv) => {
+    const { runDocpipeCliFromArgv } = await import("../docpipe-cli.js");
+    return runDocpipeCliFromArgv(argv);
+  },
+};
+
 const routes: RouteSpec[] = [
   routeHealth,
   routeStatus,
@@ -303,6 +325,8 @@ const routes: RouteSpec[] = [
   routeConfigUnset,
   routeModelsList,
   routeModelsStatus,
+  routeCalendar,
+  routeDocpipe,
 ];
 
 export function findRoutedCommand(path: string[]): RouteSpec | null {

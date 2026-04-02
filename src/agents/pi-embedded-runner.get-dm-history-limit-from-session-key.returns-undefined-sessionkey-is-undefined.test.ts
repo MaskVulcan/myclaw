@@ -27,6 +27,52 @@ describe("getDmHistoryLimitFromSessionKey", () => {
     } as OpenClawConfig;
     expect(getDmHistoryLimitFromSessionKey("agent:main:telegram:dm:123", config)).toBe(10);
   });
+  it("returns dmHistoryLimit for account-scoped direct session keys", () => {
+    const config = {
+      channels: { "openclaw-weixin": { dmHistoryLimit: 8 } },
+    } as OpenClawConfig;
+    expect(
+      getDmHistoryLimitFromSessionKey(
+        "agent:main:openclaw-weixin:account-1:direct:user-123",
+        config,
+      ),
+    ).toBe(8);
+  });
+  it("prefers account-scoped history overrides when present", () => {
+    const config = {
+      channels: {
+        "openclaw-weixin": {
+          dmHistoryLimit: 8,
+          accounts: {
+            "account-1": {
+              dmHistoryLimit: 5,
+              dms: {
+                "user-123": { historyLimit: 3 },
+              },
+            },
+          },
+        },
+      },
+    } as OpenClawConfig;
+    expect(
+      getDmHistoryLimitFromSessionKey(
+        "agent:main:openclaw-weixin:account-1:direct:user-123",
+        config,
+      ),
+    ).toBe(3);
+    expect(
+      getDmHistoryLimitFromSessionKey(
+        "agent:main:openclaw-weixin:account-1:direct:user-999",
+        config,
+      ),
+    ).toBe(5);
+    expect(
+      getDmHistoryLimitFromSessionKey(
+        "agent:main:openclaw-weixin:account-2:direct:user-999",
+        config,
+      ),
+    ).toBe(8);
+  });
   it("strips thread suffix from dm session keys", () => {
     const config = {
       channels: { telegram: { dmHistoryLimit: 10, dms: { "123": { historyLimit: 7 } } } },

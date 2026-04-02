@@ -1,0 +1,40 @@
+categories:
+  会议:
+    color: "#FF6B35"
+    icon: "🤝"
+    heatmap_cmap: "Oranges"
+  技术:
+    color: "#4ECDC4"
+    icon: "💻"
+    heatmap_cmap: "Blues"
+  社交:
+    color: "#F7B801"
+    icon: "🥂"
+    heatmap_cmap: "YlOrBr"
+  学习:
+    color: "#6C5CE7"
+    icon: "📚"
+    heatmap_cmap: "Purples"
+  出行:
+    color: "#2D98DA"
+    icon: "✈️"
+    heatmap_cmap: "PuBu"
+  健康:
+    color: "#20BF6B"
+    icon: "🏃"
+    heatmap_cmap: "Greens"
+  家庭:
+    color: "#EB3B5A"
+    icon: "🏠"
+    heatmap_cmap: "Reds"
+  其他:
+    color: "#DFE6E9"
+    icon: "📌"
+    heatmap_cmap: "Greys"
+
+defaults:
+  timezone: "Asia/Shanghai"
+  locale: "zh"
+  work_hours: [9, 18]
+  data_dir: "./data"
+  output_dir: "./output"

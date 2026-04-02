@@ -54,6 +54,9 @@ const internalHookMocks = vi.hoisted(() => ({
   createInternalHookEvent: vi.fn(),
   triggerInternalHook: vi.fn(async () => {}),
 }));
+const bundledSkillFastpassMocks = vi.hoisted(() => ({
+  tryHandleBundledSkillFastpass: vi.fn(async () => ({ handled: false as const })),
+}));
 const acpMocks = vi.hoisted(() => ({
   listAcpSessionEntries: vi.fn(async () => []),
   readAcpSessionEntry: vi.fn<() => unknown>(() => null),
@@ -145,6 +148,9 @@ vi.mock("./abort.runtime.js", () => ({
     const label = stoppedSubagents === 1 ? "sub-agent" : "sub-agents";
     return `⚙️ Agent was aborted. Stopped ${stoppedSubagents} ${label}.`;
   },
+}));
+vi.mock("./bundled-skill-fastpass.runtime.js", () => ({
+  tryHandleBundledSkillFastpass: bundledSkillFastpassMocks.tryHandleBundledSkillFastpass,
 }));
 
 vi.mock("../../logging/diagnostic.js", () => ({
@@ -340,6 +346,10 @@ describe("dispatchReplyFromConfig", () => {
     hookMocks.runner.runMessageReceived.mockClear();
     hookMocks.runner.runBeforeDispatch.mockClear();
     hookMocks.runner.runBeforeDispatch.mockResolvedValue(undefined);
+    bundledSkillFastpassMocks.tryHandleBundledSkillFastpass.mockClear();
+    bundledSkillFastpassMocks.tryHandleBundledSkillFastpass.mockResolvedValue({
+      handled: false,
+    });
     hookMocks.registry.plugins = [];
     internalHookMocks.createInternalHookEvent.mockClear();
     internalHookMocks.createInternalHookEvent.mockImplementation(createInternalHookEventPayload);
@@ -461,6 +471,35 @@ describe("dispatchReplyFromConfig", () => {
         threadId: "post-root",
       }),
     );
+  });
+
+  it("short-circuits model dispatch when the bundled skill fastpass handles the message", async () => {
+    setNoAbort();
+    const cfg = emptyConfig;
+    const dispatcher = createDispatcher();
+    const ctx = buildTestCtx({
+      Provider: "openclaw-weixin",
+      Surface: "openclaw-weixin",
+      OriginatingChannel: "openclaw-weixin",
+      OriginatingTo: "wx-user-1",
+      ChatType: "direct",
+      BodyForCommands: "帮我加个日程，明天下午三点开会",
+    });
+    bundledSkillFastpassMocks.tryHandleBundledSkillFastpass.mockResolvedValue({
+      handled: true,
+      payload: { text: "✅ 日程已添加" },
+      reason: "bundled_skill_fastpass_calendar_add",
+    });
+    const replyResolver = vi.fn(async () => ({ text: "should not run" }) as ReplyPayload);
+
+    await dispatchReplyFromConfig({ ctx, cfg, dispatcher, replyResolver });
+
+    expect(bundledSkillFastpassMocks.tryHandleBundledSkillFastpass).toHaveBeenCalledWith({
+      ctx,
+      cfg,
+    });
+    expect(replyResolver).not.toHaveBeenCalled();
+    expect(dispatcher.sendFinalReply).toHaveBeenCalledWith({ text: "✅ 日程已添加" });
   });
 
   it("does not resurrect a cleared route thread from origin metadata", async () => {

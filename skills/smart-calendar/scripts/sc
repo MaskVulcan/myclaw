@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+pick_python() {
+  if [[ -n "${PYTHON_BIN:-}" ]]; then
+    printf '%s\n' "$PYTHON_BIN"
+    return 0
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    printf '%s\n' "python3"
+    return 0
+  fi
+  if command -v python >/dev/null 2>&1; then
+    printf '%s\n' "python"
+    return 0
+  fi
+  echo "python3 or python is required to run smart-calendar" >&2
+  return 1
+}
+
+needs_playwright() {
+  if [[ "${1:-}" != "render" ]]; then
+    return 1
+  fi
+  shift
+  while (($#)); do
+    case "$1" in
+      -h|--help|help|--heatmap)
+        return 1
+        ;;
+    esac
+    shift
+  done
+  return 0
+}
+
+STATE_ROOT="${OPENCLAW_STATE_DIR:-${OPENCLAW_HOME:-$HOME/.openclaw}}"
+RUNTIME_DIR="${SMART_CALENDAR_RUNTIME_DIR:-$STATE_ROOT/skills-runtime/smart-calendar}"
+VENV_DIR="${SMART_CALENDAR_VENV_DIR:-$RUNTIME_DIR/.venv}"
+SMART_CALENDAR_HOME="${SMART_CALENDAR_HOME:-$STATE_ROOT/skills-data/smart-calendar}"
+PYTHON_CMD="$(pick_python)"
+DEPS_MARKER="$VENV_DIR/.smart-calendar-deps"
+PLAYWRIGHT_MARKER="$VENV_DIR/.smart-calendar-playwright"
+
+mkdir -p "$RUNTIME_DIR" "$SMART_CALENDAR_HOME/data/events" "$SMART_CALENDAR_HOME/data/people" "$SMART_CALENDAR_HOME/output"
+
+if [[ ! -f "$SMART_CALENDAR_HOME/data/config.yml" ]]; then
+  cp "$BASE_DIR/data/config.yml" "$SMART_CALENDAR_HOME/data/config.yml"
+fi
+
+if [[ ! -x "$VENV_DIR/bin/python" ]]; then
+  "$PYTHON_CMD" -m venv --system-site-packages "$VENV_DIR"
+fi
+
+if [[ ! -f "$DEPS_MARKER" || "$BASE_DIR/requirements.txt" -nt "$DEPS_MARKER" || "$BASE_DIR/pyproject.toml" -nt "$DEPS_MARKER" ]]; then
+  "$VENV_DIR/bin/python" -m pip install --disable-pip-version-check -r "$BASE_DIR/requirements.txt"
+  touch "$DEPS_MARKER"
+fi
+
+if needs_playwright "$@" && [[ ! -f "$PLAYWRIGHT_MARKER" ]]; then
+  "$VENV_DIR/bin/python" -m playwright install chromium
+  touch "$PLAYWRIGHT_MARKER"
+fi
+
+export SMART_CALENDAR_HOME
+export PYTHONPATH="$BASE_DIR${PYTHONPATH:+:$PYTHONPATH}"
+
+exec "$VENV_DIR/bin/python" -m smart_calendar "$@"

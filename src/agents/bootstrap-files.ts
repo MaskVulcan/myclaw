@@ -8,6 +8,7 @@ import {
   resolveBootstrapMaxChars,
   resolveBootstrapTotalMaxChars,
 } from "./pi-embedded-helpers.js";
+import { applyWeixinDmScopedMemoryBootstrap } from "./weixin-dm-scoped-memory.js";
 import {
   filterBootstrapFilesForSession,
   loadWorkspaceBootstrapFiles,
@@ -125,9 +126,15 @@ export async function resolveBootstrapFilesForRun(params: {
     contextMode: params.contextMode,
     runKind: params.runKind,
   });
+  const sessionScopedBootstrapFiles = await applyWeixinDmScopedMemoryBootstrap({
+    workspaceDir: params.workspaceDir,
+    sessionKey: params.sessionKey,
+    files: bootstrapFiles,
+    warn: params.warn,
+  });
 
   const updated = await applyBootstrapHookOverrides({
-    files: bootstrapFiles,
+    files: sessionScopedBootstrapFiles,
     workspaceDir: params.workspaceDir,
     config: params.config,
     sessionKey: params.sessionKey,

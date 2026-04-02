@@ -5,6 +5,7 @@ import { registerGetReplyCommonMocks } from "./get-reply.test-mocks.js";
 const mocks = vi.hoisted(() => ({
   applyMediaUnderstanding: vi.fn(async (..._args: unknown[]) => undefined),
   applyLinkUnderstanding: vi.fn(async (..._args: unknown[]) => undefined),
+  bundledFastpass: vi.fn(async () => ({ handled: false as const })),
   createInternalHookEvent: vi.fn(),
   triggerInternalHook: vi.fn(async (..._args: unknown[]) => undefined),
   resolveReplyDirectives: vi.fn(),
@@ -31,6 +32,9 @@ vi.mock("../../media-understanding/apply.js", () => ({
 }));
 vi.mock("../../media-understanding/apply.runtime.js", () => ({
   applyMediaUnderstanding: mocks.applyMediaUnderstanding,
+}));
+vi.mock("./bundled-skill-fastpass.runtime.js", () => ({
+  tryHandleBundledSkillFastpass: mocks.bundledFastpass,
 }));
 vi.mock("./commands-core.js", () => ({
   emitResetCommandHooks: vi.fn(async () => undefined),
@@ -81,11 +85,13 @@ describe("getReplyFromConfig message hooks", () => {
     delete process.env.OPENCLAW_TEST_FAST;
     mocks.applyMediaUnderstanding.mockReset();
     mocks.applyLinkUnderstanding.mockReset();
+    mocks.bundledFastpass.mockReset();
     mocks.createInternalHookEvent.mockReset();
     mocks.triggerInternalHook.mockReset();
     mocks.resolveReplyDirectives.mockReset();
     mocks.initSessionState.mockReset();
 
+    mocks.bundledFastpass.mockResolvedValue({ handled: false });
     mocks.applyMediaUnderstanding.mockImplementation(async (...args: unknown[]) => {
       const { ctx } = args[0] as { ctx: MsgContext };
       ctx.Transcript = "voice transcript";

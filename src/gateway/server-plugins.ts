@@ -244,7 +244,7 @@ function canClientUseModelOverride(client: GatewayRequestOptions["client"]): boo
   return hasAdminScope(client) || client?.internal?.allowModelOverride === true;
 }
 
-async function dispatchGatewayMethod<T>(
+export async function dispatchInternalGatewayMethod<T>(
   method: string,
   params: Record<string, unknown>,
   options?: {
@@ -295,7 +295,7 @@ async function dispatchGatewayMethod<T>(
 
 export function createGatewaySubagentRuntime(): PluginRuntime["subagent"] {
   const getSessionMessages: PluginRuntime["subagent"]["getSessionMessages"] = async (params) => {
-    const payload = await dispatchGatewayMethod<{ messages?: unknown[] }>("sessions.get", {
+    const payload = await dispatchInternalGatewayMethod<{ messages?: unknown[] }>("sessions.get", {
       key: params.sessionKey,
       ...(params.limit != null && { limit: params.limit }),
     });
@@ -324,7 +324,7 @@ export function createGatewaySubagentRuntime(): PluginRuntime["subagent"] {
       if (overrideRequested && !allowOverride) {
         throw new Error("provider/model override is not authorized for this plugin subagent run.");
       }
-      const payload = await dispatchGatewayMethod<{ runId?: string }>(
+      const payload = await dispatchInternalGatewayMethod<{ runId?: string }>(
         "agent",
         {
           sessionKey: params.sessionKey,
@@ -347,7 +347,7 @@ export function createGatewaySubagentRuntime(): PluginRuntime["subagent"] {
       return { runId };
     },
     async waitForRun(params) {
-      const payload = await dispatchGatewayMethod<{ status?: string; error?: string }>(
+      const payload = await dispatchInternalGatewayMethod<{ status?: string; error?: string }>(
         "agent.wait",
         {
           runId: params.runId,
@@ -368,7 +368,7 @@ export function createGatewaySubagentRuntime(): PluginRuntime["subagent"] {
       return getSessionMessages(params);
     },
     async deleteSession(params) {
-      await dispatchGatewayMethod("sessions.delete", {
+      await dispatchInternalGatewayMethod("sessions.delete", {
         key: params.sessionKey,
         deleteTranscript: params.deleteTranscript ?? true,
       });

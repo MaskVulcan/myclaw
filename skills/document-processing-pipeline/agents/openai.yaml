@@ -1,0 +1,7 @@
+interface:
+  display_name: "Document Processing Pipeline"
+  short_description: "Local CLI ingest, OCR, DOCX edit, and rebuild"
+  default_prompt: "Start with `docpipe route` when the lane is unclear. Use `docpipe` for structured ingest, block-by-block transforms, and rebuilds; `docx-inspect` / `docx-apply-plan` / `docx-compare` for brownfield local `.docx` work; `ocr-pdf` for local PDF or image OCR; and `docpipe install-deps all-local` when the environment is missing local helpers."
+
+policy:
+  allow_implicit_invocation: true

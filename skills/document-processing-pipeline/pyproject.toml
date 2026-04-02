@@ -1,0 +1,41 @@
+[project]
+name = "document-processing-pipeline"
+version = "0.1.0"
+description = "Script-first multi-format document ingestion and rebuild pipeline"
+requires-python = ">=3.11"
+
+[project.scripts]
+docpipe = "document_processing_pipeline.cli:cli"
+
+[project.optional-dependencies]
+unstructured = ["unstructured"]
+docx = ["python-docx"]
+translate = ["deep-translator", "requests", "beautifulsoup4"]
+html-template = ["jinja2"]
+pdf-weasyprint = ["weasyprint"]
+pdf-overlay = ["PyMuPDF"]
+mineru = ["mineru"]
+odl-pdf = ["opendataloader-pdf"]
+pipeline-local = ["unstructured", "jinja2", "python-docx"]
+translate-local = ["deep-translator", "requests", "beautifulsoup4"]
+office-local = ["python-docx", "openpyxl", "pandas", "python-pptx"]
+pdf-local = ["PyMuPDF", "pypdf", "pdfplumber"]
+ocr-local = ["PyMuPDF"]
+pdf-export = ["weasyprint", "PyMuPDF"]
+pdf-backends = ["mineru", "opendataloader-pdf"]
+local-python = ["document-processing-pipeline[pipeline-local,translate-local,office-local,pdf-local,ocr-local]"]
+all-local = ["document-processing-pipeline[pipeline-local,translate-local,office-local,pdf-local,ocr-local]"]
+all-optional-python = ["document-processing-pipeline[pdf-export,pdf-backends]"]
+everything-python = ["document-processing-pipeline[all-local,pdf-export,pdf-backends]"]
+all = [
+    "document-processing-pipeline[unstructured,docx,translate,html-template,pdf-weasyprint,pdf-overlay]",
+]
+
+[tool.setuptools.packages.find]
+include = ["document_processing_pipeline*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.j2"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

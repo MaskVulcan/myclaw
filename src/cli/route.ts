@@ -8,10 +8,13 @@ async function prepareRoutedCommand(params: {
   argv: string[];
   commandPath: string[];
   loadPlugins?: boolean | ((argv: string[]) => boolean);
+  skipBanner?: boolean;
+  skipConfigGuard?: boolean;
 }) {
   const suppressDoctorStdout = hasFlag(params.argv, "--json");
-  const skipConfigGuard = params.commandPath[0] === "status" && suppressDoctorStdout;
-  if (!suppressDoctorStdout && process.stdout.isTTY) {
+  const skipConfigGuard =
+    params.skipConfigGuard === true || (params.commandPath[0] === "status" && suppressDoctorStdout);
+  if (!params.skipBanner && !suppressDoctorStdout && process.stdout.isTTY) {
     const [{ emitCliBanner }, { VERSION }] = await Promise.all([
       import("./banner.js"),
       import("../version.js"),
@@ -63,6 +66,12 @@ export async function tryRouteCli(argv: string[]): Promise<boolean> {
   if (!route) {
     return false;
   }
-  await prepareRoutedCommand({ argv, commandPath: path, loadPlugins: route.loadPlugins });
+  await prepareRoutedCommand({
+    argv,
+    commandPath: path,
+    loadPlugins: route.loadPlugins,
+    skipBanner: route.skipBanner,
+    skipConfigGuard: route.skipConfigGuard,
+  });
   return route.run(argv);
 }

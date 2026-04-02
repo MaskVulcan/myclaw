@@ -33,6 +33,24 @@ let sessionResetModelRuntimePromise: Promise<
 let stageSandboxMediaRuntimePromise: Promise<
   typeof import("./stage-sandbox-media.runtime.js")
 > | null = null;
+let bundledSkillFastpassRuntimePromise: Promise<
+  typeof import("./bundled-skill-fastpass.runtime.js")
+> | null = null;
+
+const REQUIRED_SCHEDULE_NOUN_RE =
+  /(?:日程|日历|行程|安排|会议|约会|提醒|待办|计划|calendar|schedule|meeting|event|agenda|todo|reminder)/i;
+const REQUIRED_SCHEDULE_ACTION_RE =
+  /(?:添加|新增|安排|创建|记下|记个|提醒我|查询|查看|看下|看看|显示|列出|编辑|修改|更新|删除|取消|完成|发我|告诉我|生成图|生成图片|图片|文字总结|总结版|汇总版|add|create|schedule|show|list|view|edit|update|delete|remove|cancel|complete|render|image|summary)/i;
+const REQUIRED_SCHEDULE_EVENT_RE =
+  /(?:(?:今天|明天|后天|大后天|今晚|今早|本周|这周|下周|本月|这个月|下个月|\d{4}[-/年]\d{1,2}[-/月]\d{1,2}|周[一二三四五六日天]).{0,32}(?:开会|会议|见面|约会|提醒|行程|日程|安排|review|meeting|event))/i;
+const REQUIRED_FILE_NOUN_RE =
+  /(?:\.(?:pdf|docx?|pptx|xlsx|csv|txt|md|markdown|html?|xml|json|eml|rtf|odt)\b|pdf|docx|word|pptx|powerpoint|xlsx|excel|csv|markdown|html|xml|json|文档|文件|合同|发票|表格|幻灯片|课件|简历)/i;
+const REQUIRED_FILE_ACTION_RE =
+  /(?:翻译|提取|抽取|转换|转成|导出|导入|整理|读取|打开|合并|拆分|分割|压缩|解压|ocr|识别|总结|摘要|改写|重写|编辑|比较|对比|查找|替换|生成|导出成|导出为|extract|convert|translate|summari[sz]e|rewrite|edit|compare|merge|split|ocr|read|open)/i;
+const DOCUMENT_MEDIA_TYPE_RE =
+  /^(?:application\/(?:pdf|msword|vnd\.(?:ms-excel|ms-powerpoint|openxmlformats-officedocument\.[^;]+)|rtf|json|xml|zip)|text\/|message\/rfc822)/i;
+const DOCUMENT_MEDIA_EXT_RE =
+  /\.(?:pdf|docx?|pptx|xlsx|csv|txt|md|markdown|html?|xml|json|eml|rtf|odt)(?:$|[?#])/i;
 
 function loadSessionResetModelRuntime() {
   sessionResetModelRuntimePromise ??= import("./session-reset-model.runtime.js");
@@ -42,6 +60,11 @@ function loadSessionResetModelRuntime() {
 function loadStageSandboxMediaRuntime() {
   stageSandboxMediaRuntimePromise ??= import("./stage-sandbox-media.runtime.js");
   return stageSandboxMediaRuntimePromise;
+}
+
+function loadBundledSkillFastpassRuntime() {
+  bundledSkillFastpassRuntimePromise ??= import("./bundled-skill-fastpass.runtime.js");
+  return bundledSkillFastpassRuntimePromise;
 }
 
 function mergeSkillFilters(channelFilter?: string[], agentFilter?: string[]): string[] | undefined {
@@ -67,6 +90,73 @@ function mergeSkillFilters(channelFilter?: string[], agentFilter?: string[]): st
   }
   const agentSet = new Set(agent);
   return channel.filter((name) => agentSet.has(name));
+}
+
+function resolveSkillAwareMessageText(
+  ctx: Pick<MsgContext, "BodyForCommands" | "CommandBody" | "RawBody" | "Body">,
+): string {
+  return (
+    [ctx.BodyForCommands, ctx.CommandBody, ctx.RawBody, ctx.Body].find(
+      (value) => typeof value === "string" && value.trim().length > 0,
+    ) ?? ""
+  )
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function hasDocumentLikeMedia(ctx: MsgContext): boolean {
+  const types = [
+    typeof ctx.MediaType === "string" ? ctx.MediaType : undefined,
+    ...(Array.isArray(ctx.MediaTypes) ? ctx.MediaTypes : []),
+  ]
+    .map((value) => value?.trim().toLowerCase())
+    .filter(Boolean) as string[];
+  if (types.some((value) => DOCUMENT_MEDIA_TYPE_RE.test(value))) {
+    return true;
+  }
+
+  const paths = [
+    typeof ctx.MediaPath === "string" ? ctx.MediaPath : undefined,
+    ...(Array.isArray(ctx.MediaPaths) ? ctx.MediaPaths : []),
+    typeof ctx.MediaUrl === "string" ? ctx.MediaUrl : undefined,
+    ...(Array.isArray(ctx.MediaUrls) ? ctx.MediaUrls : []),
+  ].filter(Boolean) as string[];
+  return paths.some((value) => DOCUMENT_MEDIA_EXT_RE.test(value.toLowerCase()));
+}
+
+function resolveRequiredBundledSkills(ctx: MsgContext): string[] {
+  const message = resolveSkillAwareMessageText(ctx);
+  const required = new Set<string>();
+  if (
+    (REQUIRED_SCHEDULE_NOUN_RE.test(message) && REQUIRED_SCHEDULE_ACTION_RE.test(message)) ||
+    REQUIRED_SCHEDULE_EVENT_RE.test(message)
+  ) {
+    required.add("smart-calendar");
+  }
+  if (
+    (REQUIRED_FILE_NOUN_RE.test(message) && REQUIRED_FILE_ACTION_RE.test(message)) ||
+    hasDocumentLikeMedia(ctx)
+  ) {
+    required.add("document-processing-pipeline");
+  }
+  return [...required];
+}
+
+function injectRequiredSkills(
+  skillFilter: string[] | undefined,
+  requiredSkills: string[],
+): string[] | undefined {
+  if (requiredSkills.length === 0) {
+    return skillFilter;
+  }
+  if (skillFilter === undefined) {
+    return requiredSkills;
+  }
+  const merged = new Set(skillFilter);
+  for (const skill of requiredSkills) {
+    merged.add(skill);
+  }
+  return [...merged];
 }
 
 function hasInboundMedia(ctx: MsgContext): boolean {
@@ -132,9 +222,10 @@ export async function getReplyFromConfig(
     sessionKey: agentSessionKey,
     config: cfg,
   });
-  const mergedSkillFilter = mergeSkillFilters(
-    opts?.skillFilter,
-    resolveAgentSkillsFilter(cfg, agentId),
+  const finalized = finalizeInboundContext(ctx);
+  const mergedSkillFilter = injectRequiredSkills(
+    mergeSkillFilters(opts?.skillFilter, resolveAgentSkillsFilter(cfg, agentId)),
+    resolveRequiredBundledSkills(finalized),
   );
   const resolvedOpts =
     mergedSkillFilter !== undefined ? { ...opts, skillFilter: mergedSkillFilter } : opts;
@@ -187,7 +278,14 @@ export async function getReplyFromConfig(
   });
   opts?.onTypingController?.(typing);
 
-  const finalized = finalizeInboundContext(ctx);
+  const bundledSkillFastpassRuntime = await loadBundledSkillFastpassRuntime();
+  const bundledSkillFastpass = await bundledSkillFastpassRuntime.tryHandleBundledSkillFastpass({
+    ctx: finalized,
+    cfg,
+  });
+  if (bundledSkillFastpass.handled) {
+    return bundledSkillFastpass.payload;
+  }
 
   if (!isFastTestEnv) {
     await applyMediaUnderstandingIfNeeded({

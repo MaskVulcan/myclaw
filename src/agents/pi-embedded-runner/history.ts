@@ -3,10 +3,61 @@ import type { OpenClawConfig } from "../../config/config.js";
 import { normalizeProviderId } from "../provider-id.js";
 
 const THREAD_SUFFIX_REGEX = /^(.*)(?::(?:thread|topic):\d+)$/i;
+const SESSION_KIND_SET = new Set(["dm", "direct", "channel", "group"]);
+
+type HistoryProviderConfig = {
+  historyLimit?: number;
+  dmHistoryLimit?: number;
+  dms?: Record<string, { historyLimit?: number }>;
+  accounts?: Record<
+    string,
+    {
+      historyLimit?: number;
+      dmHistoryLimit?: number;
+      dms?: Record<string, { historyLimit?: number }>;
+    }
+  >;
+};
 
 function stripThreadSuffix(value: string): string {
   const match = value.match(THREAD_SUFFIX_REGEX);
   return match?.[1] ?? value;
+}
+
+function parseSessionHistoryKey(sessionKey: string): {
+  provider: string;
+  accountId?: string;
+  kind: string;
+  userId: string;
+} | null {
+  const parts = sessionKey.split(":").filter(Boolean);
+  const providerParts = parts.length >= 3 && parts[0] === "agent" ? parts.slice(2) : parts;
+  const provider = normalizeProviderId(providerParts[0] ?? "");
+  if (!provider) {
+    return null;
+  }
+
+  const directKind = providerParts[1]?.toLowerCase();
+  if (directKind && SESSION_KIND_SET.has(directKind)) {
+    return {
+      provider,
+      kind: directKind,
+      userId: stripThreadSuffix(providerParts.slice(2).join(":")),
+    };
+  }
+
+  const accountId = providerParts[1]?.trim();
+  const accountScopedKind = providerParts[2]?.toLowerCase();
+  if (accountId && accountScopedKind && SESSION_KIND_SET.has(accountScopedKind)) {
+    return {
+      provider,
+      accountId,
+      kind: accountScopedKind,
+      userId: stripThreadSuffix(providerParts.slice(3).join(":")),
+    };
+  }
+
+  return null;
 }
 
 /**
@@ -49,28 +100,16 @@ export function getHistoryLimitFromSessionKey(
     return undefined;
   }
 
-  const parts = sessionKey.split(":").filter(Boolean);
-  const providerParts = parts.length >= 3 && parts[0] === "agent" ? parts.slice(2) : parts;
-
-  const provider = normalizeProviderId(providerParts[0] ?? "");
-  if (!provider) {
+  const parsed = parseSessionHistoryKey(sessionKey);
+  if (!parsed) {
     return undefined;
   }
-
-  const kind = providerParts[1]?.toLowerCase();
-  const userIdRaw = providerParts.slice(2).join(":");
-  const userId = stripThreadSuffix(userIdRaw);
 
   const resolveProviderConfig = (
     cfg: OpenClawConfig | undefined,
     providerId: string,
-  ):
-    | {
-        historyLimit?: number;
-        dmHistoryLimit?: number;
-        dms?: Record<string, { historyLimit?: number }>;
-      }
-    | undefined => {
+    accountId?: string,
+  ): HistoryProviderConfig | undefined => {
     const channels = cfg?.channels;
     if (!channels || typeof channels !== "object") {
       return undefined;
@@ -84,32 +123,40 @@ export function getHistoryLimitFromSessionKey(
       if (!value || typeof value !== "object" || Array.isArray(value)) {
         return undefined;
       }
-      return value as {
-        historyLimit?: number;
-        dmHistoryLimit?: number;
-        dms?: Record<string, { historyLimit?: number }>;
+      const providerConfig = value as HistoryProviderConfig;
+      if (!accountId) {
+        return providerConfig;
+      }
+      const accountConfig = providerConfig.accounts?.[accountId];
+      if (!accountConfig || typeof accountConfig !== "object" || Array.isArray(accountConfig)) {
+        return providerConfig;
+      }
+      return {
+        ...providerConfig,
+        ...accountConfig,
+        dms: accountConfig.dms ?? providerConfig.dms,
       };
     }
     return undefined;
   };
 
-  const providerConfig = resolveProviderConfig(config, provider);
+  const providerConfig = resolveProviderConfig(config, parsed.provider, parsed.accountId);
   if (!providerConfig) {
     return undefined;
   }
 
   // For DM sessions: per-DM override -> dmHistoryLimit.
   // Accept both "direct" (new) and "dm" (legacy) for backward compat.
-  if (kind === "dm" || kind === "direct") {
-    if (userId && providerConfig.dms?.[userId]?.historyLimit !== undefined) {
-      return providerConfig.dms[userId].historyLimit;
+  if (parsed.kind === "dm" || parsed.kind === "direct") {
+    if (parsed.userId && providerConfig.dms?.[parsed.userId]?.historyLimit !== undefined) {
+      return providerConfig.dms[parsed.userId].historyLimit;
     }
     return providerConfig.dmHistoryLimit;
   }
 
   // For channel/group sessions: use historyLimit from provider config
   // This prevents context overflow in long-running channel sessions
-  if (kind === "channel" || kind === "group") {
+  if (parsed.kind === "channel" || parsed.kind === "group") {
     return providerConfig.historyLimit;
   }
 

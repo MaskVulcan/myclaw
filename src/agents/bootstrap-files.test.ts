@@ -8,7 +8,7 @@ import {
 } from "../hooks/internal-hooks.js";
 import { makeTempWorkspace } from "../test-helpers/workspace.js";
 import { resolveBootstrapContextForRun, resolveBootstrapFilesForRun } from "./bootstrap-files.js";
-import type { WorkspaceBootstrapFile } from "./workspace.js";
+import { DEFAULT_MEMORY_FILENAME, type WorkspaceBootstrapFile } from "./workspace.js";
 
 function registerExtraBootstrapFileHook() {
   registerInternalHook("agent:bootstrap", (event) => {
@@ -177,5 +177,44 @@ describe("resolveBootstrapContextForRun", () => {
     });
 
     expect(files.some((file) => file.name === "BOOTSTRAP.md")).toBe(true);
+  });
+
+  it("replaces shared MEMORY.md with a scoped per-Weixin-DM memory file", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-bootstrap-");
+    await fs.writeFile(path.join(workspaceDir, "MEMORY.md"), "shared memory", "utf8");
+
+    const files = await resolveBootstrapFilesForRun({
+      workspaceDir,
+      sessionKey: "agent:main:openclaw-weixin:primary:direct:wx-user-1",
+    });
+
+    expect(
+      files.some((file) => file.path === path.join(workspaceDir, DEFAULT_MEMORY_FILENAME)),
+    ).toBe(false);
+    const scopedPath = path.join(
+      workspaceDir,
+      ".openclaw",
+      "weixin-dm-memory",
+      "primary",
+      "wx-user-1.md",
+    );
+    const scopedFile = files.find((file) => file.path === scopedPath);
+    expect(scopedFile?.content).toContain("Use this file for durable notes");
+    expect(scopedFile?.content).toContain("Do not store this DM-specific memory");
+    await expect(fs.readFile(scopedPath, "utf8")).resolves.toContain("Weixin DM Scoped Memory");
+  });
+
+  it("keeps shared MEMORY.md for non-Weixin sessions", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-bootstrap-");
+    await fs.writeFile(path.join(workspaceDir, "MEMORY.md"), "shared memory", "utf8");
+
+    const files = await resolveBootstrapFilesForRun({
+      workspaceDir,
+      sessionKey: "agent:main:telegram:direct:user-1",
+    });
+
+    expect(
+      files.some((file) => file.path === path.join(workspaceDir, DEFAULT_MEMORY_FILENAME)),
+    ).toBe(true);
   });
 });

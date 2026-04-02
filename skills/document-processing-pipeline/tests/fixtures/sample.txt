@@ -1,0 +1,5 @@
+Sample Document
+
+This is the first paragraph of the fixture.
+
+This is the second paragraph of the fixture.

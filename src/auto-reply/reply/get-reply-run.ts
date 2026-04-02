@@ -43,6 +43,7 @@ import { resolveTypingMode } from "./typing-mode.js";
 import { resolveRunTypingPolicy } from "./typing-policy.js";
 import type { TypingController } from "./typing.js";
 import { appendUntrustedContext } from "./untrusted-context.js";
+import { buildWeixinTranscriptRecall } from "./weixin-recall.js";
 
 type AgentDefaults = NonNullable<OpenClawConfig["agents"]>["defaults"];
 type ExecOverrides = Pick<ExecToolDefaults, "host" | "security" | "ask" | "node">;
@@ -389,7 +390,22 @@ export async function runPreparedReply(
   const prependEvents = (body: string) => (eventsBlock ? `${eventsBlock}\n\n${body}` : body);
   const bodyWithEvents = prependEvents(effectiveBaseBody);
   prefixedBodyBase = prependEvents(prefixedBodyBase);
-  prefixedBodyBase = appendUntrustedContext(prefixedBodyBase, sessionCtx.UntrustedContext);
+  const weixinRecallContext = buildWeixinTranscriptRecall({
+    sessionCtx,
+    cfg,
+    sessionKey,
+    sessionId,
+    sessionFile: sessionEntry?.sessionFile,
+    storePath,
+    agentId,
+    currentBody: rawBodyTrimmed,
+    resetTriggered,
+  });
+  const untrustedContextEntries = [
+    ...(weixinRecallContext ? [weixinRecallContext] : []),
+    ...(sessionCtx.UntrustedContext ?? []),
+  ];
+  prefixedBodyBase = appendUntrustedContext(prefixedBodyBase, untrustedContextEntries);
   const threadStarterBody = ctx.ThreadStarterBody?.trim();
   const threadHistoryBody = ctx.ThreadHistoryBody?.trim();
   const threadContextNote = threadHistoryBody
