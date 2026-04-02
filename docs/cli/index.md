@@ -31,6 +31,7 @@ This page describes the current CLI behavior. If commands change, update this do
 - [`status`](/cli/status)
 - [`health`](/cli/health)
 - [`sessions`](/cli/sessions)
+- [`steward`](/cli/steward)
 - [`gateway`](/cli/gateway)
 - [`logs`](/cli/logs)
 - [`system`](/cli/system)
@@ -160,6 +161,13 @@ openclaw [--dev] [--profile <name>] <command>
   status
   health
   sessions
+  steward
+    ingest
+    curate
+    maintain
+    incubate-skills
+    promote-skills
+    cycle
   gateway
     call
     health

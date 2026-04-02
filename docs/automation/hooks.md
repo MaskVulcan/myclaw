@@ -41,9 +41,10 @@ The hooks system allows you to:
 
 ### Bundled Hooks
 
-OpenClaw ships with four bundled hooks that are automatically discovered:
+OpenClaw ships with five bundled hooks that are automatically discovered:
 
 - **💾 session-memory**: Saves session context to your agent workspace (default `~/.openclaw/workspace/memory/`) when you issue `/new` or `/reset`
+- **🧠 knowledge-steward**: Runs deterministic memory/skill stewardship against the pre-reset transcript when you issue `/new` or `/reset`
 - **📎 bootstrap-extra-files**: Injects additional workspace bootstrap files from configured glob/path patterns during `agent:bootstrap`
 - **📝 command-logger**: Logs all command events to `~/.openclaw/logs/commands.log`
 - **🚀 boot-md**: Runs `BOOT.md` when the gateway starts (requires internal hooks enabled)
@@ -227,7 +228,7 @@ Each event includes:
   context: {
     // Command events (command:new, command:reset):
     sessionEntry?: SessionEntry,       // current session entry
-    previousSessionEntry?: SessionEntry, // pre-reset entry (preferred for session-memory)
+    previousSessionEntry?: SessionEntry, // pre-reset entry (preferred for session-memory / knowledge-steward)
     commandSource?: string,            // e.g., 'whatsapp', 'telegram'
     senderId?: string,
     workspaceDir?: string,
@@ -742,6 +743,70 @@ assistant: Sure! Let's start with the endpoints...
 
 ```bash
 openclaw hooks enable session-memory
+```
+
+### knowledge-steward
+
+Runs the deterministic steward pipeline against the previous session when you issue `/new` or `/reset`.
+
+**Events**: `command:new`, `command:reset`
+
+**Requirements**: `workspace.dir` must be configured
+
+**Output**:
+
+- `memory/inbox/`
+- `memory/topics/`
+- `memory/steward/runs/YYYY-MM-DD.jsonl`
+- `skills/_candidates/`
+- `skills/_incubator/`
+- `skills/<slug>/SKILL.md` when repeated evidence is strong enough
+
+**What it does**:
+
+1. Uses `previousSessionEntry` to read the just-finished transcript directly
+2. Stages durable memory and skill candidates with `steward ingest`
+3. Curates long-term topic notes and rebuilds `MEMORY.md`
+4. Maintains topic-note size and evidence hygiene
+5. Incubates repeated workflow candidates and promotes stable skills
+
+**Config**:
+
+```json
+{
+  "hooks": {
+    "internal": {
+      "entries": {
+        "knowledge-steward": {
+          "enabled": true,
+          "curateLimit": 20,
+          "incubateLimit": 50,
+          "promoteLimit": 50,
+          "minCandidates": 2
+        }
+      }
+    }
+  }
+}
+```
+
+**Config options**:
+
+- `curateLimit` (number): max staged memory candidates inspected per run
+- `incubateLimit` (number): max staged skill candidates inspected per run
+- `promoteLimit` (number): max incubator notes inspected per run
+- `minCandidates` (number): minimum repeated candidates required before promotion
+
+**Notes**:
+
+- This hook is deterministic and bounded; it does not free-form rewrite the vault.
+- It complements `session-memory`: `session-memory` keeps a raw reset snapshot, while `knowledge-steward` maintains curated long-term notes.
+- Promotion still requires repeated evidence across sessions.
+
+**Enable**:
+
+```bash
+openclaw hooks enable knowledge-steward
 ```
 
 ### bootstrap-extra-files

@@ -592,4 +592,69 @@ describe("bundled skill fastpass", () => {
       "今天的日程，文字总结版和日历图片都要",
     ]);
   });
+
+  it("ignores appended current-time lines when unwrapping cron reminder prompts", async () => {
+    const execFile = vi
+      .fn()
+      .mockResolvedValueOnce({
+        code: 0,
+        stdout: "📅 明天安排",
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        code: 0,
+        stdout:
+          "🎨 正在生成 day 视图日历图...\n✅ 日历图已生成: /tmp/openclaw-state/skills-data/smart-calendar/weixin-dm/primary/wx-user-1/output/calendar_day.png",
+        stderr: "",
+      });
+    const ctx = buildTestCtx({
+      Provider: "cron-event",
+      OriginatingChannel: "openclaw-weixin",
+      OriginatingTo: "wx-user-1",
+      ChatType: "direct",
+      SessionKey: "agent:main:openclaw-weixin:primary:direct:wx-user-1",
+      Body: [
+        "A scheduled reminder has been triggered. The reminder content is:",
+        "",
+        "发我明天的日程，文字总结版和日历图片都要",
+        "",
+        "Please relay this reminder to the user in a helpful and friendly way.",
+        "Current time: Thursday, April 2nd, 2026 — 10:00 PM (Asia/Shanghai) / 2026-04-02 14:00 UTC",
+      ].join("\n"),
+    });
+
+    const result = await tryHandleBundledSkillFastpass(
+      { ctx },
+      {
+        execFile,
+        stateDir: "/tmp/openclaw-state",
+        env: { OPENCLAW_STATE_DIR: "/tmp/openclaw-state" },
+        calendarScriptPath: "/tmp/fake-sc",
+      },
+    );
+
+    expect(result).toEqual({
+      handled: true,
+      payload: {
+        text: "📅 明天安排",
+        mediaUrl:
+          "/tmp/openclaw-state/skills-data/smart-calendar/weixin-dm/primary/wx-user-1/output/calendar_day.png",
+      },
+      reason: "bundled_skill_fastpass_calendar_show_render",
+    });
+    expect(execFile.mock.calls[0]?.[1]).toEqual([
+      "/tmp/fake-sc",
+      "show",
+      "--date",
+      "明天的日程，文字总结版和日历图片都要",
+    ]);
+    expect(execFile.mock.calls[1]?.[1]).toEqual([
+      "/tmp/fake-sc",
+      "render",
+      "--view",
+      "day",
+      "--date",
+      "明天的日程，文字总结版和日历图片都要",
+    ]);
+  });
 });

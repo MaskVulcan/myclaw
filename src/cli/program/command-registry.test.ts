@@ -42,6 +42,14 @@ vi.mock("./register.status-health-sessions.js", () => ({
   },
 }));
 
+vi.mock("./register.steward.js", () => ({
+  registerStewardCommand: (program: Command) => {
+    const steward = program.command("steward");
+    steward.command("ingest");
+    steward.command("curate");
+  },
+}));
+
 const testProgramContext: ProgramContext = {
   programVersion: "0.0.0-test",
   channelOptions: [],
@@ -75,6 +83,7 @@ describe("command-registry", () => {
     expect(names).toContain("agents");
     expect(names).toContain("backup");
     expect(names).toContain("sessions");
+    expect(names).toContain("steward");
     expect(names).not.toContain("agent");
     expect(names).not.toContain("status");
     expect(names).not.toContain("doctor");
@@ -139,6 +148,7 @@ describe("command-registry", () => {
     expect(names).toContain("status");
     expect(names).toContain("health");
     expect(names).toContain("sessions");
+    expect(names).toContain("steward");
   });
 
   it("replaces placeholders when loading a grouped entry by secondary command name", async () => {

@@ -8,7 +8,7 @@ title: "hooks"
 
 # `openclaw hooks`
 
-Manage agent hooks (event-driven automations for commands like `/new`, `/reset`, and gateway startup).
+Manage agent hooks (event-driven automations for commands like `/new`, `/reset`, gateway startup, and post-session stewardship).
 
 Related:
 
@@ -32,12 +32,13 @@ List all discovered hooks from workspace, managed, extra, and bundled directorie
 **Example output:**
 
 ```
-Hooks (4/4 ready)
+Hooks (5/5 ready)
 
 Ready:
   🚀 boot-md ✓ - Run BOOT.md on gateway startup
   📎 bootstrap-extra-files ✓ - Inject extra workspace bootstrap files during agent bootstrap
   📝 command-logger ✓ - Log all command events to a centralized audit file
+  🧠 knowledge-steward ✓ - Curate durable memory and reusable skills when /new or /reset closes a session
   💾 session-memory ✓ - Save session context to memory when /new or /reset command is issued
 ```
 
@@ -114,8 +115,8 @@ Show summary of hook eligibility status (how many are ready vs. not ready).
 ```
 Hooks Status
 
-Total hooks: 4
-Ready: 4
+Total hooks: 5
+Ready: 5
 Not ready: 0
 ```
 
@@ -275,6 +276,20 @@ openclaw hooks enable session-memory
 **Output:** `~/.openclaw/workspace/memory/YYYY-MM-DD-slug.md`
 
 **See:** [session-memory documentation](/automation/hooks#session-memory)
+
+### knowledge-steward
+
+Runs the deterministic steward pipeline against the previous session when you issue `/new` or `/reset`.
+
+**Enable:**
+
+```bash
+openclaw hooks enable knowledge-steward
+```
+
+**Outputs:** curated notes under `memory/topics/`, staged skill evidence under `skills/_candidates/` and `skills/_incubator/`, promoted `skills/<slug>/SKILL.md` when ready, plus steward run ledgers under `memory/steward/runs/`
+
+**See:** [knowledge-steward documentation](/automation/hooks#knowledge-steward)
 
 ### bootstrap-extra-files
 

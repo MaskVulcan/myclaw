@@ -196,6 +196,14 @@
     "target": "CLI"
   },
   {
+    "source": "steward",
+    "target": "steward"
+  },
+  {
+    "source": "knowledge-steward",
+    "target": "knowledge-steward"
+  },
+  {
     "source": "install sanity",
     "target": "安装完整性检查"
   },

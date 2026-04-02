@@ -203,6 +203,19 @@ const coreEntries: CoreCliEntry[] = [
       mod.registerStatusHealthSessionsCommands(program);
     },
   },
+  {
+    commands: [
+      {
+        name: "steward",
+        description: "Automate memory and skill stewardship from recent sessions",
+        hasSubcommands: true,
+      },
+    ],
+    register: async ({ program }) => {
+      const mod = await import("./register.steward.js");
+      mod.registerStewardCommand(program);
+    },
+  },
 ];
 
 export function getCoreCliCommandNames(): string[] {

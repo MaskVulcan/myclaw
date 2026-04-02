@@ -76,6 +76,13 @@ const FILE_NAME_RE =
   /[A-Za-z0-9_\u4e00-\u9fa5\-./]+?\.(?:pdf|docx?|xlsx|pptx|csv|txt|md|jpg|jpeg|png|zip|rar)/gi;
 const CRON_REMINDER_WRAPPER_RE =
   /^A scheduled reminder has been triggered\. The reminder content is:\s*([\s\S]*?)\s*(?:Please relay this reminder to the user in a helpful and friendly way\.|Handle this reminder internally\. Do not relay it to the user unless explicitly requested\.)\s*$/i;
+const CRON_REMINDER_PREFIX_RE =
+  /A scheduled reminder has been triggered\. The reminder content is:\s*/i;
+const CRON_REMINDER_SUFFIXES = [
+  "Please relay this reminder to the user in a helpful and friendly way.",
+  "Handle this reminder internally. Do not relay it to the user unless explicitly requested.",
+] as const;
+const CURRENT_TIME_LINE_RE = /\n?Current time:[^\n]*(?:\n|$)/gi;
 const REMINDER_JOB_NAME_PREFIX = "openclaw:smart-calendar:weixin-digest";
 const REMINDER_DESCRIPTION = "Auto-generated Weixin smart-calendar daily digest";
 const REMINDER_TIMEZONE = "Asia/Shanghai";
@@ -238,8 +245,31 @@ function resolveSourceText(
     [ctx.BodyForCommands, ctx.CommandBody, ctx.RawBody, ctx.Body].find(
       (value) => typeof value === "string" && value.trim().length > 0,
     ) ?? "";
-  const unwrapped = raw.match(CRON_REMINDER_WRAPPER_RE)?.[1]?.trim();
+  const unwrapped = unwrapCronReminderText(raw);
   return collapseWhitespace(unwrapped || raw);
+}
+
+function unwrapCronReminderText(raw: string): string | undefined {
+  const directMatch = raw.match(CRON_REMINDER_WRAPPER_RE)?.[1]?.trim();
+  if (directMatch) {
+    return directMatch;
+  }
+
+  const prefixMatch = CRON_REMINDER_PREFIX_RE.exec(raw);
+  if (!prefixMatch || typeof prefixMatch.index !== "number") {
+    return undefined;
+  }
+
+  let remainder = raw.slice(prefixMatch.index + prefixMatch[0].length);
+  const suffixIndexes = CRON_REMINDER_SUFFIXES.map((suffix) => remainder.indexOf(suffix)).filter(
+    (index) => index >= 0,
+  );
+  if (suffixIndexes.length > 0) {
+    remainder = remainder.slice(0, Math.min(...suffixIndexes));
+  }
+
+  remainder = remainder.replace(CURRENT_TIME_LINE_RE, "").trim();
+  return remainder || undefined;
 }
 
 function resolveCalendarIntent(text: string): CalendarFastpassIntent | null {

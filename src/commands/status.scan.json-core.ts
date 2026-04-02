@@ -76,6 +76,16 @@ function buildColdStartStatusSummary(): Awaited<ReturnType<typeof getStatusSumma
       paths: [],
       count: 0,
       defaults: { model: null, contextTokens: null },
+      overview: {
+        recentActivity: {
+          last60m: 0,
+          last24h: 0,
+          last7d: 0,
+        },
+        topModels: [],
+        topAgents: [],
+        kinds: [],
+      },
       recent: [],
       byAgent: [],
     },

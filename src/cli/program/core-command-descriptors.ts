@@ -81,6 +81,11 @@ export const CORE_CLI_COMMAND_DESCRIPTORS = [
     description: "List stored conversation sessions",
     hasSubcommands: true,
   },
+  {
+    name: "steward",
+    description: "Automate memory and skill stewardship from recent sessions",
+    hasSubcommands: true,
+  },
 ] as const satisfies ReadonlyArray<CoreCliCommandDescriptor>;
 
 export function getCoreCliCommandDescriptors(): ReadonlyArray<CoreCliCommandDescriptor> {

@@ -47,6 +47,7 @@ describe("tsdown config", () => {
         "extensions/msteams/index",
         "extensions/whatsapp/index",
         "bundled/boot-md/handler",
+        "bundled/knowledge-steward/handler",
       ]),
     );
   });

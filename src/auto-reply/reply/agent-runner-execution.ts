@@ -297,7 +297,7 @@ export async function runAgentTurnWithFallback(params: {
       isControlUiVisible: shouldSurfaceToControlUi,
     });
   }
-  let runResult: Awaited<ReturnType<typeof runEmbeddedPiAgent>>;
+  let runResult!: Awaited<ReturnType<typeof runEmbeddedPiAgent>>;
   let fallbackProvider = params.followupRun.run.provider;
   let fallbackModel = params.followupRun.run.model;
   let fallbackAttempts: RuntimeFallbackAttempt[] = [];

@@ -18,6 +18,20 @@ Automatically saves session context to memory when you issue `/new` or `/reset`.
 openclaw hooks enable session-memory
 ```
 
+### 🧠 knowledge-steward
+
+Automatically runs the deterministic steward pipeline when you issue `/new` or `/reset`.
+
+**Events**: `command:new`, `command:reset`
+**What it does**: Uses the just-finished transcript to stage durable memory/skill candidates, curate long-term notes, maintain note size, incubate repeated workflows, and promote ready skills.
+**Output**: `memory/inbox/`, `memory/topics/`, `memory/steward/runs/`, `skills/_candidates/`, `skills/_incubator/`, and `skills/<slug>/SKILL.md` when repeated evidence is sufficient.
+
+**Enable**:
+
+```bash
+openclaw hooks enable knowledge-steward
+```
+
 ### 📎 bootstrap-extra-files
 
 Injects extra bootstrap files (for example monorepo `AGENTS.md`/`TOOLS.md`) during prompt assembly.
