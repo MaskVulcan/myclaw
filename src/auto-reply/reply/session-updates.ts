@@ -2,7 +2,9 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { buildWorkspaceSkillSnapshot } from "../../agents/skills.js";
+import { normalizeSkillFilter } from "../../agents/skills/filter.js";
 import { ensureSkillsWatcher, getSkillsSnapshotVersion } from "../../agents/skills/refresh.js";
+import type { SkillSnapshot } from "../../agents/skills/types.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import {
   resolveSessionFilePath,
@@ -13,6 +15,27 @@ import {
 import { getRemoteSkillEligibility } from "../../infra/skills-remote.js";
 import { resolveAgentIdFromSessionKey } from "../../routing/session-key.js";
 export { drainFormattedSystemEvents } from "./session-system-events.js";
+
+function snapshotSatisfiesRequestedSkillFilter(
+  snapshot: SkillSnapshot | undefined,
+  requestedSkillFilter: string[] | undefined,
+): boolean {
+  const normalizedRequested = normalizeSkillFilter(requestedSkillFilter);
+  if (normalizedRequested === undefined) {
+    return true;
+  }
+
+  const normalizedSnapshot = normalizeSkillFilter(snapshot?.skillFilter);
+  if (normalizedRequested.length === 0) {
+    return Array.isArray(normalizedSnapshot) && normalizedSnapshot.length === 0;
+  }
+  if (normalizedSnapshot === undefined) {
+    return true;
+  }
+
+  const snapshotSet = new Set(normalizedSnapshot);
+  return normalizedRequested.every((skill) => snapshotSet.has(skill));
+}
 
 async function persistSessionEntryUpdate(params: {
   sessionStore?: Record<string, SessionEntry>;
@@ -79,7 +102,8 @@ export async function ensureSkillSnapshot(params: {
   const snapshotVersion = getSkillsSnapshotVersion(workspaceDir);
   ensureSkillsWatcher({ workspaceDir, config: cfg });
   const shouldRefreshSnapshot =
-    snapshotVersion > 0 && (nextEntry?.skillsSnapshot?.version ?? 0) < snapshotVersion;
+    (snapshotVersion > 0 && (nextEntry?.skillsSnapshot?.version ?? 0) < snapshotVersion) ||
+    !snapshotSatisfiesRequestedSkillFilter(nextEntry?.skillsSnapshot, skillFilter);
 
   if (isFirstTurnInSession && sessionStore && sessionKey) {
     const current = nextEntry ??
