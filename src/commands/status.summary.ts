@@ -11,7 +11,12 @@ import { peekSystemEvents } from "../infra/system-events.js";
 import { parseAgentSessionKey } from "../routing/session-key.js";
 import { createLazyRuntimeSurface } from "../shared/lazy-runtime.js";
 import { resolveRuntimeServiceVersion } from "../version.js";
-import type { HeartbeatStatus, SessionStatus, StatusSummary } from "./status.types.js";
+import type {
+  HeartbeatStatus,
+  SessionStatus,
+  StatusSessionOverview,
+  StatusSummary,
+} from "./status.types.js";
 
 let channelSummaryModulePromise: Promise<typeof import("../infra/channel-summary.js")> | undefined;
 let linkChannelModulePromise: Promise<typeof import("./status.link-channel.js")> | undefined;
@@ -74,6 +79,58 @@ const buildFlags = (entry?: SessionEntry): string[] => {
   return flags;
 };
 
+function sortBuckets(a: { count: number; label: string }, b: { count: number; label: string }) {
+  return b.count - a.count || a.label.localeCompare(b.label);
+}
+
+function buildTopBuckets(rows: SessionStatus[], selectLabel: (row: SessionStatus) => string) {
+  const buckets = new Map<string, number>();
+  for (const row of rows) {
+    const label = selectLabel(row);
+    buckets.set(label, (buckets.get(label) ?? 0) + 1);
+  }
+  return [...buckets.entries()].map(([label, count]) => ({ label, count })).toSorted(sortBuckets);
+}
+
+function buildSessionOverview(rows: SessionStatus[]): StatusSessionOverview {
+  const now = Date.now();
+  const countWithin = (minutes: number) =>
+    rows.filter((row) => row.updatedAt !== null && now - row.updatedAt <= minutes * 60_000).length;
+  const kinds = new Map<SessionStatus["kind"], number>();
+  for (const row of rows) {
+    kinds.set(row.kind, (kinds.get(row.kind) ?? 0) + 1);
+  }
+  const kindOrder: Record<SessionStatus["kind"], number> = {
+    direct: 0,
+    group: 1,
+    global: 2,
+    unknown: 3,
+  };
+
+  return {
+    recentActivity: {
+      last60m: countWithin(60),
+      last24h: countWithin(24 * 60),
+      last7d: countWithin(7 * 24 * 60),
+    },
+    topModels: buildTopBuckets(rows, (row) => row.model ?? "unknown")
+      .slice(0, 3)
+      .map((entry) => ({
+        model: entry.label,
+        count: entry.count,
+      })),
+    topAgents: buildTopBuckets(rows, (row) => row.agentId ?? "unknown")
+      .slice(0, 3)
+      .map((entry) => ({
+        agentId: entry.label,
+        count: entry.count,
+      })),
+    kinds: [...kinds.entries()]
+      .map(([kind, count]) => ({ kind, count }))
+      .toSorted((a, b) => b.count - a.count || kindOrder[a.kind] - kindOrder[b.kind]),
+  };
+}
+
 export function redactSensitiveStatusSummary(summary: StatusSummary): StatusSummary {
   return {
     ...summary,
@@ -84,6 +141,7 @@ export function redactSensitiveStatusSummary(summary: StatusSummary): StatusSumm
         model: null,
         contextTokens: null,
       },
+      overview: summary.sessions.overview,
       recent: [],
       byAgent: summary.sessions.byAgent.map((entry) => ({
         ...entry,
@@ -241,11 +299,12 @@ export async function getStatusSummary(
     };
   });
 
-  const allSessions = Array.from(paths)
-    .flatMap((storePath) => buildSessionRows(loadStore(storePath)))
+  const allSessions = byAgent
+    .flatMap((agent) => buildSessionRows(loadStore(agent.path), { agentIdOverride: agent.agentId }))
     .toSorted((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
   const recent = allSessions.slice(0, 10);
   const totalSessions = allSessions.length;
+  const overview = buildSessionOverview(allSessions);
 
   const summary: StatusSummary = {
     runtimeVersion: resolveRuntimeServiceVersion(process.env),
@@ -270,6 +329,7 @@ export async function getStatusSummary(
         model: configModel ?? null,
         contextTokens: configContextTokens ?? null,
       },
+      overview,
       recent,
       byAgent,
     },

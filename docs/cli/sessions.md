@@ -15,6 +15,8 @@ openclaw sessions --agent work
 openclaw sessions --all-agents
 openclaw sessions --active 120
 openclaw sessions --json
+openclaw sessions summary
+openclaw sessions summary --all-agents --recent 3
 ```
 
 Scope selection:
@@ -47,6 +49,77 @@ JSON examples:
   "sessions": [
     { "agentId": "main", "key": "agent:main:main", "model": "gpt-5" },
     { "agentId": "work", "key": "agent:work:main", "model": "claude-opus-4-6" }
+  ]
+}
+```
+
+## Summary overview
+
+Use `openclaw sessions summary` for a lightweight aggregated view inspired by
+Claude Code style session insights, but kept read-only and local:
+
+```bash
+openclaw sessions summary
+openclaw sessions summary --agent work
+openclaw sessions summary --all-agents
+openclaw sessions summary --active 60
+openclaw sessions summary --recent 3
+openclaw sessions summary --json
+```
+
+What it shows:
+
+- total sessions in scope
+- recent activity windows (`1h`, `24h`, `7d`)
+- top models, top agents, and session-kind distribution
+- known token usage and estimated cost totals when session metadata has them
+- a few recent session previews
+
+`openclaw status` now includes a short version of this overview. Use
+`openclaw sessions summary` when you want the dedicated breakdown.
+
+`openclaw sessions summary --all-agents --json`:
+
+```json
+{
+  "path": null,
+  "stores": [
+    { "agentId": "main", "path": "/home/user/.openclaw/agents/main/sessions/sessions.json" },
+    { "agentId": "work", "path": "/home/user/.openclaw/agents/work/sessions/sessions.json" }
+  ],
+  "allAgents": true,
+  "scannedCount": 12,
+  "count": 12,
+  "activeMinutes": null,
+  "recentLimit": 3,
+  "activity": { "last60m": 4, "last24h": 9, "last7d": 12 },
+  "totals": {
+    "sessions": 12,
+    "knownTokens": 182000,
+    "sessionsWithKnownTokens": 8,
+    "estimatedCostUsd": 1.42,
+    "sessionsWithEstimatedCost": 5
+  },
+  "models": [
+    { "model": "gpt-5.2", "count": 7, "knownTokens": 99000 },
+    { "model": "pi:opus", "count": 3, "knownTokens": 61000 }
+  ],
+  "agents": [
+    { "agentId": "main", "count": 9, "knownTokens": 141000 },
+    { "agentId": "work", "count": 3, "knownTokens": 41000 }
+  ],
+  "kinds": [
+    { "kind": "direct", "count": 10 },
+    { "kind": "group", "count": 2 }
+  ],
+  "recent": [
+    {
+      "key": "agent:main:main",
+      "agentId": "main",
+      "kind": "direct",
+      "model": "gpt-5.2",
+      "previewItems": [{ "role": "user", "text": "Investigate flaky tests" }]
+    }
   ]
 }
 ```
@@ -108,3 +181,4 @@ openclaw sessions cleanup --json
 Related:
 
 - Session config: [Configuration reference](/gateway/configuration-reference#session)
+- Status overview: [CLI status](/cli/status)

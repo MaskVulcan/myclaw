@@ -28,6 +28,8 @@ openclaw status --usage
 
 - `--deep` 运行实时探测（WhatsApp Web + Telegram + Discord + Google Chat + Slack + Signal）。
 - 当配置了多个智能体时，输出包含每个智能体的会话存储。
+- Sessions 区块现在会显示一个精简概览：`1h` / `24h` / `7d` 活跃度、top models、top agents、会话类型分布。
+- 如果你想看更完整的会话聚合与最近预览，使用 `openclaw sessions summary`。
 - 概览包含 Gateway 网关 + 节点主机服务安装/运行时状态（如果可用）。
 - 概览包含更新渠道 + git SHA（用于源代码检出）。
 - 更新信息显示在概览中；如果有可用更新，status 会打印提示运行 `openclaw update`（参见[更新](/install/updating)）。

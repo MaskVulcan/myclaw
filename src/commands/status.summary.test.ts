@@ -29,12 +29,44 @@ vi.mock("../config/config.js", () => ({
   loadConfig: vi.fn(() => ({})),
 }));
 
-vi.mock("../config/sessions.js", () => ({
-  loadSessionStore: vi.fn(() => ({})),
-  resolveFreshSessionTotalTokens: vi.fn(() => undefined),
+vi.mock("../config/sessions/main-session.js", () => ({
   resolveMainSessionKey: vi.fn(() => "main"),
+}));
+
+vi.mock("../config/sessions/paths.js", () => ({
   resolveStorePath: vi.fn(() => "/tmp/sessions.json"),
 }));
+
+vi.mock("../config/sessions/store-read.js", () => ({
+  readSessionStoreReadOnly: vi.fn(() => ({
+    "+1000": {
+      updatedAt: Date.now() - 60_000,
+      totalTokens: 5_000,
+      totalTokensFresh: true,
+      contextTokens: 10_000,
+      model: "gpt-5.2",
+      sessionId: "abc123",
+    },
+    "discord:group:dev": {
+      updatedAt: Date.now() - 3 * 60 * 60_000,
+      model: "gpt-5.2",
+      sessionId: "group123",
+    },
+  })),
+}));
+
+vi.mock("../config/sessions/types.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../config/sessions/types.js")>();
+  return {
+    ...actual,
+    resolveFreshSessionTotalTokens: vi.fn(
+      (entry?: { totalTokens?: number; totalTokensFresh?: boolean }) =>
+        typeof entry?.totalTokens === "number" && entry?.totalTokensFresh !== false
+          ? entry.totalTokens
+          : undefined,
+    ),
+  };
+});
 
 vi.mock("../gateway/agent-list.js", () => ({
   listGatewayAgentsBasic: vi.fn(() => ({
@@ -109,5 +141,19 @@ describe("getStatusSummary", () => {
     expect(vi.mocked(statusSummaryRuntime.resolveContextTokensForModel)).toHaveBeenCalledWith(
       expect.objectContaining({ allowAsyncLoad: false }),
     );
+  });
+
+  it("includes session overview counts in the status payload", async () => {
+    const summary = await getStatusSummary();
+
+    expect(summary.sessions.count).toBe(2);
+    expect(summary.sessions.overview.recentActivity).toEqual({
+      last60m: 1,
+      last24h: 2,
+      last7d: 2,
+    });
+    expect(summary.sessions.overview.topModels).toEqual([{ model: "gpt-5.2", count: 2 }]);
+    expect(summary.sessions.overview.topAgents).toEqual([{ agentId: "main", count: 2 }]);
+    expect(summary.sessions.overview.kinds).toEqual([{ kind: "direct", count: 2 }]);
   });
 });

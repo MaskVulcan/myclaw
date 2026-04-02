@@ -34,6 +34,26 @@ export type HeartbeatStatus = {
   everyMs: number | null;
 };
 
+export type StatusSessionOverview = {
+  recentActivity: {
+    last60m: number;
+    last24h: number;
+    last7d: number;
+  };
+  topModels: Array<{
+    model: string;
+    count: number;
+  }>;
+  topAgents: Array<{
+    agentId: string;
+    count: number;
+  }>;
+  kinds: Array<{
+    kind: SessionStatus["kind"];
+    count: number;
+  }>;
+};
+
 export type StatusSummary = {
   runtimeVersion?: string | null;
   linkChannel?: {
@@ -52,6 +72,7 @@ export type StatusSummary = {
     paths: string[];
     count: number;
     defaults: { model: string | null; contextTokens: number | null };
+    overview: StatusSessionOverview;
     recent: SessionStatus[];
     byAgent: Array<{
       agentId: string;

@@ -218,6 +218,16 @@ export function createStatusSummary(
       count: 0,
       paths: [],
       defaults: {},
+      overview: {
+        recentActivity: {
+          last60m: 0,
+          last24h: 0,
+          last7d: 0,
+        },
+        topModels: [],
+        topAgents: [],
+        kinds: [],
+      },
       recent: [],
       ...(Object.prototype.hasOwnProperty.call(options, "byAgent")
         ? { byAgent: options.byAgent ?? [] }

@@ -783,4 +783,28 @@ describe("statusCommand", () => {
       mocks.loadSessionStore.mockImplementation(originalLoadSessionStore);
     }
   });
+
+  it("includes session overview aggregates in JSON output", async () => {
+    await statusCommand({ json: true }, runtime as never);
+    const payload = JSON.parse(String(runtimeLogMock.mock.calls.at(-1)?.[0]));
+
+    expect(payload.sessions.overview.recentActivity).toEqual({
+      last60m: 1,
+      last24h: 1,
+      last7d: 1,
+    });
+    expect(payload.sessions.overview.topModels).toEqual([{ model: "pi:opus", count: 1 }]);
+    expect(payload.sessions.overview.topAgents).toEqual([{ agentId: "main", count: 1 }]);
+    expect(payload.sessions.overview.kinds).toEqual([{ kind: "direct", count: 1 }]);
+  });
+
+  it("prints a compact session overview in text output", async () => {
+    const joined = await runStatusAndGetJoinedLogs();
+
+    expect(joined).toContain("Activity: 1h 1 · 24h 1 · 7d 1");
+    expect(joined).toContain("Top models: pi:opus (1)");
+    expect(joined).toContain("Top agents: main (1)");
+    expect(joined).toContain("Kinds: direct (1)");
+    expect(joined).toContain("sessions summary");
+  });
 });

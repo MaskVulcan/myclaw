@@ -405,6 +405,7 @@ export async function statusCommand(
     summary.sessions.paths.length > 1
       ? `${summary.sessions.paths.length} stores`
       : (summary.sessions.paths[0] ?? "unknown");
+  const sessionOverview = summary.sessions.overview;
 
   const memoryValue = (() => {
     if (!memoryPlugin.enabled) {
@@ -491,7 +492,10 @@ export async function statusCommand(
     ...(lastHeartbeatValue ? [{ Item: "Last heartbeat", Value: lastHeartbeatValue }] : []),
     {
       Item: "Sessions",
-      Value: `${summary.sessions.count} active · default ${defaults.model ?? "unknown"}${defaultCtx} · ${storeLabel}`,
+      Value:
+        `${summary.sessions.count} active · 1h ${sessionOverview.recentActivity.last60m}` +
+        ` · 24h ${sessionOverview.recentActivity.last24h}` +
+        ` · default ${defaults.model ?? "unknown"}${defaultCtx} · ${storeLabel}`,
     },
   ];
 
@@ -619,6 +623,28 @@ export async function statusCommand(
 
   runtime.log("");
   runtime.log(theme.heading("Sessions"));
+  if (summary.sessions.count > 0) {
+    const formatCountList = <T extends { count: number }>(
+      items: T[],
+      toLabel: (item: T) => string,
+    ) =>
+      items.length > 0
+        ? items.map((item) => `${toLabel(item)} (${item.count})`).join(", ")
+        : "none";
+    runtime.log(
+      muted(
+        `Activity: 1h ${sessionOverview.recentActivity.last60m} · 24h ${sessionOverview.recentActivity.last24h} · 7d ${sessionOverview.recentActivity.last7d}`,
+      ),
+    );
+    runtime.log(
+      muted(`Top models: ${formatCountList(sessionOverview.topModels, (item) => item.model)}`),
+    );
+    runtime.log(
+      muted(`Top agents: ${formatCountList(sessionOverview.topAgents, (item) => item.agentId)}`),
+    );
+    runtime.log(muted(`Kinds: ${formatCountList(sessionOverview.kinds, (item) => item.kind)}`));
+    runtime.log(muted(`Details: ${formatCliCommand("openclaw sessions summary")}`));
+  }
   runtime.log(
     renderTable({
       width: tableWidth,
