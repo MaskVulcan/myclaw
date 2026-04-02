@@ -5,6 +5,7 @@ import { createCliRuntimeCapture } from "../test-runtime-capture.js";
 const statusCommand = vi.fn();
 const healthCommand = vi.fn();
 const sessionsCommand = vi.fn();
+const sessionsSummaryCommand = vi.fn();
 const sessionsCleanupCommand = vi.fn();
 const setVerbose = vi.fn();
 
@@ -20,6 +21,10 @@ vi.mock("../../commands/health.js", () => ({
 
 vi.mock("../../commands/sessions.js", () => ({
   sessionsCommand,
+}));
+
+vi.mock("../../commands/sessions-summary.js", () => ({
+  sessionsSummaryCommand,
 }));
 
 vi.mock("../../commands/sessions-cleanup.js", () => ({
@@ -54,6 +59,7 @@ describe("registerStatusHealthSessionsCommands", () => {
     statusCommand.mockResolvedValue(undefined);
     healthCommand.mockResolvedValue(undefined);
     sessionsCommand.mockResolvedValue(undefined);
+    sessionsSummaryCommand.mockResolvedValue(undefined);
     sessionsCleanupCommand.mockResolvedValue(undefined);
   });
 
@@ -157,6 +163,29 @@ describe("registerStatusHealthSessionsCommands", () => {
     expect(sessionsCommand).toHaveBeenCalledWith(
       expect.objectContaining({
         allAgents: true,
+      }),
+      runtime,
+    );
+  });
+
+  it("runs sessions summary subcommand with forwarded options", async () => {
+    await runCli([
+      "sessions",
+      "--json",
+      "--all-agents",
+      "summary",
+      "--active",
+      "60",
+      "--recent",
+      "3",
+    ]);
+
+    expect(sessionsSummaryCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        allAgents: true,
+        active: "60",
+        recent: "3",
+        json: true,
       }),
       runtime,
     );
