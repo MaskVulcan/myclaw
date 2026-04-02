@@ -117,9 +117,34 @@ class TestRenderHtml:
     def test_html_view_type(self, render):
         """不同视图类型"""
         events = [_make_event(date(2026, 3, 25), "会议")]
-        for view in ["week", "month", "day"]:
+        for view in ["week", "month"]:
             html = render.render_html(events, view=view)
             assert f"defaultView: '{view}'" in html
+
+    def test_day_html_uses_compact_agenda_layout(self, render):
+        """day 视图输出紧凑议程卡片，不再使用时间轴空白布局"""
+        events = [
+            _make_event(
+                date(2026, 3, 25),
+                "高铁去香港",
+                category="其他",
+                time="20:15",
+                participants=["张总"],
+            )
+        ]
+        html = render.render_html(
+            events,
+            view="day",
+            focus_date=date(2026, 3, 25),
+            title="日程安排",
+            date_range="3月25日 周三",
+        )
+        assert "event-card" in html
+        assert "20:15" in html
+        assert "3月25日 周三" in html
+        assert "高铁去香港" in html
+        assert "张总" in html
+        assert "defaultView:" not in html
 
     def test_html_dynamic_hours(self, render):
         """事件时间影响显示的小时范围"""
@@ -127,6 +152,12 @@ class TestRenderHtml:
         html = render.render_html(events)
         # 07:00 的事件应使 hourStart 变为 7
         assert "hourStart: 7" in html
+
+    def test_light_category_uses_readable_text_color(self, render):
+        """浅色类别会自动转成可读的前景/强调色"""
+        tokens = render._build_color_tokens("#DFE6E9")
+        assert tokens["color"] != "#dfe6e9"
+        assert tokens["text_color"] in {"#0f172a", "#f8fafc"}
 
     def test_html_empty_events(self, render):
         """空事件仍生成有效 HTML"""

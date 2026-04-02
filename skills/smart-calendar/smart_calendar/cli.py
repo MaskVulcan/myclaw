@@ -363,6 +363,12 @@ def cmd_render(args):
     import pendulum
 
     now = pendulum.now(svc.config.timezone)
+    view = args.view or "week"
+    explicit_date = None
+    if args.date:
+        explicit_date = svc.parser.parse_date_only(args.date)
+        if explicit_date is None:
+            raise CalendarError(f"无法识别日期: {args.date}")
 
     # 确定时间范围
     if args.range:
@@ -374,6 +380,8 @@ def cmd_render(args):
     elif args.month:
         start = now.start_of("month").date()
         end = now.end_of("month").date()
+    elif view == "day" and explicit_date:
+        start = end = explicit_date
     else:
         # 默认本周
         start = now.start_of("week").date()
@@ -436,7 +444,6 @@ def cmd_render(args):
 
         cal_render = CalendarRender(svc.config)
 
-        view = args.view or "week"
         if args.with_people:
             events = svc.query.by_participant(args.with_people, start, end)
         else:
@@ -445,12 +452,19 @@ def cmd_render(args):
         # focus_date: 视图中心日期
         if view == "month":
             focus = start.replace(day=15)
-        elif view == "day" and args.date:
-            focus = svc.parser.parse_date_only(args.date) or start
+        elif view == "day":
+            focus = explicit_date or start
         else:
-            focus = start
+            focus = explicit_date or start
 
-        date_range_str = f"{svc.parser.format_date(start)} ~ {svc.parser.format_date(end)}"
+        if start == end:
+            date_range_str = svc.parser.format_date(start)
+            text_title = f"📅 {date_range_str}"
+            image_title = "日程安排"
+        else:
+            date_range_str = f"{svc.parser.format_date(start)} ~ {svc.parser.format_date(end)}"
+            text_title = f"📅 {date_range_str}"
+            image_title = "日历概览"
         out = output_dir / f"calendar_{view}.png"
 
         print(f"🎨 正在生成 {view} 视图日历图...")
@@ -459,13 +473,13 @@ def cmd_render(args):
             output_path=out,
             view=view,
             focus_date=focus,
-            title="Smart Calendar",
+            title=image_title,
             date_range=date_range_str,
         )
         print(f"✅ 日历图已生成: {out}")
 
         # 同时输出文字版
-        svc.render.render_schedule(events, title=f"📅 {date_range_str}")
+        svc.render.render_schedule(events, title=text_title)
 
     # 尝试用系统默认应用打开图片（跨平台）
     if args.open and out and out.exists():

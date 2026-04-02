@@ -10,11 +10,46 @@ import yaml
 
 _DEFAULT_CONFIG = {
     "categories": {
+        "会议": {
+            "color": "#F97316",
+            "icon": "🤝",
+            "heatmap_cmap": "Oranges",
+        },
+        "技术": {
+            "color": "#14B8A6",
+            "icon": "💻",
+            "heatmap_cmap": "Blues",
+        },
+        "学习": {
+            "color": "#6366F1",
+            "icon": "📚",
+            "heatmap_cmap": "Purples",
+        },
+        "出行": {
+            "color": "#2563EB",
+            "icon": "🚄",
+            "heatmap_cmap": "Blues",
+        },
+        "健康": {
+            "color": "#16A34A",
+            "icon": "🩺",
+            "heatmap_cmap": "Greens",
+        },
+        "家庭": {
+            "color": "#E11D48",
+            "icon": "🏠",
+            "heatmap_cmap": "Reds",
+        },
+        "社交": {
+            "color": "#D97706",
+            "icon": "☕",
+            "heatmap_cmap": "YlOrBr",
+        },
         "其他": {
-            "color": "#DFE6E9",
+            "color": "#475569",
             "icon": "📌",
             "heatmap_cmap": "Greys",
-        }
+        },
     },
     "defaults": {
         "timezone": "Asia/Shanghai",
@@ -55,7 +90,12 @@ class Config:
 
     @property
     def categories(self) -> dict[str, dict]:
-        return self._data.get("categories", _DEFAULT_CONFIG["categories"])
+        categories = copy.deepcopy(_DEFAULT_CONFIG["categories"])
+        configured = self._data.get("categories", {})
+        for name, info in configured.items():
+            base = categories.get(name, {})
+            categories[name] = {**base, **(info or {})}
+        return categories
 
     @property
     def timezone(self) -> str:
@@ -89,7 +129,7 @@ class Config:
         return self.categories.get(category, {}).get("icon", "📌")
 
     def get_category_color(self, category: str) -> str:
-        return self.categories.get(category, {}).get("color", "#DFE6E9")
+        return self.categories.get(category, {}).get("color", "#475569")
 
     def get_category_cmap(self, category: str) -> str:
         return self.categories.get(category, {}).get("heatmap_cmap", "Greys")

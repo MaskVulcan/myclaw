@@ -28,7 +28,7 @@ categories:
     icon: "🏠"
     heatmap_cmap: "Reds"
   其他:
-    color: "#DFE6E9"
+    color: "#475569"
     icon: "📌"
     heatmap_cmap: "Greys"
 

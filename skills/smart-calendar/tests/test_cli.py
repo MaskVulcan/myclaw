@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import argparse
-import shutil
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -15,11 +14,12 @@ from smart_calendar.cli import (
     _Services,
     _extract_title,
     cmd_add,
-    cmd_show,
-    cmd_delete,
     cmd_edit,
-    cmd_stats,
+    cmd_delete,
     cmd_people,
+    cmd_render,
+    cmd_show,
+    cmd_stats,
 )
 from smart_calendar.storage.event_store import Event
 
@@ -76,6 +76,10 @@ def _make_args(**kwargs):
         "search": None,
         "all": False,
         "event_id": None,
+        "view": None,
+        "heatmap": None,
+        "year": False,
+        "open": False,
     }
     defaults.update(kwargs)
     return argparse.Namespace(**defaults)
@@ -343,6 +347,53 @@ class TestCmdStats:
 
         captured = capsys.readouterr()
         assert "类别对比" in captured.out
+
+
+# ─── cmd_render 测试 ─────────────────────────────────────────
+
+
+class TestCmdRender:
+    def test_render_day_uses_single_date_range(self, svc, capsys, tmp_path):
+        """day 视图 + --date 应渲染单日标题和范围，而不是整周"""
+        svc.store.add(Event(
+            id="",
+            date=date(2026, 4, 3),
+            time="20:15",
+            title="高铁去香港",
+            category="出行",
+            location="虹桥火车站",
+        ))
+        args = _make_args(view="day", date="2026-04-03")
+        captured: dict[str, object] = {}
+
+        class StubCalendarRender:
+            def __init__(self, config):
+                self.config = config
+
+            def render_png(self, events, output_path, view, focus_date, title, date_range):
+                captured["events"] = events
+                captured["output_path"] = output_path
+                captured["view"] = view
+                captured["focus_date"] = focus_date
+                captured["title"] = title
+                captured["date_range"] = date_range
+                Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+                Path(output_path).write_bytes(b"png")
+                return Path(output_path)
+
+        with patch("smart_calendar.cli._svc", return_value=svc), patch(
+            "smart_calendar.render.calendar_render.CalendarRender",
+            StubCalendarRender,
+        ):
+            cmd_render(args)
+
+        stdout = capsys.readouterr().out
+        assert "4月3日 周五" in stdout
+        assert "3月30日 周一 ~ 4月5日 周日" not in stdout
+        assert captured["view"] == "day"
+        assert captured["focus_date"] == date(2026, 4, 3)
+        assert captured["title"] == "日程安排"
+        assert captured["date_range"] == "4月3日 周五"
 
 
 # ─── cmd_people 测试 ─────────────────────────────────────────
