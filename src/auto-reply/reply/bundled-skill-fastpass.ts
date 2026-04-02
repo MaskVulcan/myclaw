@@ -69,7 +69,8 @@ const RENDER_PREFIX_RE =
 const GENERIC_PERSON_RE =
   /^(?:我|我们|自己|一下|一个|大家|同学们|朋友们|同事们|客户们|老师们|家里|公司)$/i;
 const NON_PERSON_PARTICIPANT_RE =
-  /(?:日历|图片|图|文字|文本|总结|汇总|总结版|汇总版|安排|日程|行程|会议|提醒|未来|今天|明天|后天)/i;
+  /(?:日历|图片|图|文字|文本|总结|汇总|总结版|汇总版|安排|日程|行程|会议|提醒|未来|今天|明天|后天|行李(?:箱)?|箱子|背包|书包|电脑包|公文包|文件|资料|材料|附件|合同|简历|方案|清单|证件|身份证|护照|港澳通行证|通行证|车票|机票|门票|钥匙|药|充电器|电源|衣服|外套|雨伞|钱包|银行卡)/i;
+const CALENDAR_EVENT_ID_LINE_RE = /^\s*(?:🔖\s*)?ID[:：]\s*evt_[A-Za-z0-9_-]+\s*(?:\n|$)/gim;
 const URL_RE = /\bhttps?:\/\/[^\s，。；;]+/gi;
 const FILE_NAME_RE =
   /[A-Za-z0-9_\u4e00-\u9fa5\-./]+?\.(?:pdf|docx?|xlsx|pptx|csv|txt|md|jpg|jpeg|png|zip|rar)/gi;
@@ -139,6 +140,13 @@ function sanitizeCliText(value: string | undefined): string {
   return (value ?? "").replace(/\r\n/g, "\n").replace(ANSI_ESCAPE_RE, "").trim();
 }
 
+function stripCalendarEventIdLines(value: string): string {
+  return value
+    .replace(CALENDAR_EVENT_ID_LINE_RE, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function extractUserVisibleCliText(value: string | undefined): string {
   const text = sanitizeCliText(value);
   if (!text) {
@@ -150,7 +158,7 @@ function extractUserVisibleCliText(value: string | undefined): string {
   }
   const startsWithNewline = match[0].startsWith("\n");
   const startIndex = match.index + (startsWithNewline ? 1 : 0);
-  return text.slice(startIndex).trim();
+  return stripCalendarEventIdLines(text.slice(startIndex).trim());
 }
 
 function resolveWeixinProviderId(
@@ -291,17 +299,21 @@ function cleanupParticipantCandidate(value: string): string {
     .trim();
 }
 
+function isLikelyNonPersonParticipant(candidate: string): boolean {
+  return (
+    !candidate ||
+    GENERIC_PERSON_RE.test(candidate) ||
+    NON_PERSON_PARTICIPANT_RE.test(candidate) ||
+    TIME_HINT_RE.test(candidate)
+  );
+}
+
 export function extractWeixinScheduleParticipants(text: string): string[] {
   const participants = new Set<string>();
 
   for (const match of text.matchAll(PARTICIPANT_MENTION_RE)) {
     const candidate = cleanupParticipantCandidate(match[1] ?? "");
-    if (
-      !candidate ||
-      GENERIC_PERSON_RE.test(candidate) ||
-      NON_PERSON_PARTICIPANT_RE.test(candidate) ||
-      TIME_HINT_RE.test(candidate)
-    ) {
+    if (isLikelyNonPersonParticipant(candidate)) {
       continue;
     }
     participants.add(candidate);
@@ -314,12 +326,7 @@ export function extractWeixinScheduleParticipants(text: string): string[] {
     }
     for (const piece of rawCandidate.split(PERSON_SPLIT_RE)) {
       const candidate = cleanupParticipantCandidate(piece);
-      if (
-        !candidate ||
-        GENERIC_PERSON_RE.test(candidate) ||
-        NON_PERSON_PARTICIPANT_RE.test(candidate) ||
-        TIME_HINT_RE.test(candidate)
-      ) {
+      if (isLikelyNonPersonParticipant(candidate)) {
         continue;
       }
       participants.add(candidate);

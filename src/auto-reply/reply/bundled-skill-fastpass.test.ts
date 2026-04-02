@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
+  extractWeixinScheduleParticipants,
   resolveWeixinCalendarHome,
   tryHandleBundledSkillFastpass,
 } from "./bundled-skill-fastpass.js";
@@ -248,6 +249,68 @@ describe("bundled skill fastpass", () => {
         "虹桥火车站",
         "我明天晚上八点十五，虹桥火车站的高铁去香港",
       ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not treat luggage or travel documents as participants", () => {
+    expect(extractWeixinScheduleParticipants("我明天下午一点带身份证，港澳通行证和行李箱")).toEqual(
+      [],
+    );
+  });
+
+  it("strips internal calendar ids from add replies and keeps luggage lists out of --with", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-02T20:05:00+08:00"));
+    try {
+      const execFile = vi.fn(async () => ({
+        code: 0,
+        stdout:
+          "✅ 日程已添加:\n   🤝 带身份证，港澳通行证和行李箱\n   📆 4月3日 周五 13:00\n   🔖 ID: evt_20260403_96bdf3\n",
+        stderr: "",
+      }));
+      const ctx = buildTestCtx({
+        Provider: "openclaw-weixin",
+        Surface: "openclaw-weixin",
+        OriginatingChannel: "openclaw-weixin",
+        OriginatingTo: "o9cq80xlx0ztnjhprklxlezdbudi@im.wechat",
+        SenderId: "o9cq80xlx0ztnjhprklxlezdbudi@im.wechat",
+        ChatType: "direct",
+        SessionKey:
+          "agent:main:openclaw-weixin:15b6a1154038-im-bot:direct:o9cq80xlx0ztnjhprklxlezdbudi@im.wechat",
+        BodyForCommands: "记一下，我明天下午一点带身份证，港澳通行证和行李箱",
+      });
+
+      const result = await tryHandleBundledSkillFastpass(
+        { ctx },
+        {
+          execFile,
+          stateDir: "/tmp/openclaw-state",
+          env: { OPENCLAW_STATE_DIR: "/tmp/openclaw-state" },
+          calendarScriptPath: "/tmp/fake-sc",
+        },
+      );
+
+      expect(result).toEqual({
+        handled: true,
+        payload: {
+          text: "✅ 日程已添加:\n   🤝 带身份证，港澳通行证和行李箱\n   📆 4月3日 周五 13:00",
+        },
+        reason: "bundled_skill_fastpass_calendar_add",
+      });
+      expect(execFile.mock.calls[0]?.[1]).toEqual([
+        "/tmp/fake-sc",
+        "add",
+        "--date",
+        "2026-04-03",
+        "--time",
+        "13:00",
+        "--title",
+        "带身份证，港澳通行证和行李箱",
+        "我明天下午一点带身份证，港澳通行证和行李箱",
+      ]);
+      expect(execFile.mock.calls[0]?.[1]).not.toContain("--with");
     } finally {
       vi.useRealTimers();
     }
