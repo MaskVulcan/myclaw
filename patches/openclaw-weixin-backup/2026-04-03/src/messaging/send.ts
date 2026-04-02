@@ -2,6 +2,7 @@ import type { ReplyPayload } from "openclaw/plugin-sdk/reply-runtime";
 import { stripMarkdown } from "openclaw/plugin-sdk/text-runtime";
 
 import { sendMessage as sendMessageApi } from "../api/api.js";
+import { SESSION_EXPIRED_ERRCODE } from "../api/session-guard.js";
 import type { WeixinApiOptions } from "../api/api.js";
 import { logger } from "../util/logger.js";
 import { generateId } from "../util/random.js";
@@ -13,14 +14,53 @@ function generateClientId(): string {
   return generateId("openclaw-weixin");
 }
 
-function normalizeSendError(err: unknown): Error {
-  const message = err instanceof Error ? err.message : String(err);
-  if (/\bret=-2\b/.test(message)) {
-    return new Error(
-      "sendMessage failed: ret=-2 (Weixin rejected the outbound send; the current conversation context is likely not valid for proactive/scheduled delivery)",
-    );
+export type WeixinSendFailureKind =
+  | "missing-context"
+  | "stale-context"
+  | "session-expired"
+  | "unknown";
+
+export function classifyWeixinSendFailure(params: {
+  message: string;
+  hasContextToken: boolean;
+}): { kind: WeixinSendFailureKind; error: Error } {
+  const sessionExpiredRe = new RegExp(`\\b(?:ret|errcode)=${SESSION_EXPIRED_ERRCODE}\\b`, "i");
+  if (sessionExpiredRe.test(params.message) || /\bsession expired\b/i.test(params.message)) {
+    return {
+      kind: "session-expired",
+      error: new Error(
+        `sendMessage failed: ret=${SESSION_EXPIRED_ERRCODE} (Weixin bot session expired; QR re-login is likely required)`,
+      ),
+    };
   }
-  return err instanceof Error ? err : new Error(message);
+  if (/\bret=-2\b/i.test(params.message)) {
+    if (params.hasContextToken) {
+      return {
+        kind: "stale-context",
+        error: new Error(
+          "sendMessage failed: ret=-2 (Weixin rejected the outbound send even though a contextToken was supplied; the conversation context is likely stale and should be refreshed by the next inbound message)",
+        ),
+      };
+    }
+    return {
+      kind: "missing-context",
+      error: new Error(
+        "sendMessage failed: ret=-2 (Weixin rejected the outbound send because no contextToken was available for this recipient; proactive/scheduled delivery currently has no valid conversation context)",
+      ),
+    };
+  }
+  return {
+    kind: "unknown",
+    error: new Error(params.message),
+  };
+}
+
+function normalizeSendError(err: unknown, hasContextToken: boolean): {
+  kind: WeixinSendFailureKind;
+  error: Error;
+} {
+  const message = err instanceof Error ? err.message : String(err);
+  return classifyWeixinSendFailure({ message, hasContextToken });
 }
 
 /**
@@ -112,9 +152,11 @@ export async function sendMessageWeixin(params: {
       body: req,
     });
   } catch (err) {
-    const normalizedErr = normalizeSendError(err);
-    logger.error(`sendMessageWeixin: failed to=${to} clientId=${clientId} err=${String(normalizedErr)}`);
-    throw normalizedErr;
+    const normalized = normalizeSendError(err, Boolean(opts.contextToken));
+    logger.error(
+      `sendMessageWeixin: failed to=${to} clientId=${clientId} contextState=${opts.contextToken ? "supplied" : "missing"} failureKind=${normalized.kind} err=${String(normalized.error)}`,
+    );
+    throw normalized.error;
   }
   return { messageId: clientId };
 }
@@ -160,11 +202,11 @@ async function sendMediaItems(params: {
         body: req,
       });
     } catch (err) {
-      const normalizedErr = normalizeSendError(err);
+      const normalized = normalizeSendError(err, Boolean(opts.contextToken));
       logger.error(
-        `${label}: failed to=${to} clientId=${lastClientId} err=${String(normalizedErr)}`,
+        `${label}: failed to=${to} clientId=${lastClientId} contextState=${opts.contextToken ? "supplied" : "missing"} failureKind=${normalized.kind} err=${String(normalized.error)}`,
       );
-      throw normalizedErr;
+      throw normalized.error;
     }
   }
 

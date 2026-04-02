@@ -17,6 +17,10 @@ title: 注意项
   - `upstream = https://github.com/openclaw/openclaw.git`
 - 当前网关服务：
   - `openclaw-gateway.service`
+- 当前微信通道实际运行自外置插件：
+  - `~/.openclaw/extensions/openclaw-weixin`
+- 仓库内对应回放快照：
+  - `/root/gitsource/myclaw/patches/openclaw-weixin-backup/2026-04-03`
 
 ## 运行注意项
 
@@ -51,3 +55,6 @@ title: 注意项
   - `decisions.md`
   - `design.md`
   - `roadmap.md`
+- 微信插件外置维护相关内容优先更新：
+  - `weixin-plugin-maintenance.md`
+  - `patches/openclaw-weixin-backup/2026-04-03/README.md`

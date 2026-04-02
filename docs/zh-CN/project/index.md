@@ -29,6 +29,8 @@ title: 项目文档索引
   - 当前设计边界、非目标、不要做的事
 - `notes.md`
   - 环境/运行/维护注意项
+- `weixin-plugin-maintenance.md`
+  - 微信外置插件的维护事实、故障判定和回放流程
 - `decisions.md`
   - 已采纳决策与原因
 
@@ -42,3 +44,5 @@ title: 项目文档索引
   - `/root/gitsource/myclaw/docs/zh-CN/diagnostics/weixin-prompt-slimming-2026-03-29.md`
 - 微信 Codex/ACP 任务路由记录：
   - `/root/gitsource/myclaw/docs/zh-CN/diagnostics/weixin-task-routing-codex-acp-2026-03-30.md`
+- 微信插件本地备份与回放说明：
+  - `/root/gitsource/myclaw/docs/zh-CN/diagnostics/weixin-extension-local-backup-2026-04-03.md`

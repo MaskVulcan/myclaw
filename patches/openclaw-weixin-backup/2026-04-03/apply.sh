@@ -11,16 +11,21 @@ if [[ ! -d "$TARGET_DIR" ]]; then
 fi
 
 mkdir -p \
+  "$TARGET_DIR/src" \
   "$TARGET_DIR/src/api" \
   "$TARGET_DIR/src/messaging"
 
 cp "$ROOT_DIR/src/api/api.ts" "$TARGET_DIR/src/api/api.ts"
+cp "$ROOT_DIR/src/channel.ts" "$TARGET_DIR/src/channel.ts"
 cp "$ROOT_DIR/src/api/types.ts" "$TARGET_DIR/src/api/types.ts"
 cp "$ROOT_DIR/src/messaging/send.ts" "$TARGET_DIR/src/messaging/send.ts"
+cp "$ROOT_DIR/src/messaging/send.test.ts" "$TARGET_DIR/src/messaging/send.test.ts"
 cp "$ROOT_DIR/src/messaging/process-message.ts" "$TARGET_DIR/src/messaging/process-message.ts"
 cp "$ROOT_DIR/src/messaging/send-payload.ts" "$TARGET_DIR/src/messaging/send-payload.ts"
 cp "$ROOT_DIR/src/messaging/pending-reminders.ts" "$TARGET_DIR/src/messaging/pending-reminders.ts"
 cp "$ROOT_DIR/src/messaging/pending-reminders.test.ts" "$TARGET_DIR/src/messaging/pending-reminders.test.ts"
+cp "$ROOT_DIR/src/messaging/inbound.ts" "$TARGET_DIR/src/messaging/inbound.ts"
+cp "$ROOT_DIR/src/messaging/inbound.test.ts" "$TARGET_DIR/src/messaging/inbound.test.ts"
 
 echo "restored openclaw-weixin backup into: $TARGET_DIR"
 echo "next step: systemctl --user restart openclaw-gateway.service"

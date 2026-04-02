@@ -93,6 +93,54 @@ export type HeartbeatDeps = OutboundSendDeps &
 const log = createSubsystemLogger("gateway/heartbeat");
 const WEIXIN_PROACTIVE_SEND_REJECTED_RE = /\bret=-2\b/i;
 
+type WeixinDeliveryIssueKind = "missing-context" | "stale-context" | "session-expired" | "unknown";
+
+function classifyWeixinDeliveryIssue(message: string): {
+  kind: WeixinDeliveryIssueKind;
+  hasRet2: boolean;
+  hasContextMissing: boolean;
+  hasSessionExpired: boolean;
+} {
+  const hasRet2 = /\bret=-2\b/i.test(message);
+  const hasContextMissing =
+    /\bcontextToken missing\b/i.test(message) ||
+    /\bno contextToken was available\b/i.test(message) ||
+    /\bno contextToken available\b/i.test(message);
+  const hasSessionExpired =
+    /\b(?:ret|errcode)=-14\b/i.test(message) || /\bsession expired\b/i.test(message);
+
+  if (hasSessionExpired) {
+    return {
+      kind: "session-expired",
+      hasRet2,
+      hasContextMissing,
+      hasSessionExpired,
+    };
+  }
+  if (hasRet2 && hasContextMissing) {
+    return {
+      kind: "missing-context",
+      hasRet2,
+      hasContextMissing,
+      hasSessionExpired,
+    };
+  }
+  if (hasRet2) {
+    return {
+      kind: "stale-context",
+      hasRet2,
+      hasContextMissing,
+      hasSessionExpired,
+    };
+  }
+  return {
+    kind: "unknown",
+    hasRet2,
+    hasContextMissing,
+    hasSessionExpired,
+  };
+}
+
 export { areHeartbeatsEnabled, setHeartbeatsEnabled };
 export {
   isHeartbeatEnabledForAgent,
@@ -921,6 +969,7 @@ export async function runHeartbeatOnce(opts: {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      const weixinIssue = classifyWeixinDeliveryIssue(message);
       const shouldQueuePendingReminder =
         delivery.channel === "openclaw-weixin" &&
         Boolean(delivery.to) &&
@@ -935,7 +984,7 @@ export async function runHeartbeatOnce(opts: {
         accountId: deliveryAccountId,
         to: delivery.to,
         sessionKey,
-        reason: message,
+        reason: weixinIssue.kind === "unknown" ? message : `[${weixinIssue.kind}] ${message}`,
         createdAt: startedAt,
         payloads: outboundPayloads.map((payload) => ({
           text: typeof payload.text === "string" ? payload.text : undefined,
@@ -961,6 +1010,10 @@ export async function runHeartbeatOnce(opts: {
         accountId: deliveryAccountId,
         to: delivery.to,
         queuedId: queued.id,
+        issueKind: weixinIssue.kind,
+        hasRet2: weixinIssue.hasRet2,
+        hasContextMissing: weixinIssue.hasContextMissing,
+        hasSessionExpired: weixinIssue.hasSessionExpired,
       });
       return { status: "ran", durationMs: Date.now() - startedAt };
     }
