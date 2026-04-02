@@ -108,4 +108,117 @@ describe("runHeartbeatOnce Weixin pending reminders", () => {
       });
     });
   });
+
+  it("replaces older pending reminders for the same user while keeping other users isolated", async () => {
+    await withTempHeartbeatSandbox(async ({ tmpDir, storePath, replySpy }) => {
+      const stateDir = path.join(tmpDir, "state");
+      const queuePath = path.join(stateDir, "openclaw-weixin", "pending-reminders.json");
+      vi.stubEnv("OPENCLAW_STATE_DIR", stateDir);
+
+      await fs.mkdir(path.dirname(queuePath), { recursive: true });
+      await fs.writeFile(
+        queuePath,
+        JSON.stringify([
+          {
+            id: "old-same-user",
+            accountId: "primary",
+            to: "wx-user-1@im.wechat",
+            createdAt: 1,
+            source: "heartbeat",
+            payloads: [{ text: "4月3日 周五旧提醒" }],
+          },
+          {
+            id: "other-user",
+            accountId: "primary",
+            to: "wx-user-2@im.wechat",
+            createdAt: 2,
+            source: "heartbeat",
+            payloads: [{ text: "别的用户提醒" }],
+          },
+        ]),
+        "utf-8",
+      );
+
+      setActivePluginRegistry(
+        createTestRegistry([
+          {
+            pluginId: "openclaw-weixin",
+            plugin: createOutboundTestPlugin({
+              id: "openclaw-weixin",
+              outbound: {
+                deliveryMode: "direct",
+                sendText: vi.fn().mockResolvedValue({
+                  channel: "openclaw-weixin",
+                  messageId: "msg-1",
+                }),
+              },
+            }),
+            source: "test",
+          },
+        ]),
+      );
+
+      replySpy.mockResolvedValue({
+        text: "📅 4月4日 周六新提醒",
+      });
+      deliverOutboundPayloadsMock.mockRejectedValueOnce(
+        new Error("sendMessage failed: ret=-2 (invalid context)"),
+      );
+
+      const cfg: OpenClawConfig = {
+        agents: {
+          defaults: {
+            workspace: tmpDir,
+            heartbeat: {
+              every: "5m",
+              target: "openclaw-weixin",
+              to: "wx-user-1@im.wechat",
+              accountId: "primary",
+            },
+          },
+        },
+        channels: {
+          "openclaw-weixin": {},
+        },
+        session: { store: storePath },
+      };
+      const sessionKey = resolveMainSessionKey(cfg);
+      await seedSessionStore(storePath, sessionKey, {
+        lastChannel: "openclaw-weixin",
+        lastProvider: "openclaw-weixin",
+        lastTo: "wx-user-1@im.wechat",
+      });
+
+      await runHeartbeatOnce({
+        cfg,
+        agentId: "main",
+      });
+
+      const queued = JSON.parse(await fs.readFile(queuePath, "utf-8")) as Array<
+        Record<string, unknown>
+      >;
+      expect(queued).toHaveLength(2);
+      expect(queued).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            accountId: "primary",
+            to: "wx-user-1@im.wechat",
+            payloads: [{ text: "📅 4月4日 周六新提醒" }],
+          }),
+          expect.objectContaining({
+            accountId: "primary",
+            to: "wx-user-2@im.wechat",
+            payloads: [{ text: "别的用户提醒" }],
+          }),
+        ]),
+      );
+      expect(
+        queued.some(
+          (entry) =>
+            entry.to === "wx-user-1@im.wechat" &&
+            JSON.stringify(entry.payloads) === JSON.stringify([{ text: "4月3日 周五旧提醒" }]),
+        ),
+      ).toBe(false);
+    });
+  });
 });

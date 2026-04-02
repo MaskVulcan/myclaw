@@ -16,6 +16,20 @@ export type PendingWeixinReminder = {
   payloads: PendingWeixinReminderPayload[];
 };
 
+function buildPendingReminderKey(
+  entry: Pick<PendingWeixinReminder, "accountId" | "to" | "source">,
+) {
+  return `${entry.accountId}\u0000${entry.to}\u0000${entry.source}`;
+}
+
+function compactPendingWeixinReminderQueue(entries: PendingWeixinReminder[]) {
+  const deduped = new Map<string, PendingWeixinReminder>();
+  for (const entry of entries) {
+    deduped.set(buildPendingReminderKey(entry), entry);
+  }
+  return [...deduped.values()].toSorted((a, b) => a.createdAt - b.createdAt);
+}
+
 function resolvePendingWeixinReminderFilePath(stateDir = resolveStateDir()): string {
   return path.join(stateDir, "openclaw-weixin", "pending-reminders.json");
 }
@@ -87,9 +101,11 @@ async function readPendingWeixinReminderQueue(stateDir = resolveStateDir()) {
     if (!Array.isArray(parsed)) {
       return [];
     }
-    return parsed
-      .map((entry) => normalizePendingReminderEntry(entry))
-      .filter((entry): entry is PendingWeixinReminder => Boolean(entry));
+    return compactPendingWeixinReminderQueue(
+      parsed
+        .map((entry) => normalizePendingReminderEntry(entry))
+        .filter((entry): entry is PendingWeixinReminder => Boolean(entry)),
+    );
   } catch (error) {
     const err = error as NodeJS.ErrnoException;
     if (err?.code === "ENOENT") {
@@ -138,7 +154,12 @@ export async function enqueuePendingWeixinReminder(params: {
     ...(params.sessionKey?.trim() ? { sessionKey: params.sessionKey.trim() } : {}),
     payloads,
   };
-  existing.push(entry);
-  await writePendingWeixinReminderQueue(existing, stateDir);
+  const nextEntries = compactPendingWeixinReminderQueue([
+    ...existing.filter(
+      (existingEntry) => buildPendingReminderKey(existingEntry) !== buildPendingReminderKey(entry),
+    ),
+    entry,
+  ]);
+  await writePendingWeixinReminderQueue(nextEntries, stateDir);
   return entry;
 }
