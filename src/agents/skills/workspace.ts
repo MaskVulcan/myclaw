@@ -17,6 +17,7 @@ import { shouldIncludeSkill } from "./config.js";
 import { normalizeSkillFilter } from "./filter.js";
 import {
   parseFrontmatter,
+  resolveSkillLightweightPrompt,
   resolveOpenClawMetadata,
   resolveSkillInvocationPolicy,
 } from "./frontmatter.js";
@@ -24,6 +25,7 @@ import { resolvePluginSkillDirs } from "./plugin-skills.js";
 import { serializeByKey } from "./serialize.js";
 import type {
   ParsedSkillFrontmatter,
+  ResolvedPromptSkill,
   SkillEligibilityContext,
   SkillCommandSpec,
   SkillEntry,
@@ -44,13 +46,21 @@ const skillCommandDebugOnce = new Set<string>();
  *
  * Saves ~5–6 tokens per skill path × N skills ≈ 400–600 tokens total.
  */
-function compactSkillPaths(skills: Skill[]): Skill[] {
+function compactHomePrefix(value: string): string {
   const home = os.homedir();
-  if (!home) return skills;
+  if (!home) return value;
   const prefix = home.endsWith(path.sep) ? home : home + path.sep;
+  return value.replaceAll(prefix, "~/");
+}
+
+function compactSkillPaths(skills: ResolvedPromptSkill[]): ResolvedPromptSkill[] {
   return skills.map((s) => ({
     ...s,
-    filePath: s.filePath.startsWith(prefix) ? "~/" + s.filePath.slice(prefix.length) : s.filePath,
+    filePath: compactHomePrefix(s.filePath),
+    ...(s.lightweightSummary
+      ? { lightweightSummary: compactHomePrefix(s.lightweightSummary) }
+      : {}),
+    ...(s.lightweightUsage ? { lightweightUsage: compactHomePrefix(s.lightweightUsage) } : {}),
   }));
 }
 
@@ -536,6 +546,108 @@ function escapeXml(str: string): string {
     .replace(/'/g, "&apos;");
 }
 
+function formatXmlTextNode(tag: string, value: string, indent: string): string[] {
+  const escaped = escapeXml(value);
+  if (!escaped.includes("\n")) {
+    return [`${indent}<${tag}>${escaped}</${tag}>`];
+  }
+  return [
+    `${indent}<${tag}>`,
+    ...escaped.split("\n").map((line) => `${indent}  ${line}`),
+    `${indent}</${tag}>`,
+  ];
+}
+
+function formatLightweightSkillGuidance(skills: ResolvedPromptSkill[]): string {
+  const guided = skills.filter(
+    (skill) =>
+      !skill.disableModelInvocation &&
+      (skill.lightweightSummary?.trim() || skill.lightweightUsage?.trim()),
+  );
+  if (guided.length === 0) {
+    return "";
+  }
+
+  const lines = [
+    "\n\nThe following injected skills include quick guidance. Use this first, then read the full skill file only if you need deeper workflows or edge cases.",
+    "",
+    "<skill_quick_guide>",
+  ];
+  for (const skill of guided) {
+    lines.push("  <skill>");
+    lines.push(`    <name>${escapeXml(skill.name)}</name>`);
+    if (skill.lightweightSummary?.trim()) {
+      lines.push(...formatXmlTextNode("summary", skill.lightweightSummary, "    "));
+    }
+    if (skill.lightweightUsage?.trim()) {
+      lines.push(...formatXmlTextNode("usage", skill.lightweightUsage, "    "));
+    }
+    lines.push("  </skill>");
+  }
+  lines.push("</skill_quick_guide>");
+  return lines.join("\n");
+}
+
+function truncateSkillPromptSummary(value: string, maxChars: number): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxChars) {
+    return normalized;
+  }
+  if (maxChars <= 1) {
+    return normalized.slice(0, maxChars);
+  }
+  return `${normalized.slice(0, maxChars - 1)}…`;
+}
+
+function buildSkillPromptDescription(entry: SkillEntry): string {
+  const parts: string[] = [];
+  const seen = new Set<string>();
+  const push = (value: string | undefined) => {
+    const normalized = value?.trim();
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    parts.push(normalized);
+  };
+  const baseDescription = entry.skill.description?.trim() || entry.skill.name;
+  push(baseDescription);
+  if ((entry.metadata?.capabilities?.length ?? 0) > 0) {
+    push(`Capabilities: ${entry.metadata?.capabilities?.join(", ")}`);
+  }
+  if (entry.metadata?.capabilitySummary) {
+    push(entry.metadata.capabilitySummary.trim());
+  }
+  if (entry.metadata?.progressiveDisclosure === "capabilities-first") {
+    push("Inspect capability schema on demand before execution.");
+  }
+  return truncateSkillPromptSummary(parts.filter(Boolean).join(" "), 240);
+}
+
+function materializePromptSkill(entry: SkillEntry): ResolvedPromptSkill {
+  const lightweight = resolveSkillLightweightPrompt(entry.frontmatter, {
+    baseDir: entry.skill.baseDir,
+  });
+  return {
+    ...entry.skill,
+    description: buildSkillPromptDescription(entry),
+    ...(lightweight?.summary ? { lightweightSummary: lightweight.summary } : {}),
+    ...(lightweight?.usage ? { lightweightUsage: lightweight.usage } : {}),
+  };
+}
+
+function formatSkillsFullPrompt(skills: ResolvedPromptSkill[]): string {
+  return [formatLightweightSkillGuidance(skills), formatSkillsForPrompt(skills)]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function formatSkillsCompactPrompt(skills: ResolvedPromptSkill[]): string {
+  return [formatLightweightSkillGuidance(skills), formatSkillsCompact(skills)]
+    .filter(Boolean)
+    .join("\n");
+}
+
 /**
  * Compact skill catalog: name + location only (no description).
  * Used as a fallback when the full format exceeds the char budget,
@@ -565,8 +677,11 @@ export function formatSkillsCompact(skills: Skill[]): string {
 const COMPACT_WARNING_OVERHEAD = 150;
 export type SkillsPromptMode = "auto" | "compact" | "off";
 
-function applySkillsPromptLimits(params: { skills: Skill[]; config?: OpenClawConfig }): {
-  skillsForPrompt: Skill[];
+function applySkillsPromptLimits(params: {
+  skills: ResolvedPromptSkill[];
+  config?: OpenClawConfig;
+}): {
+  skillsForPrompt: ResolvedPromptSkill[];
   truncated: boolean;
   compact: boolean;
 } {
@@ -578,13 +693,13 @@ function applySkillsPromptLimits(params: { skills: Skill[]; config?: OpenClawCon
   let truncated = total > byCount.length;
   let compact = false;
 
-  const fitsFull = (skills: Skill[]): boolean =>
-    formatSkillsForPrompt(skills).length <= limits.maxSkillsPromptChars;
+  const fitsFull = (skills: ResolvedPromptSkill[]): boolean =>
+    formatSkillsFullPrompt(skills).length <= limits.maxSkillsPromptChars;
 
   // Reserve space for the warning line the caller prepends in compact mode.
   const compactBudget = limits.maxSkillsPromptChars - COMPACT_WARNING_OVERHEAD;
-  const fitsCompact = (skills: Skill[]): boolean =>
-    formatSkillsCompact(skills).length <= compactBudget;
+  const fitsCompact = (skills: ResolvedPromptSkill[]): boolean =>
+    formatSkillsCompactPrompt(skills).length <= compactBudget;
 
   if (!fitsFull(skillsForPrompt)) {
     // Full format exceeds budget. Try compact (name + location, no description)
@@ -614,7 +729,7 @@ function applySkillsPromptLimits(params: { skills: Skill[]; config?: OpenClawCon
 }
 
 function renderSkillsPrompt(params: {
-  skills: Skill[];
+  skills: ResolvedPromptSkill[];
   config?: OpenClawConfig;
   promptMode?: SkillsPromptMode;
 }): string {
@@ -630,11 +745,11 @@ function renderSkillsPrompt(params: {
   let truncated = total > skillsForPrompt.length;
   let compact = promptMode === "compact";
 
-  const fitsFull = (skills: Skill[]): boolean =>
-    formatSkillsForPrompt(skills).length <= limits.maxSkillsPromptChars;
+  const fitsFull = (skills: ResolvedPromptSkill[]): boolean =>
+    formatSkillsFullPrompt(skills).length <= limits.maxSkillsPromptChars;
   const compactBudget = limits.maxSkillsPromptChars - COMPACT_WARNING_OVERHEAD;
-  const fitsCompact = (skills: Skill[]): boolean =>
-    formatSkillsCompact(skills).length <= compactBudget;
+  const fitsCompact = (skills: ResolvedPromptSkill[]): boolean =>
+    formatSkillsCompactPrompt(skills).length <= compactBudget;
 
   if (compact) {
     if (!fitsCompact(skillsForPrompt)) {
@@ -667,8 +782,8 @@ function renderSkillsPrompt(params: {
       ? `⚠️ Skills catalog using compact format (descriptions omitted). Run \`openclaw skills check\` to audit.`
       : "";
   const promptBody = compact
-    ? formatSkillsCompact(skillsForPrompt)
-    : formatSkillsForPrompt(skillsForPrompt);
+    ? formatSkillsCompactPrompt(skillsForPrompt)
+    : formatSkillsFullPrompt(skillsForPrompt);
   return [truncationNote, promptBody].filter(Boolean).join("\n");
 }
 
@@ -715,7 +830,7 @@ function resolveWorkspaceSkillPromptState(
 ): {
   eligible: SkillEntry[];
   prompt: string;
-  resolvedSkills: Skill[];
+  resolvedSkills: ResolvedPromptSkill[];
 } {
   const skillEntries = opts?.entries ?? loadSkillEntries(workspaceDir, opts);
   const eligible = filterSkillEntries(
@@ -728,7 +843,7 @@ function resolveWorkspaceSkillPromptState(
     (entry) => entry.invocation?.disableModelInvocation !== true,
   );
   const remoteNote = opts?.eligibility?.remote?.note?.trim();
-  const resolvedSkills = promptEntries.map((entry) => entry.skill);
+  const resolvedSkills = promptEntries.map((entry) => materializePromptSkill(entry));
   const prompt = [
     remoteNote,
     renderSkillsPrompt({

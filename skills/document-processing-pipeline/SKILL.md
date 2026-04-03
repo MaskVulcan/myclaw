@@ -1,6 +1,12 @@
 ---
 name: document-processing-pipeline
 description: Use when you need local CLI-first document processing for PDF, Word, HTML, text, slides, or spreadsheets: stable ingest into structured artifacts, block-by-block LLM transforms, local OCR, brownfield DOCX inspection/edit/compare, and rebuild into PDF, DOCX, HTML, or Markdown.
+lightweight-summary: |
+  Use this for attached or local PDF, DOCX, PPTX, XLSX, HTML, text, or scan files. Prefer one deterministic CLI/script step over ad hoc reasoning, and only escalate to a larger pipeline when OCR, block transforms, or layout-preserving rebuilds are actually needed.
+lightweight-usage: |
+  Start with `{baseDir}/scripts/docpipe route <path> --task ...` when the lane is unclear.
+  Use `{baseDir}/scripts/docpipe docx-inspect`, `docx-grep`, `docx-apply-plan`, or `docx-compare` for focused `.docx` work.
+  Use `{baseDir}/scripts/docpipe ocr-pdf <path> --output <file>` for scanned PDFs or images before extraction, summarization, or translation.
 ---
 
 # Document Processing Pipeline

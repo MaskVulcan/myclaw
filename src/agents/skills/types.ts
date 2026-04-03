@@ -1,5 +1,10 @@
 import type { Skill } from "@mariozechner/pi-coding-agent";
 
+export type ResolvedPromptSkill = Skill & {
+  lightweightSummary?: string;
+  lightweightUsage?: string;
+};
+
 export type SkillInstallSpec = {
   id?: string;
   kind: "brew" | "node" | "go" | "uv" | "download";
@@ -22,6 +27,9 @@ export type OpenClawSkillMetadata = {
   primaryEnv?: string;
   emoji?: string;
   homepage?: string;
+  capabilities?: string[];
+  capabilitySummary?: string;
+  progressiveDisclosure?: "capabilities-first" | "full";
   os?: string[];
   requires?: {
     bins?: string[];
@@ -88,6 +96,6 @@ export type SkillSnapshot = {
   skills: Array<{ name: string; primaryEnv?: string; requiredEnv?: string[] }>;
   /** Normalized agent-level filter used to build this snapshot; undefined means unrestricted. */
   skillFilter?: string[];
-  resolvedSkills?: Skill[];
+  resolvedSkills?: ResolvedPromptSkill[];
   version?: number;
 };

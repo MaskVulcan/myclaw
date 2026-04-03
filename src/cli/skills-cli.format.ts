@@ -105,6 +105,9 @@ export function formatSkillsList(report: SkillStatusReport, opts: SkillsListOpti
         name: s.name,
         description: s.description,
         emoji: s.emoji,
+        capabilities: s.capabilities,
+        capabilitySummary: s.capabilitySummary,
+        disclosureMode: s.disclosureMode,
         eligible: s.eligible,
         disabled: s.disabled,
         blockedByAllowlist: s.blockedByAllowlist,
@@ -211,6 +214,15 @@ export function formatSkillInfo(
   }
   if (skill.primaryEnv) {
     lines.push(`${theme.muted("  Primary env:")} ${skill.primaryEnv}`);
+  }
+  if (skill.capabilities.length > 0) {
+    lines.push(`${theme.muted("  Capabilities:")} ${skill.capabilities.join(", ")}`);
+  }
+  lines.push(`${theme.muted("  Disclosure:")} ${skill.disclosureMode}`);
+  if (skill.capabilitySummary) {
+    lines.push(
+      `${theme.muted("  Capability summary:")} ${sanitizeForLog(skill.capabilitySummary)}`,
+    );
   }
 
   const hasRequirements =

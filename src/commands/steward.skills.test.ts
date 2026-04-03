@@ -199,8 +199,14 @@ describe("steward skill automation", () => {
       const skill = fs.readFileSync(skillPath, "utf-8");
       expect(incubator).toContain("[[skills/_candidates/2026-04-02/release-checks-a1]]");
       expect(incubator).toContain("[[skills/_candidates/2026-04-03/release-checks-b2]]");
-      expect(skill).toContain("name: release-checks");
+      expect(skill).toContain('name: "release-checks"');
+      expect(skill).toContain('progressive-disclosure: "capabilities-first"');
+      expect(skill).toContain(
+        'capability-summary: "Prefer structured capabilities and inspect schema on demand before running commands."',
+      );
       expect(skill).toContain("## Suggested Workflow");
+      expect(skill).toContain("## Structured Capabilities");
+      expect(skill).toContain("openclaw capabilities list");
       expect(skill).toContain("[[skills/_candidates/2026-04-02/release-checks-a1]]");
       expect(skill).toContain("[[skills/_candidates/2026-04-03/release-checks-b2]]");
     } finally {

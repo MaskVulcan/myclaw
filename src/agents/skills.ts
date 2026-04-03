@@ -16,6 +16,7 @@ export {
 } from "./skills/env-overrides.js";
 export type {
   OpenClawSkillMetadata,
+  ResolvedPromptSkill,
   SkillEligibilityContext,
   SkillCommandSpec,
   SkillEntry,

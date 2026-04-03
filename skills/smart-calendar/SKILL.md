@@ -1,6 +1,13 @@
 ---
 name: smart-calendar
 description: Local Markdown-backed schedule management for meetings, events, trips, and collaborator notes. Use when the user asks in English or Chinese to add/query/edit/delete calendar items, manage 日程/会议/行程/约会/安排, inspect upcoming plans, maintain people dossiers, or render a schedule as text or PNG.
+lightweight-summary: |
+  Use this for per-user local schedule handling in MyClaw/OpenClaw chats. Prefer the bundled `{baseDir}/scripts/sc` CLI, keep extraction grounded in the original message or attached files only, and treat luggage, files, and travel items as notes or attachments rather than participants.
+lightweight-usage: |
+  Add with one command when possible: `{baseDir}/scripts/sc add <original user text>`.
+  Use explicit flags only for grounded fields such as `--date`, `--time`, `--with`, `--location`, `--notes`, or `--category`.
+  Query with `{baseDir}/scripts/sc show`, `{baseDir}/scripts/sc show --week`, `{baseDir}/scripts/sc show --month`, or render with `{baseDir}/scripts/sc render --view day|week|month`.
+  In chat schedule lookups, default to both a time-sorted text summary and a rendered image unless the user explicitly asks for only one.
 metadata: { "openclaw": { "emoji": "🗓️", "requires": { "anyBins": ["python3", "python"] } } }
 ---
 

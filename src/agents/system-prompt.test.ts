@@ -271,9 +271,8 @@ describe("buildAgentSystemPrompt", () => {
       toolNames: ["sessions_spawn", "subagents", "agents_list", "exec"],
     });
 
-    expect(prompt).toContain(
-      'For requests like "do this in codex/claude code/gemini", treat it as ACP harness intent',
-    );
+    expect(prompt).toContain('For requests like "do this in codex/claude code');
+    expect(prompt).toContain("ACP harness intent");
     expect(prompt).toContain(
       'On Discord, default ACP harness requests to thread-bound persistent sessions (`thread: true`, `mode: "session"`)',
     );
@@ -337,6 +336,7 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain(
       "- If exactly one skill clearly applies: read its SKILL.md at <location> with `Read`, then follow it.",
     );
+    expect(prompt).toContain("prefer `openclaw capabilities describe <id> --json`");
     expect(prompt).toContain("OpenClaw docs: /tmp/openclaw/docs");
     expect(prompt).toContain(
       "For OpenClaw behavior, commands, config, or architecture: consult local docs first.",
@@ -477,6 +477,7 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain(
       "- If exactly one skill clearly applies: read its SKILL.md at <location> with `read`, then follow it.",
     );
+    expect(prompt).toContain("prefer `openclaw capabilities describe <id> --json`");
   });
 
   it("appends available skills when provided", () => {

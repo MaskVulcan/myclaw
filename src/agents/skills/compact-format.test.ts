@@ -82,6 +82,53 @@ describe("formatSkillsCompact", () => {
   });
 });
 
+describe("lightweight skill guidance", () => {
+  it("injects lightweight summary and usage alongside the skills catalog", () => {
+    const prompt = buildWorkspaceSkillsPrompt("/fake", {
+      entries: [
+        {
+          skill: makeSkill("smart-calendar", "Calendar"),
+          frontmatter: {
+            "lightweight-summary": "Use {baseDir}/scripts/sc for grounded schedule handling.",
+            "lightweight-usage": "Run {baseDir}/scripts/sc add <original user text>.",
+          },
+        },
+      ],
+    });
+
+    expect(prompt).toContain("<skill_quick_guide>");
+    expect(prompt).toContain(
+      "Use /skills/smart-calendar/scripts/sc for grounded schedule handling.",
+    );
+    expect(prompt).toContain(
+      "Run /skills/smart-calendar/scripts/sc add &lt;original user text&gt;.",
+    );
+    expect(prompt).toContain("<available_skills>");
+    expect(prompt).toContain("/skills/smart-calendar/SKILL.md");
+  });
+
+  it("stores lightweight guidance on resolved snapshot skills with canonical paths", () => {
+    const snapshot = buildWorkspaceSkillSnapshot("/fake", {
+      entries: [
+        {
+          skill: makeSkill("smart-calendar", "Calendar"),
+          frontmatter: {
+            "lightweight-summary": "Use {baseDir}/scripts/sc",
+            "lightweight-usage": "Run {baseDir}/scripts/sc show --week",
+          },
+        },
+      ],
+    });
+
+    expect(snapshot.resolvedSkills).toBeDefined();
+    expect(snapshot.resolvedSkills?.[0]).toMatchObject({
+      filePath: "/skills/smart-calendar/SKILL.md",
+      lightweightSummary: "Use /skills/smart-calendar/scripts/sc",
+      lightweightUsage: "Run /skills/smart-calendar/scripts/sc show --week",
+    });
+  });
+});
+
 describe("applySkillsPromptLimits (via buildWorkspaceSkillsPrompt)", () => {
   it("tier 1: uses full format when under budget", () => {
     const skills = [makeSkill("weather", "Get weather data")];

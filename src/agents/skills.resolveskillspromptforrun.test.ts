@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { resolveSkillsPromptForRun } from "./skills.js";
 import { createCanonicalFixtureSkill } from "./skills.test-helpers.js";
-import type { SkillEntry } from "./skills/types.js";
+import type { ResolvedPromptSkill, SkillEntry } from "./skills/types.js";
 
 describe("resolveSkillsPromptForRun", () => {
   it("prefers snapshot prompt when available", () => {
@@ -31,13 +31,17 @@ describe("resolveSkillsPromptForRun", () => {
   });
 
   it("rebuilds a compact prompt from resolved snapshot skills for runtime use", () => {
-    const skill = createFixtureSkill({
-      name: "demo-skill",
-      description: "Demo description",
-      filePath: "/app/skills/demo-skill/SKILL.md",
-      baseDir: "/app/skills/demo-skill",
-      source: "openclaw-bundled",
-    });
+    const skill: ResolvedPromptSkill = {
+      ...createFixtureSkill({
+        name: "demo-skill",
+        description: "Demo description",
+        filePath: "/app/skills/demo-skill/SKILL.md",
+        baseDir: "/app/skills/demo-skill",
+        source: "openclaw-bundled",
+      }),
+      lightweightSummary: "Use /app/skills/demo-skill/scripts/demo for terse requests.",
+      lightweightUsage: "Run /app/skills/demo-skill/scripts/demo add <original text>.",
+    };
     const prompt = resolveSkillsPromptForRun({
       skillsSnapshot: { prompt: "FULL SNAPSHOT", skills: [], resolvedSkills: [skill] },
       workspaceDir: "/tmp/openclaw",
@@ -45,6 +49,9 @@ describe("resolveSkillsPromptForRun", () => {
     });
 
     expect(prompt).not.toBe("FULL SNAPSHOT");
+    expect(prompt).toContain("<skill_quick_guide>");
+    expect(prompt).toContain("Use /app/skills/demo-skill/scripts/demo for terse requests.");
+    expect(prompt).toContain("Run /app/skills/demo-skill/scripts/demo add &lt;original text&gt;.");
     expect(prompt).toContain("<available_skills>");
     expect(prompt).toContain("<name>demo-skill</name>");
     expect(prompt).toContain("/app/skills/demo-skill/SKILL.md");

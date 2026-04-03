@@ -38,6 +38,9 @@ export type SkillStatusEntry = {
   primaryEnv?: string;
   emoji?: string;
   homepage?: string;
+  capabilities: string[];
+  capabilitySummary?: string;
+  disclosureMode: "capabilities-first" | "full";
   always: boolean;
   disabled: boolean;
   blockedByAllowlist: boolean;
@@ -213,6 +216,9 @@ function buildSkillStatus(
     primaryEnv: entry.metadata?.primaryEnv,
     emoji,
     homepage,
+    capabilities: entry.metadata?.capabilities?.slice() ?? [],
+    capabilitySummary: entry.metadata?.capabilitySummary,
+    disclosureMode: entry.metadata?.progressiveDisclosure ?? "full",
     always,
     disabled,
     blockedByAllowlist,

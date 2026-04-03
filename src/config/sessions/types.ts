@@ -350,7 +350,12 @@ export type SessionSkillSnapshot = {
   skills: Array<{ name: string; primaryEnv?: string; requiredEnv?: string[] }>;
   /** Normalized agent-level filter used to build this snapshot; undefined means unrestricted. */
   skillFilter?: string[];
-  resolvedSkills?: Skill[];
+  resolvedSkills?: Array<
+    Skill & {
+      lightweightSummary?: string;
+      lightweightUsage?: string;
+    }
+  >;
   version?: number;
 };
 

@@ -124,6 +124,11 @@ export const SUB_CLI_DESCRIPTORS = [
     hasSubcommands: true,
   },
   {
+    name: "capabilities",
+    description: "Describe and run structured capability contracts",
+    hasSubcommands: true,
+  },
+  {
     name: "calendar",
     description: "Run the bundled smart-calendar CLI",
     hasSubcommands: false,

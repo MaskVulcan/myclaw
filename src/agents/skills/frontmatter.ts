@@ -1,4 +1,5 @@
 import type { Skill } from "@mariozechner/pi-coding-agent";
+import JSON5 from "json5";
 import { validateRegistryNpmSpec } from "../../infra/npm-registry-spec.js";
 import { parseFrontmatterBlock } from "../../markdown/frontmatter.js";
 import {
@@ -19,6 +20,11 @@ import type {
   SkillInstallSpec,
   SkillInvocationPolicy,
 } from "./types.js";
+
+export type SkillLightweightPrompt = {
+  summary?: string;
+  usage?: string;
+};
 
 export function parseFrontmatter(content: string): ParsedSkillFrontmatter {
   return parseFrontmatterBlock(content);
@@ -183,22 +189,96 @@ function parseInstallSpec(input: unknown): SkillInstallSpec | undefined {
   return spec;
 }
 
+function parseFrontmatterStringList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return normalizeStringList(value);
+  }
+  if (typeof value !== "string") {
+    return [];
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return [];
+  }
+  if (trimmed.startsWith("[")) {
+    try {
+      return normalizeStringList(JSON5.parse(trimmed));
+    } catch {
+      return normalizeStringList(trimmed);
+    }
+  }
+  return normalizeStringList(trimmed);
+}
+
+function normalizeCapabilityIds(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const normalized = value.trim();
+    if (!normalized || !/^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/i.test(normalized)) {
+      continue;
+    }
+    if (seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    out.push(normalized);
+  }
+  return out;
+}
+
 export function resolveOpenClawMetadata(
   frontmatter: ParsedSkillFrontmatter,
 ): OpenClawSkillMetadata | undefined {
   const metadataObj = resolveOpenClawManifestBlock({ frontmatter });
-  if (!metadataObj) {
+  const frontmatterCapabilities = normalizeCapabilityIds(
+    parseFrontmatterStringList(frontmatter.capabilities),
+  );
+  const metadataCapabilities = normalizeCapabilityIds(
+    parseFrontmatterStringList(metadataObj?.capabilities),
+  );
+  const capabilitySummary =
+    getFrontmatterString(frontmatter, "capability-summary") ??
+    (typeof metadataObj?.capabilitySummary === "string"
+      ? metadataObj.capabilitySummary
+      : undefined);
+  const progressiveDisclosureRaw =
+    getFrontmatterString(frontmatter, "progressive-disclosure") ??
+    (typeof metadataObj?.progressiveDisclosure === "string"
+      ? metadataObj.progressiveDisclosure
+      : undefined);
+  const progressiveDisclosure =
+    progressiveDisclosureRaw?.trim().toLowerCase() === "capabilities-first"
+      ? "capabilities-first"
+      : progressiveDisclosureRaw?.trim().toLowerCase() === "full"
+        ? "full"
+        : undefined;
+  if (
+    !metadataObj &&
+    frontmatterCapabilities.length === 0 &&
+    !capabilitySummary?.trim() &&
+    !progressiveDisclosure
+  ) {
     return undefined;
   }
-  const requires = resolveOpenClawManifestRequires(metadataObj);
-  const install = resolveOpenClawManifestInstall(metadataObj, parseInstallSpec);
-  const osRaw = resolveOpenClawManifestOs(metadataObj);
+  const source = metadataObj ?? {};
+  const requires = resolveOpenClawManifestRequires(source);
+  const install = resolveOpenClawManifestInstall(source, parseInstallSpec);
+  const osRaw = resolveOpenClawManifestOs(source);
   return {
-    always: typeof metadataObj.always === "boolean" ? metadataObj.always : undefined,
-    emoji: typeof metadataObj.emoji === "string" ? metadataObj.emoji : undefined,
-    homepage: typeof metadataObj.homepage === "string" ? metadataObj.homepage : undefined,
-    skillKey: typeof metadataObj.skillKey === "string" ? metadataObj.skillKey : undefined,
-    primaryEnv: typeof metadataObj.primaryEnv === "string" ? metadataObj.primaryEnv : undefined,
+    always: typeof source.always === "boolean" ? source.always : undefined,
+    emoji: typeof source.emoji === "string" ? source.emoji : undefined,
+    homepage: typeof source.homepage === "string" ? source.homepage : undefined,
+    skillKey: typeof source.skillKey === "string" ? source.skillKey : undefined,
+    primaryEnv: typeof source.primaryEnv === "string" ? source.primaryEnv : undefined,
+    capabilities:
+      metadataCapabilities.length > 0
+        ? metadataCapabilities
+        : frontmatterCapabilities.length > 0
+          ? frontmatterCapabilities
+          : undefined,
+    capabilitySummary: capabilitySummary?.trim() || undefined,
+    progressiveDisclosure,
     os: osRaw.length > 0 ? osRaw : undefined,
     requires: requires,
     install: install.length > 0 ? install : undefined,
@@ -214,6 +294,41 @@ export function resolveSkillInvocationPolicy(
       getFrontmatterString(frontmatter, "disable-model-invocation"),
       false,
     ),
+  };
+}
+
+function normalizeSkillLightweightText(
+  value: string | undefined,
+  baseDir?: string,
+): string | undefined {
+  const trimmed = value?.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  if (!baseDir) {
+    return trimmed;
+  }
+  return trimmed.replaceAll("{baseDir}", baseDir);
+}
+
+export function resolveSkillLightweightPrompt(
+  frontmatter: ParsedSkillFrontmatter,
+  params?: { baseDir?: string },
+): SkillLightweightPrompt | undefined {
+  const summary = normalizeSkillLightweightText(
+    getFrontmatterString(frontmatter, "lightweight-summary"),
+    params?.baseDir,
+  );
+  const usage = normalizeSkillLightweightText(
+    getFrontmatterString(frontmatter, "lightweight-usage"),
+    params?.baseDir,
+  );
+  if (!summary && !usage) {
+    return undefined;
+  }
+  return {
+    ...(summary ? { summary } : {}),
+    ...(usage ? { usage } : {}),
   };
 }
 

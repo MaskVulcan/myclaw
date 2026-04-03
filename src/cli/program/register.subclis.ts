@@ -294,6 +294,15 @@ const entries: SubCliEntry[] = [
     },
   },
   {
+    name: "capabilities",
+    description: "Describe and run structured capability contracts",
+    hasSubcommands: true,
+    register: async (program) => {
+      const mod = await import("../capabilities-cli.js");
+      mod.registerCapabilitiesCli(program);
+    },
+  },
+  {
     name: "calendar",
     description: "Run the bundled smart-calendar CLI",
     hasSubcommands: false,

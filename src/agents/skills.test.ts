@@ -244,6 +244,27 @@ describe("buildWorkspaceSkillsPrompt", () => {
     expect(prompt).toContain(path.join(bundledSkillDir, "SKILL.md"));
   });
 
+  it("surfaces declared capability ids in the prompt summary without loading full skill usage", async () => {
+    const workspaceDir = await makeWorkspace();
+    await writeSkill({
+      dir: path.join(workspaceDir, "skills", "memory-steward"),
+      name: "memory-steward",
+      description: "Maintain long-term memory.",
+      frontmatterExtra: [
+        "capabilities:",
+        '  - "steward.ingest"',
+        '  - "steward.curate"',
+        'progressive-disclosure: "capabilities-first"',
+        'capability-summary: "Inspect capability schema on demand before execution."',
+      ].join("\n"),
+    });
+
+    const prompt = buildWorkspaceSkillsPrompt(workspaceDir, resolveTestSkillDirs(workspaceDir));
+    expect(prompt).toContain("Capabilities: steward.ingest, steward.curate");
+    expect(prompt).toContain("Inspect capability schema on demand before execution.");
+    expect(prompt).toContain(path.join(workspaceDir, "skills", "memory-steward", "SKILL.md"));
+  });
+
   it("loads extra skill folders from config (lowest precedence)", async () => {
     const workspaceDir = await makeWorkspace();
     const extraDir = path.join(workspaceDir, ".extra");

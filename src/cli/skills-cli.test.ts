@@ -20,6 +20,8 @@ function createMockSkill(overrides: Partial<SkillStatusEntry> = {}): SkillStatus
     skillKey: "test-skill",
     emoji: "🧪",
     homepage: "https://example.com",
+    capabilities: [],
+    disclosureMode: "full",
     always: false,
     disabled: false,
     blockedByAllowlist: false,

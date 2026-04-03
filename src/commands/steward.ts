@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
+import { inferCapabilityIdsFromCommandLines } from "../capabilities/registry.js";
 import { loadConfig } from "../config/config.js";
 import { loadSessionStore, type SessionEntry } from "../config/sessions.js";
 import {
@@ -1084,13 +1085,19 @@ function buildPromotedSkillContent(params: {
       `Reusable automation workflow distilled from ${params.candidateCount} steward candidates.`,
     160,
   );
-  const frontmatter = [
-    "---",
-    `name: ${params.slug}`,
-    `description: ${yamlString(description)}`,
-    "---",
-    "",
-  ].join("\n");
+  const inferredCapabilities = inferCapabilityIdsFromCommandLines(params.commands);
+  const frontmatter = renderFrontmatter([
+    ["name", params.slug],
+    ["description", description],
+    ...(inferredCapabilities.length > 0 ? ([["capabilities", inferredCapabilities]] as const) : []),
+    ["progressive-disclosure", "capabilities-first"],
+    [
+      "capability-summary",
+      inferredCapabilities.length > 0
+        ? `Prefer structured capabilities ${inferredCapabilities.join(", ")} before ad-hoc shell.`
+        : "Prefer structured capabilities and inspect schema on demand before running commands.",
+    ],
+  ]);
   const lines = [
     frontmatter.trimEnd(),
     `# ${params.title}`,
@@ -1106,6 +1113,18 @@ function buildPromotedSkillContent(params: {
     ...(params.commands.length > 0
       ? params.commands.map((command) => `- Run \`${command}\``)
       : ["- Review source candidates and adapt the workflow manually."]),
+    "",
+    "## Structured Capabilities",
+    ...(inferredCapabilities.length > 0
+      ? inferredCapabilities.flatMap((capabilityId) => [
+          `- \`${capabilityId}\``,
+          `  Inspect schema: \`openclaw capabilities describe ${capabilityId} --json\``,
+          `  Execute safely: \`openclaw capabilities run ${capabilityId} --input-json '<json>'\``,
+        ])
+      : [
+          "- No direct capability match inferred from the evidence yet.",
+          "- Before writing new shell, check `openclaw capabilities list` and inspect a matching contract with `openclaw capabilities describe <id> --json`.",
+        ]),
     "",
     "## Tools",
     ...(params.tools.length > 0 ? params.tools.map((toolName) => `- \`${toolName}\``) : ["- None"]),
