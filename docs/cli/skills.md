@@ -34,3 +34,14 @@ openclaw skills check
 `search`/`install`/`update` use ClawHub directly and install into the active
 workspace `skills/` directory. `list`/`info`/`check` still inspect the local
 skills visible to the current workspace and config.
+
+For capability-first skills, `list --json`, `info --json`, and `check --json`
+also surface:
+
+- `capabilities`
+- `capabilitySummary`
+- `disclosureMode`
+
+Use that metadata to decide whether the next step should be
+`openclaw capabilities describe/run` instead of reading a full `SKILL.md`
+up front.

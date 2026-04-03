@@ -113,6 +113,42 @@ Notes:
     The tool is invoked with params:
     `{ command: "<raw args>", commandName: "<slash command>", skillName: "<skill name>" }`.
 
+## Capability-first progressive disclosure
+
+Skills can advertise stable execution contracts without embedding full command
+recipes in the initial prompt.
+
+Additional frontmatter keys:
+
+- `capabilities` — array of capability ids such as `["steward.ingest"]`
+- `capability-summary` — one short sentence describing the stable contract
+- `progressive-disclosure` — `capabilities-first` or `full`
+
+Example:
+
+```markdown
+---
+name: knowledge-steward
+description: Maintain long-term memory and reusable skills from recent sessions.
+capabilities: ["steward.ingest", "steward.curate", "steward.promote-skills"]
+capability-summary: Run the steward pipeline through schema-constrained CLI capabilities before reading full maintenance details.
+progressive-disclosure: "capabilities-first"
+---
+```
+
+Semantics:
+
+- the initial skill catalog can stay compact
+- a skill summary can expose capability ids first
+- the agent should inspect details on demand with
+  `openclaw capabilities describe <id>`
+- execution should prefer
+  `openclaw capabilities run <id> --input-json '<json>'`
+  over improvising shell when a matching capability exists
+
+Use `progressive-disclosure: full` when the skill really does need the full
+document loaded before any stable command can be chosen.
+
 ## Gating (load-time filters)
 
 OpenClaw **filters skills at load time** using `metadata` (single-line JSON):
@@ -195,6 +231,9 @@ Notes:
 
 If no `metadata.openclaw` is present, the skill is always eligible (unless
 disabled in config or blocked by `skills.allowBundled` for bundled skills).
+
+`openclaw skills list/info/check --json` surfaces capability-first metadata so
+callers can progressively reveal only the skill or capability details they need.
 
 ## Config overrides (`~/.openclaw/openclaw.json`)
 

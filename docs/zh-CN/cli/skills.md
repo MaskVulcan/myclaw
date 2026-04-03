@@ -31,3 +31,14 @@ openclaw skills list --eligible
 openclaw skills info <name>
 openclaw skills check
 ```
+
+对于 capability-first 的 skill，`list --json`、`info --json`、`check --json`
+还会带出这些字段：
+
+- `capabilities`
+- `capabilitySummary`
+- `disclosureMode`
+
+如果 skill 已经声明这些字段，下一步优先考虑
+`openclaw capabilities describe/run`，而不是一上来就把整个 `SKILL.md`
+全文读进上下文。

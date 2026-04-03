@@ -31,6 +31,7 @@ This page describes the current CLI behavior. If commands change, update this do
 - [`status`](/cli/status)
 - [`health`](/cli/health)
 - [`sessions`](/cli/sessions)
+- [`capabilities`](/cli/capabilities)
 - [`steward`](/cli/steward)
 - [`gateway`](/cli/gateway)
 - [`logs`](/cli/logs)
@@ -130,6 +131,10 @@ openclaw [--dev] [--profile <name>] <command>
     login
     logout
   directory
+  capabilities
+    list
+    describe
+    run
   skills
     list
     info

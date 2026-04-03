@@ -31,6 +31,8 @@ title: 项目文档索引
   - 环境/运行/维护注意项
 - `weixin-plugin-maintenance.md`
   - 微信外置插件的维护事实、故障判定和回放流程
+- `capability-first-skills.md`
+  - skill / capability / steward 分层和阶段计划
 - `decisions.md`
   - 已采纳决策与原因
 

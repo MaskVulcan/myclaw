@@ -13,12 +13,18 @@ title: 待办
 - [ ] 给微信 light recall 增加低噪音命中日志
 - [ ] 给微信 scoped memory 增加更明确的真实场景回归样例
 - [ ] 验证用户专属偏好是否稳定写入 scoped memory，而不是误写到共享 `MEMORY.md`
+- [ ] 扩 capability registry，把高频稳定脚本/CLI 流程继续收进 schema 契约
+- [ ] 给 steward 的能力升级规则补阈值：
+  - 什么时候还是 skill
+  - 什么时候该升到 capability / CLI
 
 ## P2
 
 - [ ] 评估是否启用 `builtin` FTS-only memory search
 - [ ] 如果启用，确认它对当前时延和内存的实际影响
 - [ ] 设计 scoped memory 是否需要进入正式检索链路
+- [ ] 给 destructive / external write capability 增加更严格确认策略
+- [ ] 补 capability 执行审计与失败归因
 
 ## P3
 

@@ -16,6 +16,9 @@ title: 路线图
 - 微信同 session transcript 轻召回补层
 - 微信私聊 scoped memory 自动注入
 - memory prompt 增加 scoped memory 使用提示
+- capability registry + `openclaw capabilities` CLI
+- skill capability-first 渐进暴露
+- steward promote 自动生成 capability-first skill 模板
 
 ## 近期
 
@@ -25,12 +28,16 @@ title: 路线图
   - 最近历史命中
   - 引用上下文命中
   - 窗口外旧事召回命中
+- 扩 capability registry 覆盖面，把高频稳定脚本/CLI 能力继续纳入
+- 给 steward 的“skill 还是 capability/CLI”升级判断补更明确阈值
 
 ## 中期
 
 - 评估是否启用 `builtin` 的 FTS-only memory search
 - 评估是否需要把微信 scoped memory 纳入正式检索路径
 - 评估是否需要按触发条件自动做更强的历史检索
+- 补 capability 的确认策略、运行审计和失败归因
+- 把能力发现闭环接得更紧，让 steward 更稳定地推动 skill/CLI 沉淀
 
 ## 远期
 
@@ -40,6 +47,7 @@ title: 路线图
   - 不默认把大段历史塞回 prompt
   - 检索按需触发
   - 多用户隔离不退化
+- 如果未来 CLI 能力规模明显膨胀，再重新评估是否需要更重的管理框架
 
 ## Recall Backend 改进顺序
 

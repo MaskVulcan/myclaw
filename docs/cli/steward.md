@@ -96,6 +96,15 @@ openclaw steward promote-skills [--workspace <dir>] [--agent <id>] [--limit <cou
 
 Promotes ready incubator notes into real workspace skills once repeated evidence crosses the configured threshold.
 
+When observed commands already map to registered structured capabilities, the
+promoted skill template now defaults to capability-first disclosure:
+
+- frontmatter includes `capabilities`, `capability-summary`, and
+  `progressive-disclosure: "capabilities-first"`
+- the skill body points agents to `openclaw capabilities describe/run`
+- if no mapping is known yet, the template falls back to
+  `openclaw capabilities list` as the discovery step
+
 ## Cycle
 
 ```bash

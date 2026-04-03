@@ -95,6 +95,40 @@ description: Generate or edit images via Gemini 3 Pro Image
     工具使用以下参数调用：
     `{ command: "<raw args>", commandName: "<slash command>", skillName: "<skill name>" }`。
 
+## Capability-first 渐进暴露
+
+Skill 可以声明稳定执行契约，而不是把完整命令说明一开始就全部塞进 prompt。
+
+新增 frontmatter 字段：
+
+- `capabilities` — capability id 数组，例如 `["steward.ingest"]`
+- `capability-summary` — 一句简短说明这个稳定契约是干什么的
+- `progressive-disclosure` — `capabilities-first` 或 `full`
+
+示例：
+
+```markdown
+---
+name: knowledge-steward
+description: Maintain long-term memory and reusable skills from recent sessions.
+capabilities: ["steward.ingest", "steward.curate", "steward.promote-skills"]
+capability-summary: 先通过 schema 约束的 CLI capabilities 跑 steward，再按需读取更完整维护细节。
+progressive-disclosure: "capabilities-first"
+---
+```
+
+语义约束：
+
+- 初始 skill catalog 尽量保持轻量
+- skill 摘要可以先只暴露 capability id
+- 真正需要细节时，再用 `openclaw capabilities describe <id>` 看 schema
+- 只要存在匹配 capability，执行时优先
+  `openclaw capabilities run <id> --input-json '<json>'`
+  而不是即兴拼 shell
+
+如果某个 skill 在真正开始前必须先读完整文档，才应该用
+`progressive-disclosure: full`。
+
 ## 门控（加载时过滤）
 
 OpenClaw 使用 `metadata`（单行 JSON）**在加载时过滤 Skills**：
@@ -169,6 +203,8 @@ metadata:
 - Download 安装：`url`（必填）、`archive`（`tar.gz` | `tar.bz2` | `zip`）、`extract`（默认：检测到归档时自动）、`stripComponents`、`targetDir`（默认：`~/.openclaw/tools/<skillKey>`）。
 
 如果没有 `metadata.openclaw`，该 Skills 始终有资格（除非在配置中禁用或被 `skills.allowBundled` 阻止用于内置 Skills）。
+
+`openclaw skills list/info/check --json` 也会把这些 capability-first 元数据带出来，方便调用方按需揭示 skill 或 capability 细节。
 
 ## 配置覆盖（`~/.openclaw/openclaw.json`）
 

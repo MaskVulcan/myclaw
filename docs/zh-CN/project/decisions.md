@@ -76,3 +76,31 @@ title: 已采纳决策
   - `api.kimi.com/coding` 即使传 `kimi-k2.5`，服务端也会回到 `kimi-for-coding`
   - `kimi --session` 已验证可复用会话
   - `claude code` 当前状态不稳定，不适合作为默认保底
+
+## 2026-04-03
+
+### Skill 保持轻编排，稳定执行下沉 capability registry
+
+- 决策：
+  - skill 继续存在，但主要负责能力暴露、边界和轻量说明
+  - 一旦流程可稳定脚本化，就优先走 `openclaw capabilities describe/run`
+- 原因：
+  - 避免 LLM 读完 skill 后继续自由发挥拼 shell
+  - 让输入/输出和 side effects 有更稳定的契约
+
+### 不迁 `Cobra`
+
+- 决策：
+  - 当前阶段不做 CLI 到 `Cobra` 的整体迁移
+  - 继续沿用现有 TS + `commander` 主干
+- 原因：
+  - 当前目标是固定执行契约，而不是重做 CLI 基础设施
+  - 先把 capability-first 路线跑通，收益更直接
+
+### Steward 同时承担能力发现与沉淀入口
+
+- 决策：
+  - steward 不只整理记忆，也负责从对话中发现是否该沉淀 skill / CLI / capability
+- 原因：
+  - 用户要的是自动化能力，不是人工维护 UI
+  - 这条线可以把“对话里反复出现的稳定流程”持续固化下来

@@ -144,6 +144,21 @@ Promote repeated workflow evidence into reusable workspace skills.
   - create `skills/<slug>/SKILL.md`
   - optionally create helper scripts alongside the skill
   - preserve provenance back to candidate notes and sessions
+  - default to capability-first disclosure when observed commands already map to
+    registered structured capabilities
+
+### Execution contract rule
+
+Promoted skills should not become another place where the model freely invents
+shell.
+
+- If a reusable workflow already has a registered CLI capability, the promoted
+  skill should expose the capability id first.
+- The agent should inspect the contract with `openclaw capabilities describe`
+  before execution.
+- The actual run should prefer `openclaw capabilities run` with schema-checked
+  JSON input.
+- Skill prose stays light; stable execution belongs in the capability layer.
 
 ### Promotion policy
 

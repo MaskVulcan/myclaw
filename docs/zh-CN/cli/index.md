@@ -37,6 +37,7 @@ x-i18n:
 - [`status`](/cli/status)
 - [`health`](/cli/health)
 - [`sessions`](/cli/sessions)
+- [`capabilities`](/cli/capabilities)
 - [`gateway`](/cli/gateway)
 - [`logs`](/cli/logs)
 - [`system`](/cli/system)
@@ -131,6 +132,10 @@ openclaw [--dev] [--profile <name>] <command>
     login
     logout
   directory
+  capabilities
+    list
+    describe
+    run
   skills
     list
     info

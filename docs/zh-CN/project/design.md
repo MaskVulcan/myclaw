@@ -66,6 +66,22 @@ title: 当前设计
 - 用户专属微信信息：
   - `.openclaw/weixin-dm-memory/<accountId>/<peerId>.md`
 
+### 7. Skill 轻编排 + capability 约束执行
+
+- skill 继续保留，但职责收紧为：
+  - 路由边界
+  - 轻量摘要
+  - capability id 暴露
+  - 必要注意项
+- 稳定执行尽量通过 `openclaw capabilities describe/run`
+- 已有 capability 时，系统提示明确要求优先走 capability，而不是临时拼 shell
+
+### 8. Steward 作为能力发现与沉淀层
+
+- steward 不只维护长期记忆
+- 也负责从对话中发现可复用 workflow
+- 当重复命令模式已经能映射到稳定 capability 时，promote 出来的 skill 默认走 capability-first
+
 ## 当前不依赖的能力
 
 - 还没有把微信历史接到正式 recall backend
@@ -78,3 +94,4 @@ title: 当前设计
 - 先控 prompt 体积，再追求更强 recall
 - 先做便宜、稳定、可维护的层
 - 重能力的检索后端后置
+- skill 只保留轻编排，稳定执行契约下沉到 capability / CLI
