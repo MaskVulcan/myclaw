@@ -124,7 +124,10 @@ function buildFastPassInstruction(marker: string): string {
   return [
     "Fast-pass mode.",
     "Handle direct simple requests and lightweight one-step tasks when you can do so confidently.",
-    "Treat straightforward file-handling and schedule-management requests as eligible for fast-pass triage; if they actually need filesystem/calendar/tool execution, emit the escalation marker immediately instead of guessing.",
+    "Treat straightforward file-handling and schedule-management requests as eligible for fast-pass.",
+    "When the request is genuinely about files/documents or schedules/calendars, use the injected skills and tools directly instead of guessing.",
+    "Only extract fields that are grounded in the user's message, links, or attached files; if a key detail is missing or uncertain, escalate instead of inventing it.",
+    "Do not activate file or schedule tooling for unrelated chats such as weather, small talk, or meta requests about skills/prompts.",
     "Keep the visible reply concise, plain-text, and directly useful.",
     "Do not self-introduce or mention provider/model details.",
     "Avoid markdown code fences, long tutorials, and broad explanations unless the user explicitly asked for them.",
@@ -177,14 +180,11 @@ function resolveFastPassBypassReason(params: {
   if (!normalized) {
     return undefined;
   }
-  if (raw.split(/\r?\n/).filter((line) => line.trim().length > 0).length > 1) {
-    return "multiline";
-  }
+  const preferredFileTask = isFastPassPreferredFileTask(normalized);
+  const preferredScheduleTask = isFastPassPreferredScheduleTask(normalized);
+  const preferredDirectTask = preferredFileTask || preferredScheduleTask;
   if (/(?:&&|\|\||;|；)/.test(normalized)) {
     return "compound_command";
-  }
-  if (normalized.length > 160) {
-    return "long_message";
   }
   if (FAST_PASS_COMPLEX_FOLLOWUP_RE.test(normalized)) {
     return "operational_followup";
@@ -192,17 +192,23 @@ function resolveFastPassBypassReason(params: {
   if (FAST_PASS_COMPLEX_QUESTION_RE.test(normalized)) {
     return "complex_question";
   }
-  if (isFastPassPreferredFileTask(normalized) || isFastPassPreferredScheduleTask(normalized)) {
-    return undefined;
-  }
-  if (FAST_PASS_STRUCTURED_MESSAGE_RE.test(normalized)) {
-    return "structured_or_link";
-  }
   if (FAST_PASS_COMPLEX_ACTION_RE.test(normalized)) {
     return "complex_action";
   }
   if (FAST_PASS_COMPLEX_INSPECTION_RE.test(normalized)) {
     return "complex_inspection";
+  }
+  if (preferredDirectTask) {
+    return undefined;
+  }
+  if (raw.split(/\r?\n/).filter((line) => line.trim().length > 0).length > 1) {
+    return "multiline";
+  }
+  if (normalized.length > 160) {
+    return "long_message";
+  }
+  if (FAST_PASS_STRUCTURED_MESSAGE_RE.test(normalized)) {
+    return "structured_or_link";
   }
   return undefined;
 }
@@ -238,9 +244,10 @@ export function resolveMultiStageRoutingPlan(params: {
     sessionCtx: params.sessionCtx,
   });
   const normalizedSourceText = sourceText.replace(/\s+/g, " ").trim();
+  const prefersDirectSkillHandling = prefersFastPassSkillPrompt(normalizedSourceText);
   const fastPassSkillsPromptMode =
     routing.fastPass?.skillsPromptMode ??
-    (prefersFastPassSkillPrompt(normalizedSourceText) ? "compact" : "off");
+    (prefersDirectSkillHandling ? "auto" : "off");
 
   return {
     escalationMarker: MULTI_STAGE_ESCALATION_MARKER,
@@ -258,7 +265,7 @@ export function resolveMultiStageRoutingPlan(params: {
       systemPromptMode: routing.fastPass?.systemPromptMode ?? "none",
       skillsPromptMode: fastPassSkillsPromptMode,
       bootstrapContextMode: routing.fastPass?.bootstrapContextMode ?? "lightweight",
-      disableTools: routing.fastPass?.disableTools ?? true,
+      disableTools: routing.fastPass?.disableTools ?? !prefersDirectSkillHandling,
       inheritExtraSystemPrompt: routing.fastPass?.inheritExtraSystemPrompt ?? false,
       extraSystemPrompt: joinSystemPromptSegments(
         routing.fastPass?.extraSystemPrompt,

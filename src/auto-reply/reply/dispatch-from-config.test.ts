@@ -473,14 +473,14 @@ describe("dispatchReplyFromConfig", () => {
     );
   });
 
-  it("short-circuits model dispatch when the bundled skill fastpass handles the message", async () => {
+  it("short-circuits model dispatch for cron-event turns when the bundled skill fastpass handles the message", async () => {
     setNoAbort();
     const cfg = emptyConfig;
     const dispatcher = createDispatcher();
     const ctx = buildTestCtx({
-      Provider: "openclaw-weixin",
-      Surface: "openclaw-weixin",
-      OriginatingChannel: "openclaw-weixin",
+      Provider: "cron-event",
+      Surface: "cron-event",
+      OriginatingChannel: "cron-event",
       OriginatingTo: "wx-user-1",
       ChatType: "direct",
       BodyForCommands: "帮我加个日程，明天下午三点开会",
@@ -500,6 +500,27 @@ describe("dispatchReplyFromConfig", () => {
     });
     expect(replyResolver).not.toHaveBeenCalled();
     expect(dispatcher.sendFinalReply).toHaveBeenCalledWith({ text: "✅ 日程已添加" });
+  });
+
+  it("does not run bundled skill fastpass for normal weixin user turns", async () => {
+    setNoAbort();
+    const cfg = emptyConfig;
+    const dispatcher = createDispatcher();
+    const ctx = buildTestCtx({
+      Provider: "openclaw-weixin",
+      Surface: "openclaw-weixin",
+      OriginatingChannel: "openclaw-weixin",
+      OriginatingTo: "wx-user-1",
+      ChatType: "direct",
+      BodyForCommands: "帮我加个日程，明天下午三点开会",
+    });
+    const replyResolver = vi.fn(async () => ({ text: "model reply" }) as ReplyPayload);
+
+    await dispatchReplyFromConfig({ ctx, cfg, dispatcher, replyResolver });
+
+    expect(bundledSkillFastpassMocks.tryHandleBundledSkillFastpass).not.toHaveBeenCalled();
+    expect(replyResolver).toHaveBeenCalled();
+    expect(dispatcher.sendFinalReply).toHaveBeenCalledWith({ text: "model reply" });
   });
 
   it("does not resurrect a cleared route thread from origin metadata", async () => {

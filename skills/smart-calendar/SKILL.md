@@ -28,6 +28,19 @@ Use the bundled wrapper at `{baseDir}/scripts/sc`.
 - User data lives under `$OPENCLAW_STATE_DIR/skills-data/smart-calendar`
 - The bundled skill directory stays read-only; events and people data are copied into the runtime data dir on first use
 
+## Conversation Routing Rules
+
+- In MyClaw / OpenClaw chat flows, always use `{baseDir}/scripts/sc` rather than inventing your own parser or storage.
+- Keep per-user isolation. The runtime provides a scoped `SMART_CALENDAR_HOME`; use it as-is and do not mix one chat's events into another chat.
+- Extract only fields that are grounded in the user's original text, links, and attached files. If a person, location, meeting link, file, or note is not actually present in the source, do not invent it.
+- Treat obvious objects like luggage, files, and travel items as notes or attachments, not participants.
+- For natural-language adds, prefer a single `sc add ...` command when possible. Use explicit flags like `--date`, `--time`, `--with`, `--location`, `--notes`, or `--category` when the source text makes them clear.
+- For schedule lookups, default to both:
+  - a text summary sorted by time
+  - a rendered calendar image
+- If the user explicitly asks for only text or only image, honor that.
+- Never expose raw CLI progress logs like "正在生成..." to the end user. Convert them into a clean final result.
+
 ## Core Commands
 
 ```bash

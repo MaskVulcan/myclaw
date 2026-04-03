@@ -407,7 +407,7 @@ describe("bundled skill fastpass", () => {
     expect(result).toEqual({
       handled: true,
       payload: {
-        text: "🎨 正在生成 week 视图日历图...\n✅ 日历图已生成",
+        text: "✅ 日历图已生成",
         mediaUrl:
           "/tmp/openclaw-state/skills-data/smart-calendar/weixin-dm/primary/wx-user-1/output/calendar_week.png",
       },

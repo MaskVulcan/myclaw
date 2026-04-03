@@ -87,7 +87,7 @@ describe("getReplyFromConfig bundled skill fastpass", () => {
     });
   });
 
-  it("short-circuits before directive/model flow when bundled fastpass handles the message", async () => {
+  it("short-circuits before directive/model flow for cron-event turns handled by bundled fastpass", async () => {
     mocks.bundledFastpass.mockResolvedValueOnce({
       handled: true,
       payload: { text: "✅ 日程已添加" },
@@ -96,6 +96,9 @@ describe("getReplyFromConfig bundled skill fastpass", () => {
 
     const res = await getReplyFromConfig(
       buildCtx({
+        Provider: "cron-event",
+        Surface: "cron-event",
+        OriginatingChannel: "cron-event",
         Body: "帮我加个日程，明天下午三点开会",
         BodyForCommands: "帮我加个日程，明天下午三点开会",
         RawBody: "帮我加个日程，明天下午三点开会",
@@ -124,14 +127,7 @@ describe("getReplyFromConfig bundled skill fastpass", () => {
       {},
     );
 
-    expect(mocks.bundledFastpass).toHaveBeenCalledWith(
-      expect.objectContaining({
-        ctx: expect.objectContaining({
-          BodyForCommands: "把这个 pdf 总结一下，再发我未来七天的日程",
-        }),
-        cfg: {},
-      }),
-    );
+    expect(mocks.bundledFastpass).not.toHaveBeenCalled();
     expect(mocks.resolveReplyDirectives).toHaveBeenCalledWith(
       expect.objectContaining({
         skillFilter: expect.arrayContaining(["document-processing-pipeline", "smart-calendar"]),

@@ -400,7 +400,7 @@ describe("agent-runner-utils", () => {
     expect(plan?.bypassFastPassReason).toBeUndefined();
   });
 
-  it("injects compact skills prompts for direct file and schedule fast-pass candidates", () => {
+  it("injects full skill prompts and enables tools for direct file and schedule fast-pass candidates", () => {
     const run = makeRun({
       config: {
         agents: {
@@ -430,8 +430,38 @@ describe("agent-runner-utils", () => {
       },
     });
 
-    expect(filePlan?.fastPass.skillsPromptMode).toBe("compact");
-    expect(schedulePlan?.fastPass.skillsPromptMode).toBe("compact");
+    expect(filePlan?.fastPass.skillsPromptMode).toBe("auto");
+    expect(filePlan?.fastPass.disableTools).toBe(false);
+    expect(schedulePlan?.fastPass.skillsPromptMode).toBe("auto");
+    expect(schedulePlan?.fastPass.disableTools).toBe(false);
+  });
+
+  it("keeps fast-pass enabled for multiline grounded schedule requests with links", () => {
+    const run = makeRun({
+      config: {
+        agents: {
+          defaults: {
+            multiStageRouting: {
+              enabled: true,
+            },
+          },
+        },
+      },
+    });
+
+    const plan = resolveMultiStageRoutingPlan({
+      run,
+      hasImages: false,
+      isHeartbeat: false,
+      sessionCtx: {
+        BodyForCommands:
+          "请帮我记个日程：\n明天下午3点和张总开会\n会议链接 https://meeting.example.com/abc",
+      },
+    });
+
+    expect(plan?.bypassFastPassReason).toBeUndefined();
+    expect(plan?.fastPass.skillsPromptMode).toBe("auto");
+    expect(plan?.fastPass.disableTools).toBe(false);
   });
 
   it("still bypasses fast-pass for explanatory file-processing questions", () => {

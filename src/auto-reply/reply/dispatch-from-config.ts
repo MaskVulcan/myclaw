@@ -91,6 +91,15 @@ const AUDIO_PLACEHOLDER_RE = /^<media:audio>(\s*\([^)]*\))?$/i;
 const AUDIO_HEADER_RE = /^\[Audio\b/i;
 const normalizeMediaType = (value: string): string => value.split(";")[0]?.trim().toLowerCase();
 
+function shouldUseBundledSkillFastpass(
+  ctx: Pick<FinalizedMsgContext, "Provider" | "Surface" | "OriginatingChannel">,
+): boolean {
+  const channels = [ctx.Provider, ctx.Surface, ctx.OriginatingChannel]
+    .map((value) => value?.trim().toLowerCase())
+    .filter(Boolean);
+  return channels.includes("cron-event");
+}
+
 const isInboundAudioContext = (ctx: FinalizedMsgContext): boolean => {
   const rawTypes = [
     typeof ctx.MediaType === "string" ? ctx.MediaType : undefined,
@@ -595,26 +604,30 @@ export async function dispatchReplyFromConfig(params: {
       }
     }
 
-    const bundledSkillFastpassRuntime = await loadBundledSkillFastpassRuntime();
-    const bundledSkillFastpass = await bundledSkillFastpassRuntime.tryHandleBundledSkillFastpass({
-      ctx,
-      cfg,
-    });
-    if (bundledSkillFastpass.handled) {
-      let queuedFinal = false;
-      let routedFinalCount = 0;
-      if (bundledSkillFastpass.payload) {
-        const handledReply = await sendFinalPayload(bundledSkillFastpass.payload);
-        queuedFinal = handledReply.queuedFinal;
-        routedFinalCount += handledReply.routedFinalCount;
+    if (shouldUseBundledSkillFastpass(ctx)) {
+      const bundledSkillFastpassRuntime = await loadBundledSkillFastpassRuntime();
+      const bundledSkillFastpass = await bundledSkillFastpassRuntime.tryHandleBundledSkillFastpass(
+        {
+          ctx,
+          cfg,
+        },
+      );
+      if (bundledSkillFastpass.handled) {
+        let queuedFinal = false;
+        let routedFinalCount = 0;
+        if (bundledSkillFastpass.payload) {
+          const handledReply = await sendFinalPayload(bundledSkillFastpass.payload);
+          queuedFinal = handledReply.queuedFinal;
+          routedFinalCount += handledReply.routedFinalCount;
+        }
+        const counts = dispatcher.getQueuedCounts();
+        counts.final += routedFinalCount;
+        recordProcessed("completed", {
+          reason: bundledSkillFastpass.reason ?? "bundled_skill_fastpass",
+        });
+        markIdle("message_completed");
+        return { queuedFinal, counts };
       }
-      const counts = dispatcher.getQueuedCounts();
-      counts.final += routedFinalCount;
-      recordProcessed("completed", {
-        reason: bundledSkillFastpass.reason ?? "bundled_skill_fastpass",
-      });
-      markIdle("message_completed");
-      return { queuedFinal, counts };
     }
 
     // Forum topics are threaded conversations within a group — verbose tool

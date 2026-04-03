@@ -54,6 +54,13 @@ Inside MyClaw / OpenClaw, do not assume `docpipe` is installed globally. Use the
 - It exports `DOCUMENT_PROCESSING_PIPELINE_COMMAND` so `doctor` and install hints point back to the wrapper command.
 - In the command examples below, replace bare `docpipe` with `{baseDir}/scripts/docpipe` when running from the bundled skill.
 
+## Conversation Routing Rules
+
+- In MyClaw / OpenClaw chat flows, prefer one direct CLI command or one short deterministic pipeline over ad hoc prose reasoning.
+- Ground every extraction, summary, translation target, and file reference in the actual user message, attached files, or resolved local paths. Do not pretend a file exists if it was not provided.
+- For simple read/convert/summarize/edit requests, prefer the smallest direct command that satisfies the task.
+- Only escalate to larger multi-step flows when the document task truly needs OCR, IR rebuild, or block-by-block transforms.
+
 ## Automation Commands
 
 Use the CLI route engine instead of relying on ad hoc judgment when possible:

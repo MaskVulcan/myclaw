@@ -1180,24 +1180,22 @@ function sanitizeRenderReplyText(
     return "✅ 日历图已生成";
   }
   const cleaned = text.replace(/(✅\s*[^:\n]+)[:：]\s*(.+\.png)/i, "$1").trim();
-  if (options?.includeScheduleText) {
-    return cleaned;
-  }
-  const lines = cleaned
+  const filteredLines = cleaned
     .split("\n")
     .map((line) => line.trimEnd())
-    .filter(
-      (line, index, items) =>
-        line || items.slice(0, index).some((candidate) => candidate.trim().length > 0),
-    );
-  const kept: string[] = [];
-  for (const line of lines) {
-    kept.push(line);
-    if (/^✅\s*/.test(line.trim())) {
-      break;
-    }
+    .filter((line) => {
+      const normalized = line.trim();
+      if (!normalized) {
+        return false;
+      }
+      return !/^🎨\s*/.test(normalized) && !/正在生成/i.test(normalized);
+    });
+  const filtered = filteredLines.join("\n").trim();
+  if (options?.includeScheduleText) {
+    return filtered || "✅ 日历图已生成";
   }
-  return kept.join("\n").trim() || "✅ 日历图已生成";
+  const successLine = filteredLines.find((line) => /^✅\s*/.test(line.trim()));
+  return successLine || "✅ 日历图已生成";
 }
 
 function resolveFailureText(

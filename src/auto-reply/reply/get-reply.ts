@@ -52,6 +52,15 @@ const DOCUMENT_MEDIA_TYPE_RE =
 const DOCUMENT_MEDIA_EXT_RE =
   /\.(?:pdf|docx?|pptx|xlsx|csv|txt|md|markdown|html?|xml|json|eml|rtf|odt)(?:$|[?#])/i;
 
+function shouldUseBundledSkillFastpass(
+  ctx: Pick<MsgContext, "Provider" | "Surface" | "OriginatingChannel">,
+): boolean {
+  const channels = [ctx.Provider, ctx.Surface, ctx.OriginatingChannel]
+    .map((value) => value?.trim().toLowerCase())
+    .filter(Boolean);
+  return channels.includes("cron-event");
+}
+
 function loadSessionResetModelRuntime() {
   sessionResetModelRuntimePromise ??= import("./session-reset-model.runtime.js");
   return sessionResetModelRuntimePromise;
@@ -278,13 +287,15 @@ export async function getReplyFromConfig(
   });
   opts?.onTypingController?.(typing);
 
-  const bundledSkillFastpassRuntime = await loadBundledSkillFastpassRuntime();
-  const bundledSkillFastpass = await bundledSkillFastpassRuntime.tryHandleBundledSkillFastpass({
-    ctx: finalized,
-    cfg,
-  });
-  if (bundledSkillFastpass.handled) {
-    return bundledSkillFastpass.payload;
+  if (shouldUseBundledSkillFastpass(finalized)) {
+    const bundledSkillFastpassRuntime = await loadBundledSkillFastpassRuntime();
+    const bundledSkillFastpass = await bundledSkillFastpassRuntime.tryHandleBundledSkillFastpass({
+      ctx: finalized,
+      cfg,
+    });
+    if (bundledSkillFastpass.handled) {
+      return bundledSkillFastpass.payload;
+    }
   }
 
   if (!isFastTestEnv) {
