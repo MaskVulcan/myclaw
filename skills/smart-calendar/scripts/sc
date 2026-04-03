@@ -40,7 +40,25 @@ needs_playwright() {
 STATE_ROOT="${OPENCLAW_STATE_DIR:-${OPENCLAW_HOME:-$HOME/.openclaw}}"
 RUNTIME_DIR="${SMART_CALENDAR_RUNTIME_DIR:-$STATE_ROOT/skills-runtime/smart-calendar}"
 VENV_DIR="${SMART_CALENDAR_VENV_DIR:-$RUNTIME_DIR/.venv}"
-SMART_CALENDAR_HOME="${SMART_CALENDAR_HOME:-$STATE_ROOT/skills-data/smart-calendar}"
+
+resolve_calendar_home() {
+  if [[ -n "${SMART_CALENDAR_HOME:-}" ]]; then
+    printf '%s\n' "$SMART_CALENDAR_HOME"
+    return 0
+  fi
+
+  local cwd="${PWD:-}"
+  if [[ -n "$cwd" && -d "$cwd/data/events" ]]; then
+    if [[ -f "$cwd/data/config.yml" || -d "$cwd/data/people" || -d "$cwd/output" ]]; then
+      printf '%s\n' "$cwd"
+      return 0
+    fi
+  fi
+
+  printf '%s\n' "$STATE_ROOT/skills-data/smart-calendar"
+}
+
+SMART_CALENDAR_HOME="$(resolve_calendar_home)"
 PYTHON_CMD="$(pick_python)"
 DEPS_MARKER="$VENV_DIR/.smart-calendar-deps"
 PLAYWRIGHT_MARKER="$VENV_DIR/.smart-calendar-playwright"
