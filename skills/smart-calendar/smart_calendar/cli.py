@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -98,6 +99,51 @@ def _svc() -> _Services:
     return _Services()
 
 
+def _event_payload(event: Event, svc: _Services | None = None) -> dict[str, object]:
+    payload = event.to_dict()
+    if svc is not None:
+        payload["icon"] = svc.config.get_category_icon(event.category)
+    return payload
+
+
+def _person_payload(person: Person) -> dict[str, object]:
+    return {
+        "name": person.name,
+        "role": person.role,
+        "personality": list(person.personality),
+        "collaboration_tips": list(person.collaboration_tips),
+        "contact": person.contact,
+        "tags": list(person.tags),
+        "notes": person.notes,
+    }
+
+
+def _tips_payload(events: list[Event], svc: _Services) -> list[dict[str, object]]:
+    tips: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for event in events:
+        for name in event.participants:
+            normalized = name.strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            person = svc.people.get(normalized)
+            if not person or (not person.collaboration_tips and not person.personality):
+                continue
+            tips.append(
+                {
+                    "name": person.name,
+                    "personality": list(person.personality),
+                    "collaboration_tips": list(person.collaboration_tips),
+                }
+            )
+    return tips
+
+
+def _emit_json(payload: dict[str, object]) -> None:
+    print(json.dumps(payload, ensure_ascii=False))
+
+
 # ─── add 命令 ───────────────────────────────────────────────
 
 
@@ -147,12 +193,24 @@ def cmd_add(args):
     # 冲突检测
     conflicts = svc.store.find_conflicts(event_date, time_str)
     if conflicts:
-        print(f"\n⚠️  时间冲突提醒 — {svc.parser.format_date(event_date)} {time_str}:")
-        for c in conflicts:
-            print(f"   • {c.time} {c.title}")
-        print("   （日程仍已添加，请注意安排）")
+        if not getattr(args, "json", False):
+            print(f"\n⚠️  时间冲突提醒 — {svc.parser.format_date(event_date)} {time_str}:")
+            for c in conflicts:
+                print(f"   • {c.time} {c.title}")
+            print("   （日程仍已添加，请注意安排）")
 
     event = svc.store.add(event)
+
+    if getattr(args, "json", False):
+        _emit_json(
+            {
+                "ok": True,
+                "calendar_home": str(svc.config.base_dir),
+                "event": _event_payload(event, svc),
+                "conflicts": [_event_payload(conflict, svc) for conflict in conflicts],
+            }
+        )
+        return
 
     # 展示确认
     icon = svc.config.get_category_icon(category)
@@ -242,6 +300,30 @@ def cmd_show(args):
         events = svc.query.by_range(start, end)
         title_suffix = ""
 
+    tips = _tips_payload(events, svc)
+
+    if getattr(args, "json", False):
+        _emit_json(
+            {
+                "ok": True,
+                "calendar_home": str(svc.config.base_dir),
+                "query": {
+                    "start_date": start.isoformat(),
+                    "end_date": end.isoformat(),
+                    "date": args.date,
+                    "range": args.range,
+                    "week": bool(args.week),
+                    "month": bool(args.month),
+                    "category": args.category,
+                    "with_people": args.with_people,
+                    "search": args.search,
+                },
+                "events": [_event_payload(event, svc) for event in events],
+                "tips": tips,
+            }
+        )
+        return
+
     # 构建标题
     date_label = svc.parser.format_date(start)
     if start == end:
@@ -253,26 +335,16 @@ def cmd_show(args):
     svc.render.render_schedule(events, title=title.strip())
 
     # 展示日程中涉及的已知人物的协作提示
-    all_participants = set()
-    for e in events:
-        for p in e.participants:
-            all_participants.add(p)
-    if all_participants:
-        tips_shown = False
-        for name in sorted(all_participants):
-            person = svc.people.get(name)
-            if person and (person.collaboration_tips or person.personality):
-                if not tips_shown:
-                    print("\n💡 协作备忘:")
-                    tips_shown = True
-                parts = []
-                if person.personality:
-                    parts.append(f"性格: {'; '.join(person.personality[:2])}")
-                if person.collaboration_tips:
-                    parts.append(f"建议: {'; '.join(person.collaboration_tips[:2])}")
-                print(f"   👤 {name} — {' | '.join(parts)}")
-        if tips_shown:
-            print()
+    if tips:
+        print("\n💡 协作备忘:")
+        for tip in tips:
+            parts = []
+            if tip["personality"]:
+                parts.append(f"性格: {'; '.join(tip['personality'][:2])}")
+            if tip["collaboration_tips"]:
+                parts.append(f"建议: {'; '.join(tip['collaboration_tips'][:2])}")
+            print(f"   👤 {tip['name']} — {' | '.join(parts)}")
+        print()
 
 
 # ─── stats 命令 ───────────────────────────────────────────────
@@ -330,6 +402,15 @@ def cmd_edit(args):
 
     updated = svc.store.update(args.event_id, **kwargs)
     if updated:
+        if getattr(args, "json", False):
+            _emit_json(
+                {
+                    "ok": True,
+                    "calendar_home": str(svc.config.base_dir),
+                    "event": _event_payload(updated, svc),
+                }
+            )
+            return
         icon = svc.config.get_category_icon(updated.category)
         print(f"\n✅ 日程已更新:")
         print(f"   {icon} {updated.title}")
@@ -347,7 +428,18 @@ def cmd_edit(args):
 def cmd_delete(args):
     """删除日程"""
     svc = _svc()
-    if svc.store.delete(args.event_id):
+    deleted = svc.store.delete(args.event_id)
+    if getattr(args, "json", False):
+        _emit_json(
+            {
+                "ok": deleted,
+                "calendar_home": str(svc.config.base_dir),
+                "event_id": args.event_id,
+                "deleted": deleted,
+            }
+        )
+        return
+    if deleted:
         print(f"✅ 已删除: {args.event_id}")
     else:
         print(f"❌ 未找到: {args.event_id}")
@@ -391,6 +483,8 @@ def cmd_render(args):
     output_dir = svc.config.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
     out = None  # 防止提前 return 时 out 未定义
+    payload_events: list[Event] = []
+    payload_mode = "heatmap" if args.heatmap else "calendar"
 
     if args.heatmap:
         # ── 热力图模式 ──
@@ -400,17 +494,46 @@ def cmd_render(args):
         category = args.heatmap
 
         all_events = svc.store.get_range(start, end)
+        payload_events = all_events
 
         if category == "__all__":
             # 所有类别对比热力图
             categories = list({e.category for e in all_events})
             if not categories:
+                if getattr(args, "json", False):
+                    _emit_json(
+                        {
+                            "ok": True,
+                            "calendar_home": str(svc.config.base_dir),
+                            "mode": payload_mode,
+                            "output_path": None,
+                            "start_date": start.isoformat(),
+                            "end_date": end.isoformat(),
+                            "heatmap": category,
+                            "events": [],
+                        }
+                    )
+                    return
                 print("📊 该时段暂无日程数据")
                 return
             period = "month" if args.month else "week"
             results = svc.aggregator.compare(all_events, categories, period)
             out = output_dir / "heatmap_compare.png"
             heatmap.render_category_comparison(results, out)
+            if getattr(args, "json", False):
+                _emit_json(
+                    {
+                        "ok": True,
+                        "calendar_home": str(svc.config.base_dir),
+                        "mode": payload_mode,
+                        "output_path": str(out),
+                        "start_date": start.isoformat(),
+                        "end_date": end.isoformat(),
+                        "heatmap": category,
+                        "events": [_event_payload(event, svc) for event in payload_events],
+                    }
+                )
+                return
             print(f"✅ 类别对比热力图已生成: {out}")
             # 同时输出文字统计（复用已有 results）
             svc.render.render_compare(results)
@@ -427,6 +550,21 @@ def cmd_render(args):
             cmap = svc.config.get_category_cmap(category)
             out = output_dir / f"heatmap_{category}_year.png"
             heatmap.render_year(daily, out, year=now.year, title=f"{icon} {now.year}年「{category}」", cmap=cmap)
+            payload_events = filtered
+            if getattr(args, "json", False):
+                _emit_json(
+                    {
+                        "ok": True,
+                        "calendar_home": str(svc.config.base_dir),
+                        "mode": payload_mode,
+                        "output_path": str(out),
+                        "start_date": year_start.isoformat(),
+                        "end_date": year_end.isoformat(),
+                        "heatmap": category,
+                        "events": [_event_payload(event, svc) for event in payload_events],
+                    }
+                )
+                return
             print(f"✅ 年度热力图已生成: {out}")
         else:
             # 单月/单周热力图
@@ -434,6 +572,21 @@ def cmd_render(args):
             result = svc.aggregator.summary(all_events, category, period)
             out = output_dir / f"heatmap_{category}_{period}.png"
             heatmap.render_month(result, out)
+            payload_events = [event for event in all_events if event.category == category]
+            if getattr(args, "json", False):
+                _emit_json(
+                    {
+                        "ok": True,
+                        "calendar_home": str(svc.config.base_dir),
+                        "mode": payload_mode,
+                        "output_path": str(out),
+                        "start_date": start.isoformat(),
+                        "end_date": end.isoformat(),
+                        "heatmap": category,
+                        "events": [_event_payload(event, svc) for event in payload_events],
+                    }
+                )
+                return
             print(f"✅ 热力图已生成: {out}")
             # 同时输出文字统计（复用已有 result）
             svc.render.render_stats(result)
@@ -448,6 +601,7 @@ def cmd_render(args):
             events = svc.query.by_participant(args.with_people, start, end)
         else:
             events = svc.store.get_range(start, end)
+        payload_events = events
 
         # focus_date: 视图中心日期
         if view == "month":
@@ -467,7 +621,8 @@ def cmd_render(args):
             image_title = "日历概览"
         out = output_dir / f"calendar_{view}.png"
 
-        print(f"🎨 正在生成 {view} 视图日历图...")
+        if not getattr(args, "json", False):
+            print(f"🎨 正在生成 {view} 视图日历图...")
         cal_render.render_png(
             events,
             output_path=out,
@@ -476,6 +631,21 @@ def cmd_render(args):
             title=image_title,
             date_range=date_range_str,
         )
+        if getattr(args, "json", False):
+            _emit_json(
+                {
+                    "ok": True,
+                    "calendar_home": str(svc.config.base_dir),
+                    "mode": payload_mode,
+                    "view": view,
+                    "output_path": str(out),
+                    "start_date": start.isoformat(),
+                    "end_date": end.isoformat(),
+                    "with_people": args.with_people,
+                    "events": [_event_payload(event, svc) for event in payload_events],
+                }
+            )
+            return
         print(f"✅ 日历图已生成: {out}")
 
         # 同时输出文字版
@@ -657,6 +827,7 @@ def main():
     p_add.add_argument("--location", "-l", help="地点")
     p_add.add_argument("--notes", "-n", help="备注")
     p_add.add_argument("--priority", "-p", choices=["high", "normal", "low"], default="normal")
+    p_add.add_argument("--json", action="store_true", help="输出结构化 JSON")
     p_add.set_defaults(func=cmd_add)
 
     # ── show ──
@@ -668,6 +839,7 @@ def main():
     p_show.add_argument("--category", "-c", help="按类别筛选")
     p_show.add_argument("--with", dest="with_people", help="按参与人筛选")
     p_show.add_argument("--search", "-s", help="关键字搜索")
+    p_show.add_argument("--json", action="store_true", help="输出结构化 JSON")
     p_show.set_defaults(func=cmd_show)
 
     # ── stats ──
@@ -688,6 +860,7 @@ def main():
     p_render.add_argument("--date", "-d", help="指定日期（day 视图用）")
     p_render.add_argument("--with", dest="with_people", help="按参与人过滤")
     p_render.add_argument("--open", "-o", action="store_true", help="生成后自动打开图片")
+    p_render.add_argument("--json", action="store_true", help="输出结构化 JSON")
     p_render.set_defaults(func=cmd_render)
 
     # ── people ──
@@ -715,11 +888,13 @@ def main():
     p_edit.add_argument("--location", "-l", help="新地点")
     p_edit.add_argument("--notes", "-n", help="新备注")
     p_edit.add_argument("--priority", "-p", choices=["high", "normal", "low"], help="新优先级")
+    p_edit.add_argument("--json", action="store_true", help="输出结构化 JSON")
     p_edit.set_defaults(func=cmd_edit)
 
     # ── delete ──
     p_del = subparsers.add_parser("delete", help="删除日程")
     p_del.add_argument("event_id", help="事件 ID")
+    p_del.add_argument("--json", action="store_true", help="输出结构化 JSON")
     p_del.set_defaults(func=cmd_delete)
 
     args = parser.parse_args()

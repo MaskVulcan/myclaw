@@ -7,6 +7,14 @@ lightweight-usage: |
   Start with `{baseDir}/scripts/docpipe route <path> --task ...` when the lane is unclear.
   Use `{baseDir}/scripts/docpipe docx-inspect`, `docx-grep`, `docx-apply-plan`, or `docx-compare` for focused `.docx` work.
   Use `{baseDir}/scripts/docpipe ocr-pdf <path> --output <file>` for scanned PDFs or images before extraction, summarization, or translation.
+capabilities:
+  - "document-processing.route"
+  - "document-processing.ingest"
+  - "document-processing.docx-inspect"
+  - "document-processing.docx-grep"
+  - "document-processing.ocr-pdf"
+capability-summary: Inspect document-processing capability schemas first for routing, ingest, OCR, and local DOCX inspection before loading the full workflow notes.
+progressive-disclosure: "capabilities-first"
 ---
 
 # Document Processing Pipeline

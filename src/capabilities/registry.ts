@@ -1,5 +1,8 @@
+import path from "node:path";
 import { z } from "zod";
 import { buildWorkspaceSkillStatus } from "../agents/skills-status.js";
+import { resolveCalendarScriptPath } from "../cli/calendar-cli.js";
+import { resolveDocpipeScriptPath } from "../cli/docpipe-cli.js";
 import {
   stewardCurateCommand,
   stewardCycleCommand,
@@ -9,6 +12,7 @@ import {
   stewardPromoteSkillsCommand,
 } from "../commands/steward.js";
 import { loadConfig } from "../config/config.js";
+import { execFileUtf8 } from "../daemon/exec-file.js";
 import type {
   CapabilityDescription,
   CapabilityDescriptor,
@@ -147,6 +151,231 @@ const StewardCycleInputSchema = z
   })
   .strict();
 
+const SmartCalendarPrioritySchema = z.enum(["high", "normal", "low"]);
+
+const SmartCalendarEventSchema = z
+  .object({
+    id: z.string().min(1),
+    date: z.string().min(1),
+    time: z.string().min(1),
+    title: z.string().min(1),
+    category: z.string().min(1),
+    participants: z.array(z.string()).default([]),
+    location: z.string().default(""),
+    notes: z.string().default(""),
+    priority: SmartCalendarPrioritySchema.default("normal"),
+    icon: z.string().optional(),
+  })
+  .passthrough();
+
+const SmartCalendarTipSchema = z
+  .object({
+    name: z.string().min(1),
+    personality: z.array(z.string()).default([]),
+    collaboration_tips: z.array(z.string()).default([]),
+  })
+  .passthrough();
+
+const SmartCalendarAddInputSchema = z
+  .object({
+    calendarHome: z.string().min(1).optional(),
+    text: z.string().min(1).optional(),
+    date: z.string().min(1).optional(),
+    time: z.string().min(1).optional(),
+    title: z.string().min(1).optional(),
+    category: z.string().min(1).optional(),
+    withPeople: z.array(z.string().min(1)).optional(),
+    location: z.string().optional(),
+    notes: z.string().optional(),
+    priority: SmartCalendarPrioritySchema.optional(),
+  })
+  .strict()
+  .refine((value) => Boolean(value.text?.trim() || value.title?.trim()), {
+    message: "Provide text or title for smart-calendar.add",
+  });
+
+const SmartCalendarShowInputSchema = z
+  .object({
+    calendarHome: z.string().min(1).optional(),
+    date: z.string().min(1).optional(),
+    week: z.boolean().optional().default(false),
+    month: z.boolean().optional().default(false),
+    range: z.string().min(1).optional(),
+    category: z.string().min(1).optional(),
+    withPeople: z.string().min(1).optional(),
+    search: z.string().min(1).optional(),
+  })
+  .strict();
+
+const SmartCalendarRenderInputSchema = z
+  .object({
+    calendarHome: z.string().min(1).optional(),
+    view: z.enum(["month", "week", "day"]).optional(),
+    heatmap: z.string().min(1).optional(),
+    week: z.boolean().optional().default(false),
+    month: z.boolean().optional().default(false),
+    year: z.boolean().optional().default(false),
+    range: z.string().min(1).optional(),
+    date: z.string().min(1).optional(),
+    withPeople: z.string().min(1).optional(),
+  })
+  .strict();
+
+const SmartCalendarQuerySchema = z
+  .object({
+    start_date: z.string().min(1),
+    end_date: z.string().min(1),
+  })
+  .passthrough();
+
+const SmartCalendarAddOutputSchema = z
+  .object({
+    ok: z.literal(true),
+    calendar_home: z.string().min(1),
+    event: SmartCalendarEventSchema,
+    conflicts: z.array(SmartCalendarEventSchema),
+  })
+  .passthrough();
+
+const SmartCalendarShowOutputSchema = z
+  .object({
+    ok: z.literal(true),
+    calendar_home: z.string().min(1),
+    query: SmartCalendarQuerySchema,
+    events: z.array(SmartCalendarEventSchema),
+    tips: z.array(SmartCalendarTipSchema),
+  })
+  .passthrough();
+
+const SmartCalendarRenderOutputSchema = z
+  .object({
+    ok: z.literal(true),
+    calendar_home: z.string().min(1),
+    mode: z.enum(["calendar", "heatmap"]),
+    view: z.enum(["month", "week", "day"]).optional(),
+    output_path: z.string().min(1).nullable().optional(),
+    start_date: z.string().min(1),
+    end_date: z.string().min(1),
+    heatmap: z.string().optional(),
+    with_people: z.string().optional(),
+    events: z.array(SmartCalendarEventSchema).default([]),
+  })
+  .passthrough();
+
+const DocpipeRouteTaskSchema = z.enum([
+  "translate",
+  "summarize",
+  "simplify",
+  "rebuild",
+  "extract-text",
+  "extract-fields",
+  "edit-docx",
+  "compare-docx",
+  "overlay-pdf",
+  "side-by-side-pdf",
+  "pdf-direct",
+  "merge-pdf",
+  "split-pdf",
+  "rotate-pdf",
+  "watermark-pdf",
+  "form-fill-pdf",
+  "extract-pdf",
+]);
+
+const DocpipeRouteInputSchema = z
+  .object({
+    source: z.string().min(1),
+    task: DocpipeRouteTaskSchema,
+    runDir: z.string().min(1).optional(),
+    mimeType: z.string().min(1).optional(),
+    outputFormat: z.string().min(1).optional(),
+    sourceLang: z.string().min(1).optional(),
+    targetLang: z.string().min(1).optional(),
+    backend: z.string().min(1).optional(),
+    requiresRedline: z.boolean().optional().default(false),
+    requiresReview: z.boolean().optional().default(false),
+    requiresOcr: z.boolean().optional().default(false),
+    layoutPreserving: z.boolean().optional().default(false),
+  })
+  .strict();
+
+const DocpipeRouteOutputSchema = z
+  .object({
+    lane: z.string().min(1),
+    available: z.boolean(),
+    reason: z.string().min(1),
+    commands: z.array(z.array(z.string())).default([]),
+    warnings: z.array(z.string()).default([]),
+  })
+  .passthrough();
+
+const DocpipeIngestInputSchema = z
+  .object({
+    source: z.string().min(1),
+    runDir: z.string().min(1),
+    backend: z.string().min(1).optional(),
+    dryRun: z.boolean().optional().default(false),
+  })
+  .strict();
+
+const DocpipeRunDirOutputSchema = z
+  .object({
+    run_dir: z.string().min(1),
+  })
+  .passthrough();
+
+const DocpipeParagraphRecordSchema = z
+  .object({
+    paragraph_id: z.string().min(1),
+    index: z.number().int().positive(),
+    style: z.string().nullable().optional(),
+    text: z.string(),
+  })
+  .passthrough();
+
+const DocpipeDocxInspectInputSchema = z
+  .object({
+    source: z.string().min(1),
+  })
+  .strict();
+
+const DocpipeDocxGrepInputSchema = z
+  .object({
+    source: z.string().min(1),
+    patterns: z.array(z.string().min(1)).min(1),
+  })
+  .strict();
+
+const DocpipeDocxGrepMatchSchema = z
+  .object({
+    paragraph_id: z.string().min(1),
+    index: z.number().int().positive(),
+    style: z.string().nullable().optional(),
+    pattern: z.string().min(1),
+    text: z.string(),
+  })
+  .passthrough();
+
+const DocpipeOcrInputSchema = z
+  .object({
+    source: z.string().min(1),
+    output: z.string().min(1).optional(),
+    lang: z.string().min(1).optional(),
+    forceOcr: z.boolean().optional().default(false),
+    pages: z.string().min(1).optional(),
+    format: z.enum(["markdown", "jsonl"]).optional().default("markdown"),
+  })
+  .strict();
+
+const DocpipeOutputPathSchema = z
+  .object({
+    output_path: z.string().min(1),
+  })
+  .passthrough();
+
+const SKILL_CLI_TIMEOUT_MS = 5 * 60 * 1000;
+const SKILL_CLI_MAX_BUFFER = 16 * 1024 * 1024;
+
 class CapabilityExitError extends Error {
   code: number;
 
@@ -253,6 +482,84 @@ async function runStewardJsonCommand<T>(params: {
   return parseCapturedJson(capture.logs, params.schema, params.capabilityId);
 }
 
+function parseJsonFromCommandOutput<T>(
+  output: string,
+  schema: z.ZodType<T>,
+  capabilityId: string,
+): T {
+  const trimmed = output.trim();
+  if (!trimmed) {
+    throw new Error(`${capabilityId}: command did not emit JSON output`);
+  }
+  for (let index = trimmed.length - 1; index >= 0; index -= 1) {
+    const char = trimmed[index];
+    if (char !== "{" && char !== "[") {
+      continue;
+    }
+    try {
+      return schema.parse(JSON.parse(trimmed.slice(index)) as unknown);
+    } catch {
+      // keep scanning for the trailing JSON payload
+    }
+  }
+  throw new Error(`${capabilityId}: command did not emit valid JSON output`);
+}
+
+async function runBundledSkillJsonCommand<T>(params: {
+  capabilityId: string;
+  scriptPath: string;
+  args: string[];
+  schema: z.ZodType<T>;
+  env?: NodeJS.ProcessEnv;
+}): Promise<T> {
+  const result = await execFileUtf8("bash", [params.scriptPath, ...params.args], {
+    env: {
+      ...process.env,
+      ...params.env,
+    },
+    timeout: SKILL_CLI_TIMEOUT_MS,
+    maxBuffer: SKILL_CLI_MAX_BUFFER,
+  });
+  if (result.code !== 0) {
+    const detail = (result.stderr || result.stdout || "unknown error").trim();
+    throw new Error(`${params.capabilityId}: command failed (${result.code}): ${detail}`);
+  }
+  return parseJsonFromCommandOutput(result.stdout, params.schema, params.capabilityId);
+}
+
+function appendStringFlag(argv: string[], flag: string, value?: string) {
+  if (value?.trim()) {
+    argv.push(flag, value.trim());
+  }
+}
+
+function appendBooleanFlag(argv: string[], flag: string, value?: boolean) {
+  if (value) {
+    argv.push(flag);
+  }
+}
+
+function normalizeObservedCommandLine(command: string): string {
+  const trimmed = command.trim().toLowerCase();
+  if (!trimmed) {
+    return "";
+  }
+  const tokens = trimmed.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) {
+    return "";
+  }
+  const normalizeToken = (value: string) => {
+    const unquoted = value.replace(/^['"]+|['"]+$/g, "");
+    return path.posix.basename(path.win32.basename(unquoted));
+  };
+  const first = normalizeToken(tokens[0] ?? "");
+  if (["bash", "sh", "zsh"].includes(first) && tokens.length > 1) {
+    const second = normalizeToken(tokens[1] ?? "");
+    return [second, ...tokens.slice(2)].join(" ");
+  }
+  return [first, ...tokens.slice(1)].join(" ");
+}
+
 const CAPABILITY_DESCRIPTORS = [
   {
     id: "skills.list",
@@ -335,6 +642,279 @@ const CAPABILITY_DESCRIPTORS = [
     outputSchema: SkillsCheckOutputSchema,
     execute: async (input) =>
       SkillsCheckOutputSchema.parse(buildSkillsCheckResult(input.workspace)),
+  },
+  {
+    id: "smart-calendar.add",
+    title: "Add Calendar Event",
+    summary: "Create one grounded event in the bundled smart-calendar store.",
+    category: "calendar",
+    tags: ["calendar", "schedule", "skill", "write"],
+    disclosureMode: "capabilities-first",
+    skillSummary: "Use to add a local schedule item through the stable smart-calendar wrapper.",
+    sideEffects: ["filesystem-read", "filesystem-write"],
+    idempotent: false,
+    dryRunSupported: false,
+    requiresConfirmation: false,
+    underlyingCliCommand: ["openclaw", "calendar", "add", "--json"],
+    examples: [
+      `openclaw capabilities run smart-calendar.add --input-json '{"calendarHome":"/tmp/calendar","text":"明天下午3点和张总开会","category":"会议"}'`,
+    ],
+    inputSchema: SmartCalendarAddInputSchema,
+    outputSchema: SmartCalendarAddOutputSchema,
+    execute: async (input) => {
+      const args = ["add", "--json"];
+      appendStringFlag(args, "--date", input.date);
+      appendStringFlag(args, "--time", input.time);
+      appendStringFlag(args, "--title", input.title);
+      appendStringFlag(args, "--category", input.category);
+      if ((input.withPeople?.length ?? 0) > 0) {
+        args.push("--with", input.withPeople!.join(","));
+      }
+      appendStringFlag(args, "--location", input.location);
+      appendStringFlag(args, "--notes", input.notes);
+      appendStringFlag(args, "--priority", input.priority);
+      if (input.text?.trim()) {
+        args.push(input.text.trim());
+      }
+      return await runBundledSkillJsonCommand({
+        capabilityId: "smart-calendar.add",
+        scriptPath: resolveCalendarScriptPath(),
+        args,
+        env: input.calendarHome ? { SMART_CALENDAR_HOME: input.calendarHome } : undefined,
+        schema: SmartCalendarAddOutputSchema,
+      });
+    },
+  },
+  {
+    id: "smart-calendar.show",
+    title: "Show Calendar Events",
+    summary: "Query bundled smart-calendar events and collaboration tips as structured JSON.",
+    category: "calendar",
+    tags: ["calendar", "schedule", "skill", "read"],
+    disclosureMode: "capabilities-first",
+    skillSummary: "Use to inspect upcoming schedules before replying or rendering.",
+    sideEffects: ["filesystem-read"],
+    idempotent: true,
+    dryRunSupported: true,
+    requiresConfirmation: false,
+    underlyingCliCommand: ["openclaw", "calendar", "show", "--json"],
+    examples: [
+      `openclaw capabilities run smart-calendar.show --input-json '{"calendarHome":"/tmp/calendar","week":true}'`,
+    ],
+    inputSchema: SmartCalendarShowInputSchema,
+    outputSchema: SmartCalendarShowOutputSchema,
+    execute: async (input) => {
+      const args = ["show", "--json"];
+      appendStringFlag(args, "--date", input.date);
+      appendBooleanFlag(args, "--week", input.week);
+      appendBooleanFlag(args, "--month", input.month);
+      appendStringFlag(args, "--range", input.range);
+      appendStringFlag(args, "--category", input.category);
+      appendStringFlag(args, "--with", input.withPeople);
+      appendStringFlag(args, "--search", input.search);
+      return await runBundledSkillJsonCommand({
+        capabilityId: "smart-calendar.show",
+        scriptPath: resolveCalendarScriptPath(),
+        args,
+        env: input.calendarHome ? { SMART_CALENDAR_HOME: input.calendarHome } : undefined,
+        schema: SmartCalendarShowOutputSchema,
+      });
+    },
+  },
+  {
+    id: "smart-calendar.render",
+    title: "Render Calendar View",
+    summary: "Render a bundled smart-calendar calendar or heatmap view to an image file.",
+    category: "calendar",
+    tags: ["calendar", "schedule", "skill", "render"],
+    disclosureMode: "capabilities-first",
+    skillSummary: "Use when a schedule request should also return a rendered calendar artifact.",
+    sideEffects: ["filesystem-read", "filesystem-write"],
+    idempotent: false,
+    dryRunSupported: false,
+    requiresConfirmation: false,
+    underlyingCliCommand: ["openclaw", "calendar", "render", "--json"],
+    examples: [
+      `openclaw capabilities run smart-calendar.render --input-json '{"calendarHome":"/tmp/calendar","view":"week"}'`,
+    ],
+    inputSchema: SmartCalendarRenderInputSchema,
+    outputSchema: SmartCalendarRenderOutputSchema,
+    execute: async (input) => {
+      const args = ["render", "--json"];
+      appendStringFlag(args, "--view", input.view);
+      appendStringFlag(args, "--heatmap", input.heatmap);
+      appendBooleanFlag(args, "--week", input.week);
+      appendBooleanFlag(args, "--month", input.month);
+      appendBooleanFlag(args, "--year", input.year);
+      appendStringFlag(args, "--range", input.range);
+      appendStringFlag(args, "--date", input.date);
+      appendStringFlag(args, "--with", input.withPeople);
+      return await runBundledSkillJsonCommand({
+        capabilityId: "smart-calendar.render",
+        scriptPath: resolveCalendarScriptPath(),
+        args,
+        env: input.calendarHome ? { SMART_CALENDAR_HOME: input.calendarHome } : undefined,
+        schema: SmartCalendarRenderOutputSchema,
+      });
+    },
+  },
+  {
+    id: "document-processing.route",
+    title: "Route Document Task",
+    summary: "Choose the stable document-processing lane and suggested commands for one file task.",
+    category: "documents",
+    tags: ["documents", "skill", "routing", "planning"],
+    disclosureMode: "capabilities-first",
+    skillSummary: "Use before running a larger document workflow when the right lane is unclear.",
+    sideEffects: ["filesystem-read"],
+    idempotent: true,
+    dryRunSupported: true,
+    requiresConfirmation: false,
+    underlyingCliCommand: ["openclaw", "docpipe", "route"],
+    examples: [
+      `openclaw capabilities run document-processing.route --input-json '{"source":"./paper.pdf","task":"translate","layoutPreserving":true}'`,
+    ],
+    inputSchema: DocpipeRouteInputSchema,
+    outputSchema: DocpipeRouteOutputSchema,
+    execute: async (input) => {
+      const args = ["route", input.source, "--task", input.task];
+      appendStringFlag(args, "--run-dir", input.runDir);
+      appendStringFlag(args, "--mime-type", input.mimeType);
+      appendStringFlag(args, "--output-format", input.outputFormat);
+      appendStringFlag(args, "--source-lang", input.sourceLang);
+      appendStringFlag(args, "--target-lang", input.targetLang);
+      appendStringFlag(args, "--backend", input.backend);
+      appendBooleanFlag(args, "--requires-redline", input.requiresRedline);
+      appendBooleanFlag(args, "--requires-review", input.requiresReview);
+      appendBooleanFlag(args, "--requires-ocr", input.requiresOcr);
+      appendBooleanFlag(args, "--layout-preserving", input.layoutPreserving);
+      return await runBundledSkillJsonCommand({
+        capabilityId: "document-processing.route",
+        scriptPath: resolveDocpipeScriptPath(),
+        args,
+        schema: DocpipeRouteOutputSchema,
+      });
+    },
+  },
+  {
+    id: "document-processing.ingest",
+    title: "Ingest Document",
+    summary: "Ingest one source document into a structured docpipe run directory.",
+    category: "documents",
+    tags: ["documents", "skill", "pipeline", "ingest"],
+    disclosureMode: "capabilities-first",
+    skillSummary: "Use for deterministic document ingest before transform or rebuild stages.",
+    sideEffects: ["filesystem-read", "filesystem-write"],
+    idempotent: false,
+    dryRunSupported: true,
+    requiresConfirmation: false,
+    underlyingCliCommand: ["openclaw", "docpipe", "ingest"],
+    examples: [
+      `openclaw capabilities run document-processing.ingest --input-json '{"source":"./paper.pdf","runDir":"./work/paper","dryRun":false}'`,
+    ],
+    inputSchema: DocpipeIngestInputSchema,
+    outputSchema: DocpipeRunDirOutputSchema,
+    execute: async (input) => {
+      const args = ["ingest", input.source, "--run-dir", input.runDir];
+      appendStringFlag(args, "--backend", input.backend);
+      appendBooleanFlag(args, "--dry-run", input.dryRun);
+      return await runBundledSkillJsonCommand({
+        capabilityId: "document-processing.ingest",
+        scriptPath: resolveDocpipeScriptPath(),
+        args,
+        schema: DocpipeRunDirOutputSchema,
+      });
+    },
+  },
+  {
+    id: "document-processing.docx-inspect",
+    title: "Inspect DOCX Paragraphs",
+    summary: "Inspect DOCX paragraph records for precise local editing or review.",
+    category: "documents",
+    tags: ["documents", "skill", "docx", "inspection"],
+    disclosureMode: "capabilities-first",
+    skillSummary: "Use for paragraph-level DOCX inspection before grep or apply-plan.",
+    sideEffects: ["filesystem-read"],
+    idempotent: true,
+    dryRunSupported: true,
+    requiresConfirmation: false,
+    underlyingCliCommand: ["openclaw", "docpipe", "docx-inspect"],
+    examples: [
+      `openclaw capabilities run document-processing.docx-inspect --input-json '{"source":"./contract.docx"}'`,
+    ],
+    inputSchema: DocpipeDocxInspectInputSchema,
+    outputSchema: z.array(DocpipeParagraphRecordSchema),
+    execute: async (input) =>
+      await runBundledSkillJsonCommand({
+        capabilityId: "document-processing.docx-inspect",
+        scriptPath: resolveDocpipeScriptPath(),
+        args: ["docx-inspect", input.source],
+        schema: z.array(DocpipeParagraphRecordSchema),
+      }),
+  },
+  {
+    id: "document-processing.docx-grep",
+    title: "Search DOCX Paragraphs",
+    summary: "Search a DOCX for matching paragraphs without free-form shell grep.",
+    category: "documents",
+    tags: ["documents", "skill", "docx", "search"],
+    disclosureMode: "capabilities-first",
+    skillSummary: "Use for deterministic paragraph search before planning local DOCX edits.",
+    sideEffects: ["filesystem-read"],
+    idempotent: true,
+    dryRunSupported: true,
+    requiresConfirmation: false,
+    underlyingCliCommand: ["openclaw", "docpipe", "docx-grep"],
+    examples: [
+      `openclaw capabilities run document-processing.docx-grep --input-json '{"source":"./contract.docx","patterns":["termination"]}'`,
+    ],
+    inputSchema: DocpipeDocxGrepInputSchema,
+    outputSchema: z.array(DocpipeDocxGrepMatchSchema),
+    execute: async (input) => {
+      const args = ["docx-grep", input.source];
+      for (const pattern of input.patterns) {
+        args.push("--pattern", pattern);
+      }
+      return await runBundledSkillJsonCommand({
+        capabilityId: "document-processing.docx-grep",
+        scriptPath: resolveDocpipeScriptPath(),
+        args,
+        schema: z.array(DocpipeDocxGrepMatchSchema),
+      });
+    },
+  },
+  {
+    id: "document-processing.ocr-pdf",
+    title: "OCR Local PDF Or Image",
+    summary: "Run local OCR for one PDF or image through the bundled docpipe wrapper.",
+    category: "documents",
+    tags: ["documents", "skill", "ocr", "extraction"],
+    disclosureMode: "capabilities-first",
+    skillSummary: "Use when document text must be extracted locally before downstream processing.",
+    sideEffects: ["filesystem-read", "filesystem-write"],
+    idempotent: false,
+    dryRunSupported: false,
+    requiresConfirmation: false,
+    underlyingCliCommand: ["openclaw", "docpipe", "ocr-pdf"],
+    examples: [
+      `openclaw capabilities run document-processing.ocr-pdf --input-json '{"source":"./scan.pdf","format":"markdown"}'`,
+    ],
+    inputSchema: DocpipeOcrInputSchema,
+    outputSchema: DocpipeOutputPathSchema,
+    execute: async (input) => {
+      const args = ["ocr-pdf", input.source];
+      appendStringFlag(args, "--output", input.output);
+      appendStringFlag(args, "--lang", input.lang);
+      appendBooleanFlag(args, "--force-ocr", input.forceOcr);
+      appendStringFlag(args, "--pages", input.pages);
+      appendStringFlag(args, "--format", input.format);
+      return await runBundledSkillJsonCommand({
+        capabilityId: "document-processing.ocr-pdf",
+        scriptPath: resolveDocpipeScriptPath(),
+        args,
+        schema: DocpipeOutputPathSchema,
+      });
+    },
   },
   {
     id: "steward.ingest",
@@ -569,6 +1149,22 @@ const CAPABILITY_MAP = new Map(
 );
 
 const OBSERVED_COMMAND_CAPABILITY_PREFIXES = [
+  { prefix: "openclaw calendar add", capabilityId: "smart-calendar.add" },
+  { prefix: "openclaw calendar show", capabilityId: "smart-calendar.show" },
+  { prefix: "openclaw calendar render", capabilityId: "smart-calendar.render" },
+  { prefix: "sc add", capabilityId: "smart-calendar.add" },
+  { prefix: "sc show", capabilityId: "smart-calendar.show" },
+  { prefix: "sc render", capabilityId: "smart-calendar.render" },
+  { prefix: "openclaw docpipe route", capabilityId: "document-processing.route" },
+  { prefix: "openclaw docpipe ingest", capabilityId: "document-processing.ingest" },
+  { prefix: "openclaw docpipe docx-inspect", capabilityId: "document-processing.docx-inspect" },
+  { prefix: "openclaw docpipe docx-grep", capabilityId: "document-processing.docx-grep" },
+  { prefix: "openclaw docpipe ocr-pdf", capabilityId: "document-processing.ocr-pdf" },
+  { prefix: "docpipe route", capabilityId: "document-processing.route" },
+  { prefix: "docpipe ingest", capabilityId: "document-processing.ingest" },
+  { prefix: "docpipe docx-inspect", capabilityId: "document-processing.docx-inspect" },
+  { prefix: "docpipe docx-grep", capabilityId: "document-processing.docx-grep" },
+  { prefix: "docpipe ocr-pdf", capabilityId: "document-processing.ocr-pdf" },
   { prefix: "openclaw steward ingest", capabilityId: "steward.ingest" },
   { prefix: "openclaw steward curate", capabilityId: "steward.curate" },
   { prefix: "openclaw steward maintain", capabilityId: "steward.maintain" },
@@ -634,9 +1230,15 @@ export async function runCapability(params: { id: string; input: unknown }): Pro
 export function inferCapabilityIdsFromCommandLines(commands: string[]): string[] {
   const inferred = new Set<string>();
   for (const command of commands) {
-    const normalized = command.trim().toLowerCase();
+    const normalized = normalizeObservedCommandLine(command);
     if (!normalized) {
       continue;
+    }
+    const capabilityRunnerMatch = normalized.match(
+      /^openclaw capabilities (?:run|describe) ([a-z][a-z0-9]*(?:[._-][a-z0-9]+)*)\b/,
+    );
+    if (capabilityRunnerMatch?.[1]) {
+      inferred.add(capabilityRunnerMatch[1]);
     }
     for (const candidate of OBSERVED_COMMAND_CAPABILITY_PREFIXES) {
       if (normalized.startsWith(candidate.prefix)) {

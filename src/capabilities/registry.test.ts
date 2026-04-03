@@ -35,6 +35,8 @@ describe("capability registry", () => {
     expect(capabilities).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: "skills.list", category: "skills" }),
+        expect.objectContaining({ id: "smart-calendar.add", category: "calendar" }),
+        expect.objectContaining({ id: "document-processing.route", category: "documents" }),
         expect.objectContaining({ id: "steward.ingest", category: "steward" }),
       ]),
     );
@@ -98,9 +100,16 @@ describe("capability registry", () => {
     expect(
       inferCapabilityIdsFromCommandLines([
         "openclaw steward ingest --json",
-        "openclaw skills check --json",
+        "/root/gitsource/myclaw/skills/smart-calendar/scripts/sc add 明天下午三点开会",
+        "bash /root/gitsource/myclaw/skills/document-processing-pipeline/scripts/docpipe route paper.pdf --task translate",
+        'openclaw capabilities run document-processing.ocr-pdf --input-json \'{"source":"scan.pdf"}\'',
         "git status",
       ]),
-    ).toEqual(["skills.check", "steward.ingest"]);
+    ).toEqual([
+      "document-processing.ocr-pdf",
+      "document-processing.route",
+      "smart-calendar.add",
+      "steward.ingest",
+    ]);
   });
 });

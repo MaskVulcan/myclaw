@@ -8,6 +8,12 @@ lightweight-usage: |
   Use explicit flags only for grounded fields such as `--date`, `--time`, `--with`, `--location`, `--notes`, or `--category`.
   Query with `{baseDir}/scripts/sc show`, `{baseDir}/scripts/sc show --week`, `{baseDir}/scripts/sc show --month`, or render with `{baseDir}/scripts/sc render --view day|week|month`.
   In chat schedule lookups, default to both a time-sorted text summary and a rendered image unless the user explicitly asks for only one.
+capabilities:
+  - "smart-calendar.add"
+  - "smart-calendar.show"
+  - "smart-calendar.render"
+capability-summary: Use structured smart-calendar capabilities for grounded add/show/render flows before falling back to the full skill document.
+progressive-disclosure: "capabilities-first"
 metadata: { "openclaw": { "emoji": "🗓️", "requires": { "anyBins": ["python3", "python"] } } }
 ---
 

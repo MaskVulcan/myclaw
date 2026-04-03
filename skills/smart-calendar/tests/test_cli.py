@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from datetime import date
 from pathlib import Path
 from unittest.mock import patch
@@ -80,6 +81,7 @@ def _make_args(**kwargs):
         "heatmap": None,
         "year": False,
         "open": False,
+        "json": False,
     }
     defaults.update(kwargs)
     return argparse.Namespace(**defaults)
@@ -202,6 +204,24 @@ class TestCmdAdd:
         assert "冲突" in captured.out
         assert "已有会议" in captured.out
 
+    def test_add_json_output(self, svc, capsys):
+        """JSON 模式返回结构化结果"""
+        args = _make_args(
+            text=["代码评审"],
+            date="2026-03-25",
+            time="14:00",
+            title="代码评审",
+            category="技术",
+            json=True,
+        )
+        with patch("smart_calendar.cli._svc", return_value=svc):
+            cmd_add(args)
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["ok"] is True
+        assert payload["event"]["title"] == "代码评审"
+        assert payload["conflicts"] == []
+
 
 # ─── cmd_show 测试 ───────────────────────────────────────────
 
@@ -244,6 +264,35 @@ class TestCmdShow:
 
         captured = capsys.readouterr()
         assert "会议A" in captured.out
+
+    def test_show_json_output(self, svc, capsys):
+        """JSON 模式返回事件和协作提示"""
+        dt = date(2026, 3, 25)
+        svc.store.add(
+            Event(
+                id="",
+                date=dt,
+                time="10:00",
+                title="会议A",
+                category="会议",
+                participants=["张总"],
+            )
+        )
+
+        class StubPerson:
+            name = "张总"
+            personality = ["果断"]
+            collaboration_tips = ["材料提前发"]
+
+        with patch.object(svc.people, "get", return_value=StubPerson()):
+            args = _make_args(date="2026-03-25", json=True)
+            with patch("smart_calendar.cli._svc", return_value=svc):
+                cmd_show(args)
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["ok"] is True
+        assert payload["events"][0]["title"] == "会议A"
+        assert payload["tips"][0]["name"] == "张总"
 
 
 # ─── cmd_edit 测试 ───────────────────────────────────────────
@@ -312,6 +361,20 @@ class TestCmdDelete:
 
         captured = capsys.readouterr()
         assert "未找到" in captured.out
+
+    def test_delete_json_output(self, svc, capsys):
+        """JSON 模式返回删除结果"""
+        saved = svc.store.add(Event(
+            id="", date=date(2026, 3, 25), time="14:00",
+            title="待删", category="会议",
+        ))
+        args = _make_args(event_id=saved.id, json=True)
+        with patch("smart_calendar.cli._svc", return_value=svc):
+            cmd_delete(args)
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["ok"] is True
+        assert payload["deleted"] is True
 
 
 # ─── cmd_stats 测试 ──────────────────────────────────────────
@@ -394,6 +457,40 @@ class TestCmdRender:
         assert captured["focus_date"] == date(2026, 4, 3)
         assert captured["title"] == "日程安排"
         assert captured["date_range"] == "4月3日 周五"
+
+    def test_render_json_output(self, svc, capsys):
+        """JSON 模式返回输出文件和事件摘要"""
+        svc.store.add(Event(
+            id="",
+            date=date(2026, 4, 3),
+            time="20:15",
+            title="高铁去香港",
+            category="出行",
+            location="虹桥火车站",
+        ))
+        args = _make_args(view="week", json=True)
+
+        class StubCalendarRender:
+            def __init__(self, config):
+                self.config = config
+
+            def render_png(self, events, output_path, view, focus_date, title, date_range):
+                Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+                Path(output_path).write_bytes(b"png")
+                return Path(output_path)
+
+        with patch("smart_calendar.cli._svc", return_value=svc), patch(
+            "smart_calendar.render.calendar_render.CalendarRender",
+            StubCalendarRender,
+        ):
+            cmd_render(args)
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["ok"] is True
+        assert payload["mode"] == "calendar"
+        assert payload["view"] == "week"
+        assert payload["events"][0]["title"] == "高铁去香港"
+        assert payload["output_path"].endswith("calendar_week.png")
 
 
 # ─── cmd_people 测试 ─────────────────────────────────────────

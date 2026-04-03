@@ -84,6 +84,14 @@ openclaw capabilities run <id> --input-json '<json>'
 - `skills.list`
 - `skills.info`
 - `skills.check`
+- `smart-calendar.add`
+- `smart-calendar.show`
+- `smart-calendar.render`
+- `document-processing.route`
+- `document-processing.ingest`
+- `document-processing.docx-inspect`
+- `document-processing.docx-grep`
+- `document-processing.ocr-pdf`
 - `steward.ingest`
 - `steward.curate`
 - `steward.maintain`
