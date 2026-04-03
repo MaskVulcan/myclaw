@@ -134,4 +134,24 @@ describe("getReplyFromConfig bundled skill fastpass", () => {
       }),
     );
   });
+
+  it("keeps schedule and file skills injected for terse weixin direct turns", async () => {
+    await getReplyFromConfig(
+      buildCtx({
+        Body: "我今天的行程",
+        BodyForCommands: "我今天的行程",
+        RawBody: "我今天的行程",
+        CommandBody: "我今天的行程",
+      }),
+      undefined,
+      {},
+    );
+
+    expect(mocks.bundledFastpass).not.toHaveBeenCalled();
+    expect(mocks.resolveReplyDirectives).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skillFilter: expect.arrayContaining(["document-processing-pipeline", "smart-calendar"]),
+      }),
+    );
+  });
 });

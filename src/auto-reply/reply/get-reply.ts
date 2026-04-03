@@ -61,6 +61,16 @@ function shouldUseBundledSkillFastpass(
   return channels.includes("cron-event");
 }
 
+function isWeixinDirectSkillContext(
+  ctx: Pick<MsgContext, "Provider" | "Surface" | "OriginatingChannel" | "ChatType">,
+): boolean {
+  const channels = [ctx.Provider, ctx.Surface, ctx.OriginatingChannel]
+    .map((value) => value?.trim().toLowerCase())
+    .filter(Boolean);
+  const chatType = ctx.ChatType?.trim().toLowerCase();
+  return channels.includes("openclaw-weixin") && (!chatType || chatType === "direct");
+}
+
 function loadSessionResetModelRuntime() {
   sessionResetModelRuntimePromise ??= import("./session-reset-model.runtime.js");
   return sessionResetModelRuntimePromise;
@@ -136,6 +146,10 @@ function hasDocumentLikeMedia(ctx: MsgContext): boolean {
 function resolveRequiredBundledSkills(ctx: MsgContext): string[] {
   const message = resolveSkillAwareMessageText(ctx);
   const required = new Set<string>();
+  if (isWeixinDirectSkillContext(ctx)) {
+    required.add("smart-calendar");
+    required.add("document-processing-pipeline");
+  }
   if (
     (REQUIRED_SCHEDULE_NOUN_RE.test(message) && REQUIRED_SCHEDULE_ACTION_RE.test(message)) ||
     REQUIRED_SCHEDULE_EVENT_RE.test(message)

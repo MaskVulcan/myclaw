@@ -171,6 +171,14 @@ function prefersFastPassSkillPrompt(normalized: string): boolean {
   return isFastPassPreferredFileTask(normalized) || isFastPassPreferredScheduleTask(normalized);
 }
 
+function isWeixinDirectSessionContext(sessionCtx?: TemplateContext): boolean {
+  const channels = [sessionCtx?.Provider, sessionCtx?.Surface, sessionCtx?.OriginatingChannel]
+    .map((value) => value?.trim().toLowerCase())
+    .filter(Boolean);
+  const chatType = sessionCtx?.ChatType?.trim().toLowerCase();
+  return channels.includes("openclaw-weixin") && (!chatType || chatType === "direct");
+}
+
 function resolveFastPassBypassReason(params: {
   commandBody?: string;
   sessionCtx?: TemplateContext;
@@ -244,10 +252,11 @@ export function resolveMultiStageRoutingPlan(params: {
     sessionCtx: params.sessionCtx,
   });
   const normalizedSourceText = sourceText.replace(/\s+/g, " ").trim();
+  const keepWeixinSkillsInjected = isWeixinDirectSessionContext(params.sessionCtx);
   const prefersDirectSkillHandling = prefersFastPassSkillPrompt(normalizedSourceText);
   const fastPassSkillsPromptMode =
     routing.fastPass?.skillsPromptMode ??
-    (prefersDirectSkillHandling ? "auto" : "off");
+    (keepWeixinSkillsInjected || prefersDirectSkillHandling ? "compact" : "off");
 
   return {
     escalationMarker: MULTI_STAGE_ESCALATION_MARKER,

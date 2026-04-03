@@ -436,6 +436,36 @@ describe("agent-runner-utils", () => {
     expect(schedulePlan?.fastPass.disableTools).toBe(false);
   });
 
+  it("keeps compact skill prompts injected for weixin direct turns even when the message is terse", () => {
+    const run = makeRun({
+      config: {
+        agents: {
+          defaults: {
+            multiStageRouting: {
+              enabled: true,
+            },
+          },
+        },
+      },
+    });
+
+    const plan = resolveMultiStageRoutingPlan({
+      run,
+      hasImages: false,
+      isHeartbeat: false,
+      sessionCtx: {
+        Provider: "openclaw-weixin",
+        Surface: "openclaw-weixin",
+        OriginatingChannel: "openclaw-weixin",
+        ChatType: "direct",
+        BodyForCommands: "我今天的行程",
+      },
+    });
+
+    expect(plan?.fastPass.skillsPromptMode).toBe("compact");
+    expect(plan?.fastPass.disableTools).toBe(false);
+  });
+
   it("keeps fast-pass enabled for multiline grounded schedule requests with links", () => {
     const run = makeRun({
       config: {
