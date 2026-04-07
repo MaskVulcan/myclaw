@@ -116,6 +116,8 @@ export type SessionEntry = {
   /** Epoch ms cutoff paired with abortCutoffMessageSid when available. */
   abortCutoffTimestamp?: number;
   chatType?: SessionChatType;
+  /** Timestamp (ms) of the last inbound user message that touched this session. */
+  lastInboundAt?: number;
   thinkingLevel?: string;
   fastMode?: boolean;
   verboseLevel?: string;

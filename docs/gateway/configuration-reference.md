@@ -1846,6 +1846,7 @@ Controls elevated (host) exec access:
   tools: {
     elevated: {
       enabled: true,
+      idleResetAfter: "2h",
       allowFrom: {
         whatsapp: ["+15555550123"],
         discord: ["1234567890123", "987654321098765432"],
@@ -1857,6 +1858,7 @@ Controls elevated (host) exec access:
 
 - Per-agent override (`agents.list[].tools.elevated`) can only further restrict.
 - `/elevated on|off|ask|full` stores state per session; inline directives apply to single message.
+- `idleResetAfter` automatically drops session elevated mode back to the non-elevated default after that much inbound idle time.
 - Elevated `exec` runs on the host, bypasses sandboxing.
 
 ### `tools.exec`

@@ -932,6 +932,99 @@ describe("initSessionState RawBody", () => {
   });
 });
 
+describe("initSessionState elevated idle reset", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("drops elevated mode after configured inbound idle timeout", async () => {
+    const now = new Date(2026, 3, 7, 13, 45, 0);
+    vi.setSystemTime(now);
+    const storePath = await createStorePath("openclaw-elevated-idle-reset-");
+    const sessionKey = "agent:main:openclaw-weixin:direct:user-1";
+
+    await writeSessionStoreFast(storePath, {
+      [sessionKey]: {
+        sessionId: "sess-elevated",
+        updatedAt: now.getTime() - 5 * 60_000,
+        lastInboundAt: now.getTime() - 3 * 60 * 60_000,
+        elevatedLevel: "full",
+      },
+    });
+
+    const result = await initSessionState({
+      ctx: {
+        RawBody: "check status",
+        SessionKey: sessionKey,
+        Provider: "openclaw-weixin",
+        Surface: "openclaw-weixin",
+        From: "user-1",
+        To: "user-1",
+        SenderId: "user-1",
+        ChatType: "direct",
+      },
+      cfg: {
+        session: { store: storePath },
+        agents: { defaults: { elevatedDefault: "off" } },
+        tools: { elevated: { idleResetAfter: "2h" } },
+      } as OpenClawConfig,
+      commandAuthorized: true,
+    });
+
+    expect(result.sessionEntry.elevatedLevel).toBe("off");
+    expect(result.sessionEntry.lastInboundAt).toBe(now.getTime());
+
+    const persisted = JSON.parse(await fs.readFile(storePath, "utf-8")) as Record<
+      string,
+      SessionEntry
+    >;
+    expect(persisted[sessionKey]?.elevatedLevel).toBe("off");
+    expect(persisted[sessionKey]?.lastInboundAt).toBe(now.getTime());
+  });
+
+  it("keeps elevated mode when inbound idle timeout has not elapsed", async () => {
+    const now = new Date(2026, 3, 7, 13, 45, 0);
+    vi.setSystemTime(now);
+    const storePath = await createStorePath("openclaw-elevated-idle-keep-");
+    const sessionKey = "agent:main:openclaw-weixin:direct:user-2";
+
+    await writeSessionStoreFast(storePath, {
+      [sessionKey]: {
+        sessionId: "sess-elevated-keep",
+        updatedAt: now.getTime() - 5 * 60_000,
+        lastInboundAt: now.getTime() - 60 * 60_000,
+        elevatedLevel: "on",
+      },
+    });
+
+    const result = await initSessionState({
+      ctx: {
+        RawBody: "run again",
+        SessionKey: sessionKey,
+        Provider: "openclaw-weixin",
+        Surface: "openclaw-weixin",
+        From: "user-2",
+        To: "user-2",
+        SenderId: "user-2",
+        ChatType: "direct",
+      },
+      cfg: {
+        session: { store: storePath },
+        agents: { defaults: { elevatedDefault: "off" } },
+        tools: { elevated: { idleResetAfter: "2h" } },
+      } as OpenClawConfig,
+      commandAuthorized: true,
+    });
+
+    expect(result.sessionEntry.elevatedLevel).toBe("on");
+    expect(result.sessionEntry.lastInboundAt).toBe(now.getTime());
+  });
+});
+
 describe("initSessionState reset policy", () => {
   let clearBootstrapSnapshotOnSessionRolloverSpy: ReturnType<typeof vi.spyOn>;
 

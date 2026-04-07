@@ -1,5 +1,6 @@
 import { resolveAgentConfig } from "../../agents/agent-scope.js";
 import { getChannelPlugin, normalizeChannelId } from "../../channels/plugins/index.js";
+import { parseDurationMs } from "../../cli/parse-duration.js";
 import type { AgentElevatedAllowFromConfig, OpenClawConfig } from "../../config/config.js";
 import { normalizeStringEntries } from "../../shared/string-normalization.js";
 import type { MsgContext } from "../templating.js";
@@ -14,6 +15,25 @@ import {
   stripSenderPrefix,
 } from "./elevated-allowlist-matcher.js";
 export { formatElevatedUnavailableMessage } from "./elevated-unavailable.js";
+
+function parseIdleResetAfterMs(raw: unknown): number | undefined {
+  if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
+    return Math.floor(raw);
+  }
+  if (typeof raw !== "string") {
+    return undefined;
+  }
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  try {
+    const parsed = parseDurationMs(trimmed, { defaultUnit: "h" });
+    return parsed > 0 ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 function resolveElevatedAllowList(
   allowFrom: AgentElevatedAllowFromConfig | undefined,
@@ -234,4 +254,18 @@ export function resolveElevatedPermissions(params: {
     });
   }
   return { enabled, allowed: globalAllowed && agentAllowed, failures };
+}
+
+export function resolveEffectiveElevatedIdleResetAfterMs(params: {
+  cfg: OpenClawConfig;
+  agentId: string;
+}): number | undefined {
+  const globalMs = parseIdleResetAfterMs(params.cfg.tools?.elevated?.idleResetAfter);
+  const agentMs = parseIdleResetAfterMs(
+    resolveAgentConfig(params.cfg, params.agentId)?.tools?.elevated?.idleResetAfter,
+  );
+  if (globalMs && agentMs) {
+    return Math.min(globalMs, agentMs);
+  }
+  return agentMs ?? globalMs;
 }

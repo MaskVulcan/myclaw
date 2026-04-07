@@ -32,6 +32,10 @@ Also available as `/elev on|off|ask|full`.
 
 Send `/elevated` with no argument to see the current level.
 
+If `tools.elevated.idleResetAfter` is configured, session elevated mode
+automatically falls back to the non-elevated default after that much inbound
+idle time.
+
 ## How it works
 
 <Steps>
@@ -43,6 +47,7 @@ Send `/elevated` with no argument to see the current level.
       tools: {
         elevated: {
           enabled: true,
+          idleResetAfter: "2h",
           allowFrom: {
             discord: ["user-id-123"],
             whatsapp: ["+15555550123"],

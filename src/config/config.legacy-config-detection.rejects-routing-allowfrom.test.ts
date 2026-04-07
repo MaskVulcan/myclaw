@@ -206,6 +206,7 @@ describe("legacy config detection", () => {
       tools: {
         elevated: {
           allowFrom: { whatsapp: ["+15555550123"] },
+          idleResetAfter: "2h",
         },
       },
       agents: {
@@ -217,6 +218,7 @@ describe("legacy config detection", () => {
               elevated: {
                 enabled: false,
                 allowFrom: { whatsapp: ["+15555550123"] },
+                idleResetAfter: "1h",
               },
             },
           },
@@ -228,6 +230,7 @@ describe("legacy config detection", () => {
       expect(res.config?.agents?.list?.[0]?.tools?.elevated).toEqual({
         enabled: false,
         allowFrom: { whatsapp: ["+15555550123"] },
+        idleResetAfter: "1h",
       });
     }
   });

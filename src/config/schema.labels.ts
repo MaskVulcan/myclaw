@@ -190,6 +190,7 @@ export const FIELD_LABELS: Record<string, string> = {
   "tools.elevated": "Elevated Tool Access",
   "tools.elevated.enabled": "Enable Elevated Tool Access",
   "tools.elevated.allowFrom": "Elevated Tool Allow Rules",
+  "tools.elevated.idleResetAfter": "Elevated Idle Reset Duration",
   "tools.subagents": "Subagent Tool Policy",
   "tools.subagents.tools": "Subagent Tool Allow/Deny Policy",
   "tools.sandbox": "Sandbox Tool Policy",

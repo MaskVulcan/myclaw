@@ -38,6 +38,7 @@ import { resolveEffectiveResetTargetSessionKey } from "./acp-reset-target.js";
 import { resolveConversationBindingContextFromMessage } from "./conversation-binding-input.js";
 import { normalizeInboundTextNewlines } from "./inbound-text.js";
 import { stripMentions, stripStructuralPrefixes } from "./mentions.js";
+import { resolveEffectiveElevatedIdleResetAfterMs } from "./reply-elevated.js";
 import {
   maybeRetireLegacyMainDeliveryRoute,
   resolveLastChannelRaw,
@@ -351,8 +352,22 @@ export async function initSessionState(params: {
   if (retiredLegacyMainDelivery) {
     sessionStore[retiredLegacyMainDelivery.key] = retiredLegacyMainDelivery.entry;
   }
-  const entry = sessionStore[sessionKey];
   const now = Date.now();
+  const elevatedIdleResetAfterMs = resolveEffectiveElevatedIdleResetAfterMs({ cfg, agentId });
+  const storedEntry = sessionStore[sessionKey];
+  const lastInboundAtForElevated =
+    storedEntry?.lastInboundAt ?? storedEntry?.updatedAt ?? Number.NEGATIVE_INFINITY;
+  const shouldResetElevatedOnIdle = Boolean(
+    storedEntry &&
+    storedEntry.elevatedLevel &&
+    storedEntry.elevatedLevel !== "off" &&
+    elevatedIdleResetAfterMs &&
+    now - lastInboundAtForElevated >= elevatedIdleResetAfterMs,
+  );
+  const entry = shouldResetElevatedOnIdle ? { ...storedEntry, elevatedLevel: "off" } : storedEntry;
+  if (shouldResetElevatedOnIdle && entry) {
+    sessionStore[sessionKey] = entry;
+  }
   const isThread = resolveThreadFlag({
     sessionKey,
     messageThreadId: ctx.MessageThreadId,
@@ -471,6 +486,7 @@ export async function initSessionState(params: {
     ...baseEntry,
     sessionId,
     updatedAt: Date.now(),
+    lastInboundAt: now,
     systemSent,
     abortedLastRun,
     // Persist previously stored thinking/verbose levels when present.

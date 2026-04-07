@@ -302,6 +302,11 @@ export type AgentToolsConfig = {
     enabled?: boolean;
     /** Approved senders for /elevated (per-provider allowlists). */
     allowFrom?: AgentElevatedAllowFromConfig;
+    /**
+     * Auto-reset session elevated mode back to the non-elevated default after this much
+     * inbound idle time. Accepts milliseconds or a duration string such as "2h".
+     */
+    idleResetAfter?: string | number;
   };
   /** Exec tool defaults for this agent. */
   exec?: ExecToolConfig;
@@ -590,6 +595,11 @@ export type ToolsConfig = {
     enabled?: boolean;
     /** Approved senders for /elevated (per-provider allowlists). */
     allowFrom?: AgentElevatedAllowFromConfig;
+    /**
+     * Auto-reset session elevated mode back to the non-elevated default after this much
+     * inbound idle time. Accepts milliseconds or a duration string such as "2h".
+     */
+    idleResetAfter?: string | number;
   };
   /** Exec tool defaults. */
   exec?: ExecToolConfig;

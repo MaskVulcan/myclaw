@@ -285,6 +285,7 @@ const TARGET_KEYS = [
   "tools.agentToAgent.enabled",
   "tools.elevated.enabled",
   "tools.elevated.allowFrom",
+  "tools.elevated.idleResetAfter",
   "tools.subagents.tools",
   "tools.sandbox.tools",
   "web",

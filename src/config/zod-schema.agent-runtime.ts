@@ -555,6 +555,28 @@ const CommonToolPolicyFields = {
   byProvider: z.record(z.string(), ToolPolicyWithProfileSchema).optional(),
 };
 
+const DurationHoursOrMsSchema = z
+  .union([z.string().min(1), z.number().int().positive()])
+  .superRefine((value, ctx) => {
+    if (typeof value === "number") {
+      return;
+    }
+    try {
+      const parsed = parseDurationMs(value.trim(), { defaultUnit: "h" });
+      if (!(parsed > 0)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Duration must be a positive value (for example "2h").',
+        });
+      }
+    } catch {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Invalid duration (use milliseconds or a string like "2h").',
+      });
+    }
+  });
+
 export const AgentToolsSchema = z
   .object({
     ...CommonToolPolicyFields,
@@ -562,6 +584,7 @@ export const AgentToolsSchema = z
       .object({
         enabled: z.boolean().optional(),
         allowFrom: ElevatedAllowFromSchema,
+        idleResetAfter: DurationHoursOrMsSchema.optional(),
       })
       .strict()
       .optional(),
@@ -843,6 +866,7 @@ export const ToolsSchema = z
       .object({
         enabled: z.boolean().optional(),
         allowFrom: ElevatedAllowFromSchema,
+        idleResetAfter: DurationHoursOrMsSchema.optional(),
       })
       .strict()
       .optional(),
