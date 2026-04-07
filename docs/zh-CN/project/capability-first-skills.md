@@ -54,11 +54,23 @@ title: Capability-First Skills
   - `skills.check`
   - `smart-calendar.add`
   - `smart-calendar.show`
+  - `smart-calendar.edit`
+  - `smart-calendar.delete`
   - `smart-calendar.render`
+  - `smart-calendar.stats`
+  - `smart-calendar.people.add`
+  - `smart-calendar.people.show`
+  - `smart-calendar.people.note`
+  - `smart-calendar.people.list`
+  - `smart-calendar.people.update`
+  - `smart-calendar.people.delete`
+  - `document-processing.doctor`
   - `document-processing.route`
   - `document-processing.ingest`
   - `document-processing.docx-inspect`
   - `document-processing.docx-grep`
+  - `document-processing.docx-apply-plan`
+  - `document-processing.docx-compare`
   - `document-processing.ocr-pdf`
   - `steward.ingest`
   - `steward.curate`
@@ -73,6 +85,10 @@ title: Capability-First Skills
   - `capabilities`
   - `capability-summary`
   - `progressive-disclosure: "capabilities-first"`
+- 明确 destructive 的能力已开始标注 `requiresConfirmation`
+  - 如 `smart-calendar.delete`
+  - `smart-calendar.people.delete`
+  - `document-processing.docx-apply-plan`
 
 ## 已采纳约束
 
@@ -104,8 +120,8 @@ title: Capability-First Skills
 
 ### Phase 4：更强约束
 
-- 补充 capability 的确认策略、运行审计、失败归因
-- 对 destructive / external write 能力增加更严格的 schema 和确认门槛
+- 继续补充 capability 的确认策略、运行审计、失败归因
+- 把更多 destructive / external write 能力纳入更严格的 schema 和确认门槛
 
 ## 不要做的事
 

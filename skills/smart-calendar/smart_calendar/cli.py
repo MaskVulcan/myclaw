@@ -118,6 +118,20 @@ def _person_payload(person: Person) -> dict[str, object]:
     }
 
 
+def _agg_result_payload(result) -> dict[str, object]:
+    return {
+        "category": result.category,
+        "period": result.period,
+        "total": result.total,
+        "daily_counts": {day.isoformat(): count for day, count in result.daily_counts.items()},
+        "avg_per_day": result.avg_per_day,
+        "peak_weekday": result.peak_weekday,
+        "peak_count": result.peak_count,
+        "active_days": result.active_days,
+        "total_days": result.total_days,
+    }
+
+
 def _tips_payload(events: list[Event], svc: _Services) -> list[dict[str, object]]:
     tips: list[dict[str, object]] = []
     seen: set[str] = set()
@@ -364,13 +378,49 @@ def cmd_stats(args):
         # 所有类别对比
         categories = list({e.category for e in all_events})
         if not categories:
+            if getattr(args, "json", False):
+                _emit_json(
+                    {
+                        "ok": True,
+                        "calendar_home": str(svc.config.base_dir),
+                        "period_kind": period,
+                        "scope": "all",
+                        "category": None,
+                        "results": [],
+                    }
+                )
+                return
             print("📊 该时段暂无日程数据")
             return
         results = svc.aggregator.compare(all_events, categories, period)
+        if getattr(args, "json", False):
+            _emit_json(
+                {
+                    "ok": True,
+                    "calendar_home": str(svc.config.base_dir),
+                    "period_kind": period,
+                    "scope": "all",
+                    "category": None,
+                    "results": [_agg_result_payload(result) for result in results],
+                }
+            )
+            return
         svc.render.render_compare(results)
     else:
         category = args.category or "其他"
         result = svc.aggregator.summary(all_events, category, period)
+        if getattr(args, "json", False):
+            _emit_json(
+                {
+                    "ok": True,
+                    "calendar_home": str(svc.config.base_dir),
+                    "period_kind": period,
+                    "scope": "category",
+                    "category": category,
+                    "results": [_agg_result_payload(result)],
+                }
+            )
+            return
         svc.render.render_stats(result)
 
 
@@ -680,6 +730,16 @@ def _cmd_people_add(args, svc: _Services):
 
     person = svc.people.get(name)
     if person:
+        if getattr(args, "json", False):
+            _emit_json(
+                {
+                    "ok": False,
+                    "calendar_home": str(svc.config.base_dir),
+                    "created": False,
+                    "person": _person_payload(person),
+                }
+            )
+            return
         print(f"⚠️  「{name}」已存在，使用 'sc people show {name}' 查看")
         return
 
@@ -696,6 +756,16 @@ def _cmd_people_add(args, svc: _Services):
         person.collaboration_tips = [t.strip() for t in args.tips.split(",")]
 
     svc.people.add(person)
+    if getattr(args, "json", False):
+        _emit_json(
+            {
+                "ok": True,
+                "calendar_home": str(svc.config.base_dir),
+                "created": True,
+                "person": _person_payload(person),
+            }
+        )
+        return
     print(f"\n✅ 人物档案已创建: {name}")
     svc.render.render_person(person)
 
@@ -707,12 +777,22 @@ def _cmd_people_show(args, svc: _Services):
     person = svc.people.get(name)
     if not person:
         raise CalendarError(f"未找到「{name}」的档案")
-    svc.render.render_person(person)
 
     # 同时展示与此人相关的近期日程
     start = date.today() - timedelta(days=30)
     end = date.today() + timedelta(days=30)
     events = svc.query.by_participant(name, start, end)
+    if getattr(args, "json", False):
+        _emit_json(
+            {
+                "ok": True,
+                "calendar_home": str(svc.config.base_dir),
+                "person": _person_payload(person),
+                "recent_events": [_event_payload(event, svc) for event in events],
+            }
+        )
+        return
+    svc.render.render_person(person)
     if events:
         svc.render.render_schedule(events, title=f"📅 与「{name}」相关的近期日程")
 
@@ -728,14 +808,28 @@ def _cmd_people_note(args, svc: _Services):
     if args.as_personality:
         person = svc.people.add_personality(name, note_text)
         label = "性格特征"
+        note_type = "personality"
     elif args.as_tip:
         person = svc.people.add_tip(name, note_text)
         label = "协作建议"
+        note_type = "tip"
     else:
         person = svc.people.add_note(name, note_text)
         label = "备忘"
+        note_type = "note"
 
     if person:
+        if getattr(args, "json", False):
+            _emit_json(
+                {
+                    "ok": True,
+                    "calendar_home": str(svc.config.base_dir),
+                    "person": _person_payload(person),
+                    "note_type": note_type,
+                    "note": note_text,
+                }
+            )
+            return
         print(f"✅ 已为「{name}」添加{label}: {note_text}")
     else:
         raise CalendarError(f"未找到「{name}」的档案，请先用 'sc people add {name}' 创建")
@@ -751,6 +845,16 @@ def _cmd_people_list(args, svc: _Services):
             return
     else:
         persons = svc.people.list_all()
+    if getattr(args, "json", False):
+        _emit_json(
+            {
+                "ok": True,
+                "calendar_home": str(svc.config.base_dir),
+                "keyword": keyword,
+                "people": [_person_payload(person) for person in persons],
+            }
+        )
+        return
     svc.render.render_people_list(persons)
 
 
@@ -770,6 +874,16 @@ def _cmd_people_update(args, svc: _Services):
 
     person = svc.people.update(name, **kwargs)
     if person:
+        if getattr(args, "json", False):
+            _emit_json(
+                {
+                    "ok": True,
+                    "calendar_home": str(svc.config.base_dir),
+                    "updated": True,
+                    "person": _person_payload(person),
+                }
+            )
+            return
         print(f"✅ 已更新「{name}」的档案")
         svc.render.render_person(person)
     else:
@@ -780,7 +894,18 @@ def _cmd_people_delete(args, svc: _Services):
     """people delete: 删除人物档案"""
     name = _require_name(args)
 
-    if svc.people.delete(name):
+    deleted = svc.people.delete(name)
+    if getattr(args, "json", False):
+        _emit_json(
+            {
+                "ok": deleted,
+                "calendar_home": str(svc.config.base_dir),
+                "name": name,
+                "deleted": deleted,
+            }
+        )
+        return
+    if deleted:
         print(f"✅ 已删除「{name}」的档案")
     else:
         raise CalendarError(f"未找到「{name}」的档案")
@@ -847,6 +972,7 @@ def main():
     p_stats.add_argument("category", nargs="?", help="要统计的类别")
     p_stats.add_argument("--week", "-w", action="store_true", help="统计本周")
     p_stats.add_argument("--all", "-a", action="store_true", help="所有类别对比")
+    p_stats.add_argument("--json", action="store_true", help="输出结构化 JSON")
     p_stats.set_defaults(func=cmd_stats)
 
     # ── render ──
@@ -876,6 +1002,7 @@ def main():
     p_people.add_argument("--tips", help="协作建议，逗号分隔（add 时使用）")
     p_people.add_argument("--as-personality", action="store_true", help="note 操作: 标记内容为性格特征")
     p_people.add_argument("--as-tip", action="store_true", help="note 操作: 标记内容为协作建议")
+    p_people.add_argument("--json", action="store_true", help="输出结构化 JSON")
     p_people.set_defaults(func=cmd_people)
 
     # ── edit ──

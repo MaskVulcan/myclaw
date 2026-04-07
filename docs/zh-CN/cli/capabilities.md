@@ -35,6 +35,8 @@ openclaw capabilities run <id> --input-json '<json>'
 
 如果 skill 已经声明了 capability id，优先走这条路径，不要再即兴拼新的 shell 命令。
 
+如果 `describe` 结果里有 `requiresConfirmation: true`，就把它当作更高风险的写入/删除动作，执行前要走确认门槛。
+
 ## 输出结构
 
 `list` 返回：
@@ -86,11 +88,23 @@ openclaw capabilities run <id> --input-json '<json>'
 - `skills.check`
 - `smart-calendar.add`
 - `smart-calendar.show`
+- `smart-calendar.edit`
+- `smart-calendar.delete`
 - `smart-calendar.render`
+- `smart-calendar.stats`
+- `smart-calendar.people.add`
+- `smart-calendar.people.show`
+- `smart-calendar.people.note`
+- `smart-calendar.people.list`
+- `smart-calendar.people.update`
+- `smart-calendar.people.delete`
+- `document-processing.doctor`
 - `document-processing.route`
 - `document-processing.ingest`
 - `document-processing.docx-inspect`
 - `document-processing.docx-grep`
+- `document-processing.docx-apply-plan`
+- `document-processing.docx-compare`
 - `document-processing.ocr-pdf`
 - `steward.ingest`
 - `steward.curate`

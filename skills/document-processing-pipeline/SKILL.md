@@ -4,16 +4,20 @@ description: Use when you need local CLI-first document processing for PDF, Word
 lightweight-summary: |
   Use this for attached or local PDF, DOCX, PPTX, XLSX, HTML, text, or scan files. Prefer one deterministic CLI/script step over ad hoc reasoning, and only escalate to a larger pipeline when OCR, block transforms, or layout-preserving rebuilds are actually needed.
 lightweight-usage: |
+  Run `{baseDir}/scripts/docpipe doctor` when local runtime readiness is unknown.
   Start with `{baseDir}/scripts/docpipe route <path> --task ...` when the lane is unclear.
   Use `{baseDir}/scripts/docpipe docx-inspect`, `docx-grep`, `docx-apply-plan`, or `docx-compare` for focused `.docx` work.
   Use `{baseDir}/scripts/docpipe ocr-pdf <path> --output <file>` for scanned PDFs or images before extraction, summarization, or translation.
 capabilities:
+  - "document-processing.doctor"
   - "document-processing.route"
   - "document-processing.ingest"
   - "document-processing.docx-inspect"
   - "document-processing.docx-grep"
+  - "document-processing.docx-apply-plan"
+  - "document-processing.docx-compare"
   - "document-processing.ocr-pdf"
-capability-summary: Inspect document-processing capability schemas first for routing, ingest, OCR, and local DOCX inspection before loading the full workflow notes.
+capability-summary: Inspect document-processing capability schemas first for doctor, routing, ingest, OCR, and local DOCX inspection before loading the full workflow notes.
 progressive-disclosure: "capabilities-first"
 ---
 

@@ -36,7 +36,12 @@ describe("capability registry", () => {
       expect.arrayContaining([
         expect.objectContaining({ id: "skills.list", category: "skills" }),
         expect.objectContaining({ id: "smart-calendar.add", category: "calendar" }),
+        expect.objectContaining({ id: "smart-calendar.people.add", category: "calendar" }),
+        expect.objectContaining({ id: "smart-calendar.stats", category: "calendar" }),
+        expect.objectContaining({ id: "smart-calendar.edit", category: "calendar" }),
+        expect.objectContaining({ id: "document-processing.doctor", category: "documents" }),
         expect.objectContaining({ id: "document-processing.route", category: "documents" }),
+        expect.objectContaining({ id: "document-processing.docx-compare", category: "documents" }),
         expect.objectContaining({ id: "steward.ingest", category: "steward" }),
       ]),
     );
@@ -101,14 +106,24 @@ describe("capability registry", () => {
       inferCapabilityIdsFromCommandLines([
         "openclaw steward ingest --json",
         "/root/gitsource/myclaw/skills/smart-calendar/scripts/sc add 明天下午三点开会",
+        "sc edit evt_20260403_abc123 --time 16:00-17:00",
+        "sc stats 会议 --week",
+        "sc people note 张总 会议材料提前一天发",
+        "openclaw docpipe doctor",
         "bash /root/gitsource/myclaw/skills/document-processing-pipeline/scripts/docpipe route paper.pdf --task translate",
+        "openclaw docpipe docx-apply-plan contract.docx --plan edits.jsonl --output edited.docx",
         'openclaw capabilities run document-processing.ocr-pdf --input-json \'{"source":"scan.pdf"}\'',
         "git status",
       ]),
     ).toEqual([
+      "document-processing.doctor",
+      "document-processing.docx-apply-plan",
       "document-processing.ocr-pdf",
       "document-processing.route",
       "smart-calendar.add",
+      "smart-calendar.edit",
+      "smart-calendar.people.note",
+      "smart-calendar.stats",
       "steward.ingest",
     ]);
   });

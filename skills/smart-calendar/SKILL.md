@@ -7,12 +7,22 @@ lightweight-usage: |
   Add with one command when possible: `{baseDir}/scripts/sc add <original user text>`.
   Use explicit flags only for grounded fields such as `--date`, `--time`, `--with`, `--location`, `--notes`, or `--category`.
   Query with `{baseDir}/scripts/sc show`, `{baseDir}/scripts/sc show --week`, `{baseDir}/scripts/sc show --month`, or render with `{baseDir}/scripts/sc render --view day|week|month`.
+  Use `{baseDir}/scripts/sc stats ...` for category summaries and `{baseDir}/scripts/sc people ...` for collaborator dossiers.
   In chat schedule lookups, default to both a time-sorted text summary and a rendered image unless the user explicitly asks for only one.
 capabilities:
   - "smart-calendar.add"
   - "smart-calendar.show"
+  - "smart-calendar.edit"
+  - "smart-calendar.delete"
   - "smart-calendar.render"
-capability-summary: Use structured smart-calendar capabilities for grounded add/show/render flows before falling back to the full skill document.
+  - "smart-calendar.stats"
+  - "smart-calendar.people.add"
+  - "smart-calendar.people.show"
+  - "smart-calendar.people.note"
+  - "smart-calendar.people.list"
+  - "smart-calendar.people.update"
+  - "smart-calendar.people.delete"
+capability-summary: Use structured smart-calendar capabilities for grounded add/show/render, stats, and people-dossier flows before falling back to the full skill document.
 progressive-disclosure: "capabilities-first"
 metadata: { "openclaw": { "emoji": "🗓️", "requires": { "anyBins": ["python3", "python"] } } }
 ---

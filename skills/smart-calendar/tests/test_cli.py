@@ -335,6 +335,21 @@ class TestCmdEdit:
             with pytest.raises(CalendarError, match="未找到"):
                 cmd_edit(args)
 
+    def test_edit_json_output(self, svc, capsys):
+        """JSON 模式返回结构化更新结果"""
+        saved = svc.store.add(Event(
+            id="", date=date(2026, 3, 25), time="14:00",
+            title="旧标题", category="会议",
+        ))
+        args = _make_args(event_id=saved.id, title="新标题", json=True)
+        with patch("smart_calendar.cli._svc", return_value=svc):
+            cmd_edit(args)
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["ok"] is True
+        assert payload["event"]["id"] == saved.id
+        assert payload["event"]["title"] == "新标题"
+
 
 # ─── cmd_delete 测试 ─────────────────────────────────────────
 
@@ -411,6 +426,33 @@ class TestCmdStats:
         captured = capsys.readouterr()
         assert "类别对比" in captured.out
 
+    def test_stats_json_output(self, svc, capsys):
+        """JSON 模式返回结构化统计"""
+        today = date.today()
+        svc.store.add(Event(id="", date=today, time="10:00", title="会议A", category="会议"))
+        svc.store.add(Event(id="", date=today, time="14:00", title="会议B", category="会议"))
+        args = _make_args(category="会议", week=True, json=True)
+        with patch("smart_calendar.cli._svc", return_value=svc):
+            cmd_stats(args)
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["ok"] is True
+        assert payload["scope"] == "category"
+        assert payload["category"] == "会议"
+        assert payload["results"][0]["category"] == "会议"
+        assert payload["results"][0]["total"] == 2
+
+    def test_stats_json_output_empty_all(self, svc, capsys):
+        """JSON 模式在空数据时返回空结果数组"""
+        args = _make_args(all=True, week=True, json=True)
+        with patch("smart_calendar.cli._svc", return_value=svc):
+            cmd_stats(args)
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["ok"] is True
+        assert payload["scope"] == "all"
+        assert payload["results"] == []
+
 
 # ─── cmd_render 测试 ─────────────────────────────────────────
 
@@ -460,9 +502,10 @@ class TestCmdRender:
 
     def test_render_json_output(self, svc, capsys):
         """JSON 模式返回输出文件和事件摘要"""
+        today = date.today()
         svc.store.add(Event(
             id="",
-            date=date(2026, 4, 3),
+            date=today,
             time="20:15",
             title="高铁去香港",
             category="出行",
@@ -509,6 +552,7 @@ class TestCmdPeople:
             "tips": None,
             "as_personality": False,
             "as_tip": False,
+            "json": False,
         }
         defaults.update(kwargs)
         return argparse.Namespace(**defaults)
@@ -533,6 +577,39 @@ class TestCmdPeople:
         captured = capsys.readouterr()
         assert "张总" in captured.out
 
+    def test_people_add_json_output(self, svc, capsys):
+        """JSON 模式返回结构化人物档案"""
+        args = self._people_args(
+            action="add",
+            name="张总",
+            role="VP",
+            personality="果断,高效",
+            tips="准备数据",
+            json=True,
+        )
+        with patch("smart_calendar.cli._svc", return_value=svc):
+            cmd_people(args)
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["ok"] is True
+        assert payload["created"] is True
+        assert payload["person"]["name"] == "张总"
+        assert payload["person"]["personality"] == ["果断", "高效"]
+
+    def test_people_add_json_output_when_existing(self, svc, capsys):
+        """JSON 模式重复创建时返回 created=false"""
+        from smart_calendar.storage.people_store import Person
+
+        svc.people.add(Person(name="张总"))
+        args = self._people_args(action="add", name="张总", json=True)
+        with patch("smart_calendar.cli._svc", return_value=svc):
+            cmd_people(args)
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["ok"] is False
+        assert payload["created"] is False
+        assert payload["person"]["name"] == "张总"
+
     def test_people_list_empty(self, svc, capsys):
         """空人物列表"""
         args = self._people_args(action="list")
@@ -541,6 +618,19 @@ class TestCmdPeople:
 
         captured = capsys.readouterr()
         assert "暂无" in captured.out
+
+    def test_people_list_json_output(self, svc, capsys):
+        """JSON 模式返回人物列表"""
+        from smart_calendar.storage.people_store import Person
+
+        svc.people.add(Person(name="张总", role="VP"))
+        args = self._people_args(action="list", json=True)
+        with patch("smart_calendar.cli._svc", return_value=svc):
+            cmd_people(args)
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["ok"] is True
+        assert payload["people"][0]["name"] == "张总"
 
     def test_people_delete(self, svc, capsys):
         """删除人物"""
@@ -554,6 +644,20 @@ class TestCmdPeople:
 
         captured = capsys.readouterr()
         assert "已删除" in captured.out
+
+    def test_people_delete_json_output(self, svc, capsys):
+        """JSON 模式返回删除结果"""
+        from smart_calendar.storage.people_store import Person
+
+        svc.people.add(Person(name="临时"))
+        args = self._people_args(action="delete", name="临时", json=True)
+        with patch("smart_calendar.cli._svc", return_value=svc):
+            cmd_people(args)
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["ok"] is True
+        assert payload["deleted"] is True
+        assert payload["name"] == "临时"
 
     def test_people_note(self, svc, capsys):
         """追加备注"""
@@ -569,3 +673,60 @@ class TestCmdPeople:
 
         captured = capsys.readouterr()
         assert "已为" in captured.out
+
+    def test_people_note_json_output(self, svc, capsys):
+        """JSON 模式返回备注更新结果"""
+        from smart_calendar.storage.people_store import Person
+
+        svc.people.add(Person(name="测试人"))
+        args = self._people_args(
+            action="note",
+            name="测试人",
+            note_text=["这是一条备注"],
+            json=True,
+        )
+        with patch("smart_calendar.cli._svc", return_value=svc):
+            cmd_people(args)
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["ok"] is True
+        assert payload["note_type"] == "note"
+        assert "这是一条备注" in payload["person"]["notes"]
+
+    def test_people_show_json_output(self, svc, capsys):
+        """JSON 模式返回人物档案和相关日程"""
+        from smart_calendar.storage.people_store import Person
+
+        svc.people.add(Person(name="张总", role="VP"))
+        svc.store.add(
+            Event(
+                id="",
+                date=date.today(),
+                time="10:00",
+                title="对齐会议",
+                category="会议",
+                participants=["张总"],
+            )
+        )
+        args = self._people_args(action="show", name="张总", json=True)
+        with patch("smart_calendar.cli._svc", return_value=svc):
+            cmd_people(args)
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["ok"] is True
+        assert payload["person"]["name"] == "张总"
+        assert payload["recent_events"][0]["title"] == "对齐会议"
+
+    def test_people_update_json_output(self, svc, capsys):
+        """JSON 模式返回更新后人物档案"""
+        from smart_calendar.storage.people_store import Person
+
+        svc.people.add(Person(name="张总", role="VP"))
+        args = self._people_args(action="update", name="张总", role="CTO", json=True)
+        with patch("smart_calendar.cli._svc", return_value=svc):
+            cmd_people(args)
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["ok"] is True
+        assert payload["updated"] is True
+        assert payload["person"]["role"] == "CTO"

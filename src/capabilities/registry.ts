@@ -176,6 +176,32 @@ const SmartCalendarTipSchema = z
   })
   .passthrough();
 
+const SmartCalendarPersonSchema = z
+  .object({
+    name: z.string().min(1),
+    role: z.string().default(""),
+    personality: z.array(z.string()).default([]),
+    collaboration_tips: z.array(z.string()).default([]),
+    contact: z.string().default(""),
+    tags: z.array(z.string()).default([]),
+    notes: z.string().default(""),
+  })
+  .passthrough();
+
+const SmartCalendarStatsResultSchema = z
+  .object({
+    category: z.string().min(1),
+    period: z.string().min(1),
+    total: z.number().int().nonnegative(),
+    daily_counts: z.record(z.string(), z.number().int().nonnegative()),
+    avg_per_day: z.number().nonnegative(),
+    peak_weekday: z.string().min(1),
+    peak_count: z.number().nonnegative(),
+    active_days: z.number().int().nonnegative(),
+    total_days: z.number().int().positive(),
+  })
+  .passthrough();
+
 const SmartCalendarAddInputSchema = z
   .object({
     calendarHome: z.string().min(1).optional(),
@@ -193,6 +219,42 @@ const SmartCalendarAddInputSchema = z
   .refine((value) => Boolean(value.text?.trim() || value.title?.trim()), {
     message: "Provide text or title for smart-calendar.add",
   });
+
+const SmartCalendarEditInputSchema = z
+  .object({
+    calendarHome: z.string().min(1).optional(),
+    eventId: z.string().min(1),
+    title: z.string().min(1).optional(),
+    time: z.string().min(1).optional(),
+    category: z.string().min(1).optional(),
+    withPeople: z.array(z.string().min(1)).optional(),
+    location: z.string().optional(),
+    notes: z.string().optional(),
+    priority: SmartCalendarPrioritySchema.optional(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      Boolean(
+        value.title?.trim() ||
+        value.time?.trim() ||
+        value.category?.trim() ||
+        (value.withPeople?.length ?? 0) > 0 ||
+        value.location !== undefined ||
+        value.notes !== undefined ||
+        value.priority,
+      ),
+    {
+      message: "Provide at least one field to update for smart-calendar.edit",
+    },
+  );
+
+const SmartCalendarDeleteInputSchema = z
+  .object({
+    calendarHome: z.string().min(1).optional(),
+    eventId: z.string().min(1),
+  })
+  .strict();
 
 const SmartCalendarShowInputSchema = z
   .object({
@@ -218,6 +280,78 @@ const SmartCalendarRenderInputSchema = z
     range: z.string().min(1).optional(),
     date: z.string().min(1).optional(),
     withPeople: z.string().min(1).optional(),
+  })
+  .strict();
+
+const SmartCalendarStatsInputSchema = z
+  .object({
+    calendarHome: z.string().min(1).optional(),
+    category: z.string().min(1).optional(),
+    week: z.boolean().optional().default(false),
+    all: z.boolean().optional().default(false),
+  })
+  .strict();
+
+const SmartCalendarPeopleAddInputSchema = z
+  .object({
+    calendarHome: z.string().min(1).optional(),
+    name: z.string().min(1),
+    role: z.string().optional(),
+    contact: z.string().optional(),
+    tags: z.array(z.string().min(1)).optional(),
+    personality: z.array(z.string().min(1)).optional(),
+    collaborationTips: z.array(z.string().min(1)).optional(),
+  })
+  .strict();
+
+const SmartCalendarPeopleShowInputSchema = z
+  .object({
+    calendarHome: z.string().min(1).optional(),
+    name: z.string().min(1),
+  })
+  .strict();
+
+const SmartCalendarPeopleNoteInputSchema = z
+  .object({
+    calendarHome: z.string().min(1).optional(),
+    name: z.string().min(1),
+    note: z.string().min(1),
+    asPersonality: z.boolean().optional().default(false),
+    asTip: z.boolean().optional().default(false),
+  })
+  .strict()
+  .refine((value) => !(value.asPersonality && value.asTip), {
+    message: "Choose at most one note type for smart-calendar.people.note",
+  });
+
+const SmartCalendarPeopleListInputSchema = z
+  .object({
+    calendarHome: z.string().min(1).optional(),
+    keyword: z.string().min(1).optional(),
+  })
+  .strict();
+
+const SmartCalendarPeopleUpdateInputSchema = z
+  .object({
+    calendarHome: z.string().min(1).optional(),
+    name: z.string().min(1),
+    role: z.string().optional(),
+    contact: z.string().optional(),
+    tags: z.array(z.string().min(1)).optional(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      Boolean(value.role?.trim() || value.contact?.trim() || (value.tags?.length ?? 0) > 0),
+    {
+      message: "Provide at least one field to update for smart-calendar.people.update",
+    },
+  );
+
+const SmartCalendarPeopleDeleteInputSchema = z
+  .object({
+    calendarHome: z.string().min(1).optional(),
+    name: z.string().min(1),
   })
   .strict();
 
@@ -247,6 +381,23 @@ const SmartCalendarShowOutputSchema = z
   })
   .passthrough();
 
+const SmartCalendarEditOutputSchema = z
+  .object({
+    ok: z.literal(true),
+    calendar_home: z.string().min(1),
+    event: SmartCalendarEventSchema,
+  })
+  .passthrough();
+
+const SmartCalendarDeleteOutputSchema = z
+  .object({
+    ok: z.boolean(),
+    calendar_home: z.string().min(1),
+    event_id: z.string().min(1),
+    deleted: z.boolean(),
+  })
+  .passthrough();
+
 const SmartCalendarRenderOutputSchema = z
   .object({
     ok: z.literal(true),
@@ -259,6 +410,72 @@ const SmartCalendarRenderOutputSchema = z
     heatmap: z.string().optional(),
     with_people: z.string().optional(),
     events: z.array(SmartCalendarEventSchema).default([]),
+  })
+  .passthrough();
+
+const SmartCalendarStatsOutputSchema = z
+  .object({
+    ok: z.literal(true),
+    calendar_home: z.string().min(1),
+    period_kind: z.enum(["week", "month"]),
+    scope: z.enum(["category", "all"]),
+    category: z.string().nullable().optional(),
+    results: z.array(SmartCalendarStatsResultSchema).default([]),
+  })
+  .passthrough();
+
+const SmartCalendarPeopleAddOutputSchema = z
+  .object({
+    ok: z.boolean(),
+    calendar_home: z.string().min(1),
+    created: z.boolean(),
+    person: SmartCalendarPersonSchema,
+  })
+  .passthrough();
+
+const SmartCalendarPeopleShowOutputSchema = z
+  .object({
+    ok: z.literal(true),
+    calendar_home: z.string().min(1),
+    person: SmartCalendarPersonSchema,
+    recent_events: z.array(SmartCalendarEventSchema).default([]),
+  })
+  .passthrough();
+
+const SmartCalendarPeopleNoteOutputSchema = z
+  .object({
+    ok: z.literal(true),
+    calendar_home: z.string().min(1),
+    person: SmartCalendarPersonSchema,
+    note_type: z.enum(["note", "personality", "tip"]),
+    note: z.string().min(1),
+  })
+  .passthrough();
+
+const SmartCalendarPeopleListOutputSchema = z
+  .object({
+    ok: z.literal(true),
+    calendar_home: z.string().min(1),
+    keyword: z.string().nullable().optional(),
+    people: z.array(SmartCalendarPersonSchema).default([]),
+  })
+  .passthrough();
+
+const SmartCalendarPeopleUpdateOutputSchema = z
+  .object({
+    ok: z.literal(true),
+    calendar_home: z.string().min(1),
+    updated: z.literal(true),
+    person: SmartCalendarPersonSchema,
+  })
+  .passthrough();
+
+const SmartCalendarPeopleDeleteOutputSchema = z
+  .object({
+    ok: z.boolean(),
+    calendar_home: z.string().min(1),
+    name: z.string().min(1),
+    deleted: z.boolean(),
   })
   .passthrough();
 
@@ -356,6 +573,58 @@ const DocpipeDocxGrepMatchSchema = z
   })
   .passthrough();
 
+const DocpipeDocxApplyPlanInputSchema = z
+  .object({
+    source: z.string().min(1),
+    plan: z.string().min(1),
+    output: z.string().min(1),
+  })
+  .strict();
+
+const DocpipeDocxAppliedEditSchema = z
+  .object({
+    plan_index: z.number().int().positive(),
+    paragraph_id: z.string().min(1),
+    old_text: z.string(),
+    new_text: z.string(),
+    note: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+const DocpipeDocxApplyPlanOutputSchema = z
+  .object({
+    output_path: z.string().min(1),
+    applied: z.array(DocpipeDocxAppliedEditSchema),
+    count: z.number().int().nonnegative(),
+  })
+  .passthrough();
+
+const DocpipeDocxCompareInputSchema = z
+  .object({
+    original: z.string().min(1),
+    revised: z.string().min(1),
+  })
+  .strict();
+
+const DocpipeDocxCompareChangeSchema = z
+  .object({
+    op: z.string().min(1),
+    original_range: z.tuple([z.number().int().nonnegative(), z.number().int().nonnegative()]),
+    revised_range: z.tuple([z.number().int().nonnegative(), z.number().int().nonnegative()]),
+    original: z.array(z.string()),
+    revised: z.array(z.string()),
+  })
+  .passthrough();
+
+const DocpipeDocxCompareOutputSchema = z
+  .object({
+    original_paragraphs: z.number().int().nonnegative(),
+    revised_paragraphs: z.number().int().nonnegative(),
+    changes: z.array(DocpipeDocxCompareChangeSchema),
+    unified_diff: z.string(),
+  })
+  .passthrough();
+
 const DocpipeOcrInputSchema = z
   .object({
     source: z.string().min(1),
@@ -370,6 +639,15 @@ const DocpipeOcrInputSchema = z
 const DocpipeOutputPathSchema = z
   .object({
     output_path: z.string().min(1),
+  })
+  .passthrough();
+
+const DocpipeDoctorOutputSchema = z
+  .object({
+    available: z.array(z.string()),
+    missing: z.array(z.string()),
+    backends: z.record(z.string(), z.boolean()),
+    features: z.record(z.string(), z.boolean()),
   })
   .passthrough();
 
@@ -722,6 +1000,71 @@ const CAPABILITY_DESCRIPTORS = [
     },
   },
   {
+    id: "smart-calendar.edit",
+    title: "Edit Calendar Event",
+    summary: "Update one existing event in the bundled smart-calendar store.",
+    category: "calendar",
+    tags: ["calendar", "schedule", "skill", "write", "update"],
+    disclosureMode: "capabilities-first",
+    skillSummary: "Use to make a grounded update without free-form calendar file edits.",
+    sideEffects: ["filesystem-read", "filesystem-write"],
+    idempotent: false,
+    dryRunSupported: false,
+    requiresConfirmation: false,
+    underlyingCliCommand: ["openclaw", "calendar", "edit", "<eventId>", "--json"],
+    examples: [
+      `openclaw capabilities run smart-calendar.edit --input-json '{"calendarHome":"/tmp/calendar","eventId":"evt_20260403_abc123","time":"16:00-17:00"}'`,
+    ],
+    inputSchema: SmartCalendarEditInputSchema,
+    outputSchema: SmartCalendarEditOutputSchema,
+    execute: async (input) => {
+      const args = ["edit", input.eventId, "--json"];
+      appendStringFlag(args, "--title", input.title);
+      appendStringFlag(args, "--time", input.time);
+      appendStringFlag(args, "--category", input.category);
+      if ((input.withPeople?.length ?? 0) > 0) {
+        args.push("--with", input.withPeople!.join(","));
+      }
+      appendStringFlag(args, "--location", input.location);
+      appendStringFlag(args, "--notes", input.notes);
+      appendStringFlag(args, "--priority", input.priority);
+      return await runBundledSkillJsonCommand({
+        capabilityId: "smart-calendar.edit",
+        scriptPath: resolveCalendarScriptPath(),
+        args,
+        env: input.calendarHome ? { SMART_CALENDAR_HOME: input.calendarHome } : undefined,
+        schema: SmartCalendarEditOutputSchema,
+      });
+    },
+  },
+  {
+    id: "smart-calendar.delete",
+    title: "Delete Calendar Event",
+    summary: "Delete one existing event in the bundled smart-calendar store.",
+    category: "calendar",
+    tags: ["calendar", "schedule", "skill", "write", "delete"],
+    disclosureMode: "capabilities-first",
+    skillSummary: "Use to remove one event through the stable smart-calendar wrapper.",
+    sideEffects: ["filesystem-read", "filesystem-write"],
+    idempotent: false,
+    dryRunSupported: false,
+    requiresConfirmation: true,
+    underlyingCliCommand: ["openclaw", "calendar", "delete", "<eventId>", "--json"],
+    examples: [
+      `openclaw capabilities run smart-calendar.delete --input-json '{"calendarHome":"/tmp/calendar","eventId":"evt_20260403_abc123"}'`,
+    ],
+    inputSchema: SmartCalendarDeleteInputSchema,
+    outputSchema: SmartCalendarDeleteOutputSchema,
+    execute: async (input) =>
+      await runBundledSkillJsonCommand({
+        capabilityId: "smart-calendar.delete",
+        scriptPath: resolveCalendarScriptPath(),
+        args: ["delete", input.eventId, "--json"],
+        env: input.calendarHome ? { SMART_CALENDAR_HOME: input.calendarHome } : undefined,
+        schema: SmartCalendarDeleteOutputSchema,
+      }),
+  },
+  {
     id: "smart-calendar.render",
     title: "Render Calendar View",
     summary: "Render a bundled smart-calendar calendar or heatmap view to an image file.",
@@ -757,6 +1100,261 @@ const CAPABILITY_DESCRIPTORS = [
         schema: SmartCalendarRenderOutputSchema,
       });
     },
+  },
+  {
+    id: "smart-calendar.stats",
+    title: "Summarize Calendar Stats",
+    summary: "Return structured category statistics from the bundled smart-calendar store.",
+    category: "calendar",
+    tags: ["calendar", "schedule", "skill", "analytics", "read"],
+    disclosureMode: "capabilities-first",
+    skillSummary:
+      "Use to inspect weekly or monthly schedule stats without parsing terminal tables.",
+    sideEffects: ["filesystem-read"],
+    idempotent: true,
+    dryRunSupported: true,
+    requiresConfirmation: false,
+    underlyingCliCommand: ["openclaw", "calendar", "stats", "--json"],
+    examples: [
+      `openclaw capabilities run smart-calendar.stats --input-json '{"calendarHome":"/tmp/calendar","category":"会议","week":true}'`,
+    ],
+    inputSchema: SmartCalendarStatsInputSchema,
+    outputSchema: SmartCalendarStatsOutputSchema,
+    execute: async (input) => {
+      const args = ["stats"];
+      if (input.category?.trim()) {
+        args.push(input.category.trim());
+      }
+      appendBooleanFlag(args, "--week", input.week);
+      appendBooleanFlag(args, "--all", input.all);
+      args.push("--json");
+      return await runBundledSkillJsonCommand({
+        capabilityId: "smart-calendar.stats",
+        scriptPath: resolveCalendarScriptPath(),
+        args,
+        env: input.calendarHome ? { SMART_CALENDAR_HOME: input.calendarHome } : undefined,
+        schema: SmartCalendarStatsOutputSchema,
+      });
+    },
+  },
+  {
+    id: "smart-calendar.people.add",
+    title: "Create Calendar Person Dossier",
+    summary: "Create one bundled smart-calendar people dossier as structured data.",
+    category: "calendar",
+    tags: ["calendar", "people", "skill", "write"],
+    disclosureMode: "capabilities-first",
+    skillSummary: "Use to create grounded collaborator dossiers before storing meeting context.",
+    sideEffects: ["filesystem-read", "filesystem-write"],
+    idempotent: false,
+    dryRunSupported: false,
+    requiresConfirmation: false,
+    underlyingCliCommand: ["openclaw", "calendar", "people", "add", "<name>", "--json"],
+    examples: [
+      `openclaw capabilities run smart-calendar.people.add --input-json '{"calendarHome":"/tmp/calendar","name":"张总","role":"技术VP","personality":["果断"],"collaborationTips":["材料提前发"]}'`,
+    ],
+    inputSchema: SmartCalendarPeopleAddInputSchema,
+    outputSchema: SmartCalendarPeopleAddOutputSchema,
+    execute: async (input) => {
+      const args = ["people", "add", input.name];
+      appendStringFlag(args, "--role", input.role);
+      appendStringFlag(args, "--contact", input.contact);
+      if ((input.tags?.length ?? 0) > 0) {
+        args.push("--tags", input.tags!.join(","));
+      }
+      if ((input.personality?.length ?? 0) > 0) {
+        args.push("--personality", input.personality!.join(","));
+      }
+      if ((input.collaborationTips?.length ?? 0) > 0) {
+        args.push("--tips", input.collaborationTips!.join(","));
+      }
+      args.push("--json");
+      return await runBundledSkillJsonCommand({
+        capabilityId: "smart-calendar.people.add",
+        scriptPath: resolveCalendarScriptPath(),
+        args,
+        env: input.calendarHome ? { SMART_CALENDAR_HOME: input.calendarHome } : undefined,
+        schema: SmartCalendarPeopleAddOutputSchema,
+      });
+    },
+  },
+  {
+    id: "smart-calendar.people.show",
+    title: "Inspect Calendar Person Dossier",
+    summary: "Inspect one bundled smart-calendar people dossier and recent related events.",
+    category: "calendar",
+    tags: ["calendar", "people", "skill", "read"],
+    disclosureMode: "capabilities-first",
+    skillSummary: "Use to inspect collaborator context before planning or replying.",
+    sideEffects: ["filesystem-read"],
+    idempotent: true,
+    dryRunSupported: true,
+    requiresConfirmation: false,
+    underlyingCliCommand: ["openclaw", "calendar", "people", "show", "<name>", "--json"],
+    examples: [
+      `openclaw capabilities run smart-calendar.people.show --input-json '{"calendarHome":"/tmp/calendar","name":"张总"}'`,
+    ],
+    inputSchema: SmartCalendarPeopleShowInputSchema,
+    outputSchema: SmartCalendarPeopleShowOutputSchema,
+    execute: async (input) =>
+      await runBundledSkillJsonCommand({
+        capabilityId: "smart-calendar.people.show",
+        scriptPath: resolveCalendarScriptPath(),
+        args: ["people", "show", input.name, "--json"],
+        env: input.calendarHome ? { SMART_CALENDAR_HOME: input.calendarHome } : undefined,
+        schema: SmartCalendarPeopleShowOutputSchema,
+      }),
+  },
+  {
+    id: "smart-calendar.people.note",
+    title: "Append Calendar Person Note",
+    summary: "Append one note, personality trait, or collaboration tip to a dossier.",
+    category: "calendar",
+    tags: ["calendar", "people", "skill", "write", "notes"],
+    disclosureMode: "capabilities-first",
+    skillSummary: "Use to ground new collaborator knowledge in the calendar people store.",
+    sideEffects: ["filesystem-read", "filesystem-write"],
+    idempotent: false,
+    dryRunSupported: false,
+    requiresConfirmation: false,
+    underlyingCliCommand: ["openclaw", "calendar", "people", "note", "<name>", "--json"],
+    examples: [
+      `openclaw capabilities run smart-calendar.people.note --input-json '{"calendarHome":"/tmp/calendar","name":"张总","note":"会议材料提前一天发","asTip":true}'`,
+    ],
+    inputSchema: SmartCalendarPeopleNoteInputSchema,
+    outputSchema: SmartCalendarPeopleNoteOutputSchema,
+    execute: async (input) => {
+      const args = ["people", "note", input.name];
+      appendBooleanFlag(args, "--as-personality", input.asPersonality);
+      appendBooleanFlag(args, "--as-tip", input.asTip);
+      args.push("--json", input.note);
+      return await runBundledSkillJsonCommand({
+        capabilityId: "smart-calendar.people.note",
+        scriptPath: resolveCalendarScriptPath(),
+        args,
+        env: input.calendarHome ? { SMART_CALENDAR_HOME: input.calendarHome } : undefined,
+        schema: SmartCalendarPeopleNoteOutputSchema,
+      });
+    },
+  },
+  {
+    id: "smart-calendar.people.list",
+    title: "List Calendar People Dossiers",
+    summary: "List or search bundled smart-calendar people dossiers as structured JSON.",
+    category: "calendar",
+    tags: ["calendar", "people", "skill", "read", "search"],
+    disclosureMode: "capabilities-first",
+    skillSummary: "Use to discover existing collaborator dossiers before creating duplicates.",
+    sideEffects: ["filesystem-read"],
+    idempotent: true,
+    dryRunSupported: true,
+    requiresConfirmation: false,
+    underlyingCliCommand: ["openclaw", "calendar", "people", "list", "--json"],
+    examples: [
+      `openclaw capabilities run smart-calendar.people.list --input-json '{"calendarHome":"/tmp/calendar","keyword":"管理"}'`,
+    ],
+    inputSchema: SmartCalendarPeopleListInputSchema,
+    outputSchema: SmartCalendarPeopleListOutputSchema,
+    execute: async (input) => {
+      const args = ["people", "list"];
+      if (input.keyword?.trim()) {
+        args.push(input.keyword.trim());
+      }
+      args.push("--json");
+      return await runBundledSkillJsonCommand({
+        capabilityId: "smart-calendar.people.list",
+        scriptPath: resolveCalendarScriptPath(),
+        args,
+        env: input.calendarHome ? { SMART_CALENDAR_HOME: input.calendarHome } : undefined,
+        schema: SmartCalendarPeopleListOutputSchema,
+      });
+    },
+  },
+  {
+    id: "smart-calendar.people.update",
+    title: "Update Calendar Person Dossier",
+    summary: "Update explicit fields on one bundled smart-calendar people dossier.",
+    category: "calendar",
+    tags: ["calendar", "people", "skill", "write", "update"],
+    disclosureMode: "capabilities-first",
+    skillSummary: "Use for grounded role/contact/tag updates without editing markdown directly.",
+    sideEffects: ["filesystem-read", "filesystem-write"],
+    idempotent: false,
+    dryRunSupported: false,
+    requiresConfirmation: false,
+    underlyingCliCommand: ["openclaw", "calendar", "people", "update", "<name>", "--json"],
+    examples: [
+      `openclaw capabilities run smart-calendar.people.update --input-json '{"calendarHome":"/tmp/calendar","name":"张总","role":"CTO","tags":["管理层"]}'`,
+    ],
+    inputSchema: SmartCalendarPeopleUpdateInputSchema,
+    outputSchema: SmartCalendarPeopleUpdateOutputSchema,
+    execute: async (input) => {
+      const args = ["people", "update", input.name];
+      appendStringFlag(args, "--role", input.role);
+      appendStringFlag(args, "--contact", input.contact);
+      if ((input.tags?.length ?? 0) > 0) {
+        args.push("--tags", input.tags!.join(","));
+      }
+      args.push("--json");
+      return await runBundledSkillJsonCommand({
+        capabilityId: "smart-calendar.people.update",
+        scriptPath: resolveCalendarScriptPath(),
+        args,
+        env: input.calendarHome ? { SMART_CALENDAR_HOME: input.calendarHome } : undefined,
+        schema: SmartCalendarPeopleUpdateOutputSchema,
+      });
+    },
+  },
+  {
+    id: "smart-calendar.people.delete",
+    title: "Delete Calendar Person Dossier",
+    summary: "Delete one bundled smart-calendar people dossier.",
+    category: "calendar",
+    tags: ["calendar", "people", "skill", "write", "delete"],
+    disclosureMode: "capabilities-first",
+    skillSummary: "Use to remove one collaborator dossier through the stable wrapper.",
+    sideEffects: ["filesystem-read", "filesystem-write"],
+    idempotent: false,
+    dryRunSupported: false,
+    requiresConfirmation: true,
+    underlyingCliCommand: ["openclaw", "calendar", "people", "delete", "<name>", "--json"],
+    examples: [
+      `openclaw capabilities run smart-calendar.people.delete --input-json '{"calendarHome":"/tmp/calendar","name":"张总"}'`,
+    ],
+    inputSchema: SmartCalendarPeopleDeleteInputSchema,
+    outputSchema: SmartCalendarPeopleDeleteOutputSchema,
+    execute: async (input) =>
+      await runBundledSkillJsonCommand({
+        capabilityId: "smart-calendar.people.delete",
+        scriptPath: resolveCalendarScriptPath(),
+        args: ["people", "delete", input.name, "--json"],
+        env: input.calendarHome ? { SMART_CALENDAR_HOME: input.calendarHome } : undefined,
+        schema: SmartCalendarPeopleDeleteOutputSchema,
+      }),
+  },
+  {
+    id: "document-processing.doctor",
+    title: "Inspect Document Processing Runtime",
+    summary: "Return document-processing runtime readiness, features, and backend availability.",
+    category: "documents",
+    tags: ["documents", "skill", "doctor", "inspection"],
+    disclosureMode: "capabilities-first",
+    skillSummary: "Use to inspect local document-processing readiness before choosing a lane.",
+    sideEffects: ["filesystem-read"],
+    idempotent: true,
+    dryRunSupported: true,
+    requiresConfirmation: false,
+    underlyingCliCommand: ["openclaw", "docpipe", "doctor"],
+    examples: [`openclaw capabilities run document-processing.doctor --input-json '{}'`],
+    inputSchema: z.object({}).strict(),
+    outputSchema: DocpipeDoctorOutputSchema,
+    execute: async () =>
+      await runBundledSkillJsonCommand({
+        capabilityId: "document-processing.doctor",
+        scriptPath: resolveDocpipeScriptPath(),
+        args: ["doctor"],
+        schema: DocpipeDoctorOutputSchema,
+      }),
   },
   {
     id: "document-processing.route",
@@ -882,6 +1480,58 @@ const CAPABILITY_DESCRIPTORS = [
         schema: z.array(DocpipeDocxGrepMatchSchema),
       });
     },
+  },
+  {
+    id: "document-processing.docx-apply-plan",
+    title: "Apply DOCX Edit Plan",
+    summary: "Apply a deterministic paragraph-edit plan to a DOCX file.",
+    category: "documents",
+    tags: ["documents", "skill", "docx", "write"],
+    disclosureMode: "capabilities-first",
+    skillSummary: "Use when a reviewed DOCX edit plan should be applied locally and predictably.",
+    sideEffects: ["filesystem-read", "filesystem-write"],
+    idempotent: false,
+    dryRunSupported: false,
+    requiresConfirmation: true,
+    underlyingCliCommand: ["openclaw", "docpipe", "docx-apply-plan"],
+    examples: [
+      `openclaw capabilities run document-processing.docx-apply-plan --input-json '{"source":"./contract.docx","plan":"./edits.jsonl","output":"./contract.edited.docx"}'`,
+    ],
+    inputSchema: DocpipeDocxApplyPlanInputSchema,
+    outputSchema: DocpipeDocxApplyPlanOutputSchema,
+    execute: async (input) =>
+      await runBundledSkillJsonCommand({
+        capabilityId: "document-processing.docx-apply-plan",
+        scriptPath: resolveDocpipeScriptPath(),
+        args: ["docx-apply-plan", input.source, "--plan", input.plan, "--output", input.output],
+        schema: DocpipeDocxApplyPlanOutputSchema,
+      }),
+  },
+  {
+    id: "document-processing.docx-compare",
+    title: "Compare Two DOCX Files",
+    summary: "Compare original and revised DOCX files at paragraph granularity.",
+    category: "documents",
+    tags: ["documents", "skill", "docx", "diff"],
+    disclosureMode: "capabilities-first",
+    skillSummary: "Use after local DOCX edits to inspect structured paragraph-level changes.",
+    sideEffects: ["filesystem-read"],
+    idempotent: true,
+    dryRunSupported: true,
+    requiresConfirmation: false,
+    underlyingCliCommand: ["openclaw", "docpipe", "docx-compare"],
+    examples: [
+      `openclaw capabilities run document-processing.docx-compare --input-json '{"original":"./contract.docx","revised":"./contract.edited.docx"}'`,
+    ],
+    inputSchema: DocpipeDocxCompareInputSchema,
+    outputSchema: DocpipeDocxCompareOutputSchema,
+    execute: async (input) =>
+      await runBundledSkillJsonCommand({
+        capabilityId: "document-processing.docx-compare",
+        scriptPath: resolveDocpipeScriptPath(),
+        args: ["docx-compare", input.original, input.revised],
+        schema: DocpipeDocxCompareOutputSchema,
+      }),
   },
   {
     id: "document-processing.ocr-pdf",
@@ -1151,19 +1801,46 @@ const CAPABILITY_MAP = new Map(
 const OBSERVED_COMMAND_CAPABILITY_PREFIXES = [
   { prefix: "openclaw calendar add", capabilityId: "smart-calendar.add" },
   { prefix: "openclaw calendar show", capabilityId: "smart-calendar.show" },
+  { prefix: "openclaw calendar edit", capabilityId: "smart-calendar.edit" },
+  { prefix: "openclaw calendar delete", capabilityId: "smart-calendar.delete" },
   { prefix: "openclaw calendar render", capabilityId: "smart-calendar.render" },
+  { prefix: "openclaw calendar stats", capabilityId: "smart-calendar.stats" },
+  { prefix: "openclaw calendar people add", capabilityId: "smart-calendar.people.add" },
+  { prefix: "openclaw calendar people show", capabilityId: "smart-calendar.people.show" },
+  { prefix: "openclaw calendar people note", capabilityId: "smart-calendar.people.note" },
+  { prefix: "openclaw calendar people list", capabilityId: "smart-calendar.people.list" },
+  { prefix: "openclaw calendar people update", capabilityId: "smart-calendar.people.update" },
+  { prefix: "openclaw calendar people delete", capabilityId: "smart-calendar.people.delete" },
   { prefix: "sc add", capabilityId: "smart-calendar.add" },
   { prefix: "sc show", capabilityId: "smart-calendar.show" },
+  { prefix: "sc edit", capabilityId: "smart-calendar.edit" },
+  { prefix: "sc delete", capabilityId: "smart-calendar.delete" },
   { prefix: "sc render", capabilityId: "smart-calendar.render" },
+  { prefix: "sc stats", capabilityId: "smart-calendar.stats" },
+  { prefix: "sc people add", capabilityId: "smart-calendar.people.add" },
+  { prefix: "sc people show", capabilityId: "smart-calendar.people.show" },
+  { prefix: "sc people note", capabilityId: "smart-calendar.people.note" },
+  { prefix: "sc people list", capabilityId: "smart-calendar.people.list" },
+  { prefix: "sc people update", capabilityId: "smart-calendar.people.update" },
+  { prefix: "sc people delete", capabilityId: "smart-calendar.people.delete" },
+  { prefix: "openclaw docpipe doctor", capabilityId: "document-processing.doctor" },
   { prefix: "openclaw docpipe route", capabilityId: "document-processing.route" },
   { prefix: "openclaw docpipe ingest", capabilityId: "document-processing.ingest" },
   { prefix: "openclaw docpipe docx-inspect", capabilityId: "document-processing.docx-inspect" },
   { prefix: "openclaw docpipe docx-grep", capabilityId: "document-processing.docx-grep" },
+  {
+    prefix: "openclaw docpipe docx-apply-plan",
+    capabilityId: "document-processing.docx-apply-plan",
+  },
+  { prefix: "openclaw docpipe docx-compare", capabilityId: "document-processing.docx-compare" },
   { prefix: "openclaw docpipe ocr-pdf", capabilityId: "document-processing.ocr-pdf" },
+  { prefix: "docpipe doctor", capabilityId: "document-processing.doctor" },
   { prefix: "docpipe route", capabilityId: "document-processing.route" },
   { prefix: "docpipe ingest", capabilityId: "document-processing.ingest" },
   { prefix: "docpipe docx-inspect", capabilityId: "document-processing.docx-inspect" },
   { prefix: "docpipe docx-grep", capabilityId: "document-processing.docx-grep" },
+  { prefix: "docpipe docx-apply-plan", capabilityId: "document-processing.docx-apply-plan" },
+  { prefix: "docpipe docx-compare", capabilityId: "document-processing.docx-compare" },
   { prefix: "docpipe ocr-pdf", capabilityId: "document-processing.ocr-pdf" },
   { prefix: "openclaw steward ingest", capabilityId: "steward.ingest" },
   { prefix: "openclaw steward curate", capabilityId: "steward.curate" },

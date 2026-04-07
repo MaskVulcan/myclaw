@@ -39,6 +39,9 @@ openclaw capabilities run <id> --input-json '<json>'
 When a skill already advertises capability ids, prefer this flow over inventing
 new shell commands.
 
+If `describe` shows `requiresConfirmation: true`, treat it as a higher-risk
+write/delete action and gate execution accordingly.
+
 ## Output shape
 
 `list` returns:
@@ -90,11 +93,23 @@ Failures are also structured JSON with these error codes:
 - `skills.check`
 - `smart-calendar.add`
 - `smart-calendar.show`
+- `smart-calendar.edit`
+- `smart-calendar.delete`
 - `smart-calendar.render`
+- `smart-calendar.stats`
+- `smart-calendar.people.add`
+- `smart-calendar.people.show`
+- `smart-calendar.people.note`
+- `smart-calendar.people.list`
+- `smart-calendar.people.update`
+- `smart-calendar.people.delete`
+- `document-processing.doctor`
 - `document-processing.route`
 - `document-processing.ingest`
 - `document-processing.docx-inspect`
 - `document-processing.docx-grep`
+- `document-processing.docx-apply-plan`
+- `document-processing.docx-compare`
 - `document-processing.ocr-pdf`
 - `steward.ingest`
 - `steward.curate`
