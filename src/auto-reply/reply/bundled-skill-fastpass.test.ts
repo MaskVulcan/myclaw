@@ -678,6 +678,96 @@ describe("bundled skill fastpass", () => {
     }
   });
 
+  it("upgrades legacy reminder jobs to tokenized prompts on the next Weixin calendar write", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-01T09:00:00+08:00"));
+    try {
+      const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-fastpass-upgrade-"));
+      const cronStorePath = path.join(stateDir, "cron", "jobs.json");
+      await fs.mkdir(path.dirname(cronStorePath), { recursive: true });
+      await fs.writeFile(
+        cronStorePath,
+        JSON.stringify(
+          {
+            version: 1,
+            jobs: [
+              {
+                id: "job-today",
+                name: "openclaw:smart-calendar:weixin-digest:primary:wx-user-1:today-0900",
+                description: "Auto-generated Weixin smart-calendar daily digest",
+                enabled: true,
+                sessionTarget: "main",
+                wakeMode: "now",
+                sessionKey: "agent:main:openclaw-weixin:primary:direct:wx-user-1",
+                payload: { kind: "systemEvent", text: "发我今天的日程，文字总结版和日历图片都要" },
+                schedule: { kind: "cron", expr: "0 9 * * *", tz: "Asia/Shanghai", staggerMs: 0 },
+                createdAtMs: 1,
+                state: {},
+              },
+              {
+                id: "job-tomorrow",
+                name: "openclaw:smart-calendar:weixin-digest:primary:wx-user-1:tomorrow-2200",
+                description: "Auto-generated Weixin smart-calendar daily digest",
+                enabled: true,
+                sessionTarget: "main",
+                wakeMode: "now",
+                sessionKey: "agent:main:openclaw-weixin:primary:direct:wx-user-1",
+                payload: { kind: "systemEvent", text: "发我明天的日程，文字总结版和日历图片都要" },
+                schedule: { kind: "cron", expr: "0 22 * * *", tz: "Asia/Shanghai", staggerMs: 0 },
+                createdAtMs: 2,
+                state: {},
+              },
+            ],
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+
+      const execFile = vi.fn(async () => ({
+        code: 0,
+        stdout: "✅ 日程已添加",
+        stderr: "",
+      }));
+      const ctx = buildTestCtx({
+        Provider: "openclaw-weixin",
+        Surface: "openclaw-weixin",
+        OriginatingChannel: "openclaw-weixin",
+        OriginatingTo: "wx-user-1",
+        SenderId: "wx-user-1",
+        ChatType: "direct",
+        SessionKey: "agent:main:openclaw-weixin:primary:direct:wx-user-1",
+        BodyForCommands: "帮我加个日程，明天下午3点和张总开会",
+      });
+
+      await tryHandleBundledSkillFastpass(
+        { ctx },
+        {
+          execFile,
+          stateDir,
+          env: { OPENCLAW_STATE_DIR: stateDir },
+          calendarScriptPath: "/tmp/fake-sc",
+          cronStorePath,
+        },
+      );
+
+      const cronStore = JSON.parse(await fs.readFile(cronStorePath, "utf8")) as {
+        jobs?: Array<{ name?: string; payload?: { text?: string } }>;
+      };
+      expect(cronStore.jobs?.map((job) => job.name)).toEqual([
+        "openclaw:smart-calendar:weixin-digest:primary:wx-user-1:today-0900",
+        "openclaw:smart-calendar:weixin-digest:primary:wx-user-1:tomorrow-2200",
+      ]);
+      expect(cronStore.jobs?.map((job) => job.payload?.text)).toEqual([
+        "发我[[openclaw_calendar_digest_date:+0]]的日程，文字总结版和日历图片都要",
+        "发我[[openclaw_calendar_digest_date:+1]]的日程，文字总结版和日历图片都要",
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("ignores appended current-time lines when unwrapping cron reminder prompts", async () => {
     vi.useFakeTimers();
     try {
