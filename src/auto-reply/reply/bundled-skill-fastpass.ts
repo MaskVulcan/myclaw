@@ -86,6 +86,7 @@ const CURRENT_TIME_LINE_RE = /\n?Current time:[^\n]*(?:\n|$)/gi;
 const REMINDER_JOB_NAME_PREFIX = "openclaw:smart-calendar:weixin-digest";
 const REMINDER_DESCRIPTION = "Auto-generated Weixin smart-calendar daily digest";
 const REMINDER_TIMEZONE = "Asia/Shanghai";
+const REMINDER_DATE_TOKEN_RE = /\[\[openclaw_calendar_digest_date:([+-]?\d+)]]/g;
 const DATE_YEAR_RE = /(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})[日号]?/;
 const DATE_MONTH_DAY_RE = /(\d{1,2})[./月](\d{1,2})[日号]?/;
 const DATE_WEEKDAY_RE = /(?:(这|本|下|上)?(?:周|星期))([一二三四五六日天])/i;
@@ -939,8 +940,16 @@ function formatReminderDigestDate(nowMs: number, dayOffset: number): string {
   return `${parts.month}月${parts.day}日 ${weekdayMap[weekdayKey] ?? weekdayKey}`;
 }
 
+function buildReminderDigestPrompt(dayOffset: number): string {
+  return `发我[[openclaw_calendar_digest_date:${dayOffset >= 0 ? `+${dayOffset}` : dayOffset}]]的日程，文字总结版和日历图片都要`;
+}
+
 function expandCronReminderAbsoluteDate(text: string, nowMs: number): string {
   return text
+    .replace(REMINDER_DATE_TOKEN_RE, (_, rawOffset: string) => {
+      const parsedOffset = Number.parseInt(rawOffset, 10);
+      return formatReminderDigestDate(nowMs, Number.isFinite(parsedOffset) ? parsedOffset : 0);
+    })
     .replace(/今天的日程/g, `${formatReminderDigestDate(nowMs, 0)}的日程`)
     .replace(/明天的日程/g, `${formatReminderDigestDate(nowMs, 1)}的日程`);
 }
@@ -1138,15 +1147,16 @@ async function writeCalendarOwnerMetadata(
     "AccountId" | "OriginatingChannel" | "OriginatingTo" | "SenderId" | "SenderName" | "SessionKey"
   >,
 ): Promise<void> {
+  const scoped = parseWeixinDirectSessionScope(ctx.SessionKey);
   const payload = {
     channel: resolveWeixinProviderId({
       OriginatingChannel: ctx.OriginatingChannel,
       Surface: undefined,
       Provider: undefined,
     }),
-    accountId: ctx.AccountId?.trim() || "default",
-    to: ctx.OriginatingTo?.trim(),
-    senderId: ctx.SenderId?.trim(),
+    accountId: scoped?.accountId ?? ctx.AccountId?.trim() ?? "default",
+    to: scoped?.peerId ?? ctx.OriginatingTo?.trim() ?? ctx.SenderId?.trim(),
+    senderId: ctx.SenderId?.trim() ?? scoped?.peerId,
     senderName: ctx.SenderName?.trim(),
     sessionKey: ctx.SessionKey?.trim(),
     updatedAt: Date.now(),
@@ -1291,13 +1301,13 @@ function buildDailyReminderJobs(
       ...base,
       name: `${REMINDER_JOB_NAME_PREFIX}:${scope.scopeKey}:today-0900`,
       schedule: { kind: "cron", expr: "0 9 * * *", tz: REMINDER_TIMEZONE, staggerMs: 0 },
-      payload: { kind: "systemEvent", text: "发我今天的日程，文字总结版和日历图片都要" },
+      payload: { kind: "systemEvent", text: buildReminderDigestPrompt(0) },
     },
     {
       ...base,
       name: `${REMINDER_JOB_NAME_PREFIX}:${scope.scopeKey}:tomorrow-2200`,
       schedule: { kind: "cron", expr: "0 22 * * *", tz: REMINDER_TIMEZONE, staggerMs: 0 },
-      payload: { kind: "systemEvent", text: "发我明天的日程，文字总结版和日历图片都要" },
+      payload: { kind: "systemEvent", text: buildReminderDigestPrompt(1) },
     },
   ];
 }
@@ -1495,14 +1505,16 @@ export async function tryHandleBundledSkillFastpass(
     SMART_CALENDAR_HOME: calendarHome,
   };
 
-  try {
-    await writeCalendarOwnerMetadata(calendarHome, ctx);
-  } catch (error) {
-    logVerbose(
-      `bundled-skill-fastpass: failed to write calendar owner metadata for ${calendarHome}: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
+  if (isUserOriginatedWeixinDirectContext(ctx)) {
+    try {
+      await writeCalendarOwnerMetadata(calendarHome, ctx);
+    } catch (error) {
+      logVerbose(
+        `bundled-skill-fastpass: failed to write calendar owner metadata for ${calendarHome}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 
   const runCalendarCli = async (cliArgs: string[]) => {

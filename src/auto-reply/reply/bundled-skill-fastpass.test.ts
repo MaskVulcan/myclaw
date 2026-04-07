@@ -132,8 +132,8 @@ describe("bundled skill fastpass", () => {
         "openclaw:smart-calendar:weixin-digest:primary:wx-user-1:tomorrow-2200",
       ]);
       expect(cronStore.jobs?.map((job) => job.payload?.text)).toEqual([
-        "发我今天的日程，文字总结版和日历图片都要",
-        "发我明天的日程，文字总结版和日历图片都要",
+        "发我[[openclaw_calendar_digest_date:+0]]的日程，文字总结版和日历图片都要",
+        "发我[[openclaw_calendar_digest_date:+1]]的日程，文字总结版和日历图片都要",
       ]);
     } finally {
       vi.useRealTimers();
@@ -594,6 +594,85 @@ describe("bundled skill fastpass", () => {
         "--date",
         "4月2日 周四的日程，文字总结版和日历图片都要",
       ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("expands reminder date tokens for cron-event prompts without overwriting route metadata", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-04-02T09:00:00+08:00"));
+      const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-fastpass-cron-"));
+      const calendarHome = path.join(
+        stateDir,
+        "skills-data",
+        "smart-calendar",
+        "weixin-dm",
+        "15b6a1154038-im-bot",
+        "o9cq80xlx0ztnjhprklxlezdbudi%40im.wechat",
+      );
+      const metadataPath = path.join(calendarHome, ".openclaw-weixin-route.json");
+      const existingMetadata = {
+        channel: "openclaw-weixin",
+        accountId: "15b6a1154038-im-bot",
+        to: "o9cq80xlx0ztnjhprklxlezdbudi@im.wechat",
+        senderId: "o9cq80xlx0ztnjhprklxlezdbudi@im.wechat",
+        sessionKey:
+          "agent:main:openclaw-weixin:15b6a1154038-im-bot:direct:o9cq80xlx0ztnjhprklxlezdbudi@im.wechat",
+        updatedAt: 123,
+      };
+      await fs.mkdir(calendarHome, { recursive: true });
+      await fs.writeFile(metadataPath, JSON.stringify(existingMetadata, null, 2), "utf8");
+      const execFile = vi.fn(async () => ({
+        code: 0,
+        stdout: "📅 4月2日 周四安排",
+        stderr: "",
+      }));
+      const ctx = buildTestCtx({
+        Provider: "cron-event",
+        OriginatingChannel: "openclaw-weixin",
+        OriginatingTo: "heartbeat",
+        ChatType: "direct",
+        SessionKey:
+          "agent:main:openclaw-weixin:15b6a1154038-im-bot:direct:o9cq80xlx0ztnjhprklxlezdbudi@im.wechat",
+        Body: [
+          "A scheduled reminder has been triggered. The reminder content is:",
+          "",
+          "发我[[openclaw_calendar_digest_date:+0]]的日程，文字总结版",
+          "",
+          "Please relay this reminder to the user in a helpful and friendly way.",
+        ].join("\n"),
+      });
+
+      const result = await tryHandleBundledSkillFastpass(
+        { ctx },
+        {
+          execFile,
+          stateDir,
+          env: { OPENCLAW_STATE_DIR: stateDir },
+          calendarScriptPath: "/tmp/fake-sc",
+        },
+      );
+
+      expect(result).toEqual({
+        handled: true,
+        payload: {
+          text: "📅 4月2日 周四安排",
+        },
+        reason: "bundled_skill_fastpass_calendar_show",
+      });
+      expect(execFile.mock.calls[0]?.[1]).toEqual([
+        "/tmp/fake-sc",
+        "show",
+        "--date",
+        "4月2日 周四的日程，文字总结版",
+      ]);
+      const metadata = JSON.parse(await fs.readFile(metadataPath, "utf8")) as Record<
+        string,
+        unknown
+      >;
+      expect(metadata).toEqual(existingMetadata);
     } finally {
       vi.useRealTimers();
     }
