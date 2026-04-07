@@ -4,6 +4,7 @@ import { parseDurationMs } from "../../cli/parse-duration.js";
 import type { AgentElevatedAllowFromConfig, OpenClawConfig } from "../../config/config.js";
 import { normalizeStringEntries } from "../../shared/string-normalization.js";
 import type { MsgContext } from "../templating.js";
+import { normalizeElevatedLevel, type ElevatedLevel } from "../thinking.js";
 import {
   type AllowFromFormatter,
   type ExplicitElevatedAllowField,
@@ -268,4 +269,19 @@ export function resolveEffectiveElevatedIdleResetAfterMs(params: {
     return Math.min(globalMs, agentMs);
   }
   return agentMs ?? globalMs;
+}
+
+export function resolveEffectiveSessionElevatedLevel(params: {
+  cfg: OpenClawConfig;
+  sessionEntry?: { elevatedLevel?: unknown } | null;
+}): ElevatedLevel | undefined {
+  const sessionLevel = normalizeElevatedLevel(
+    typeof params.sessionEntry?.elevatedLevel === "string"
+      ? params.sessionEntry.elevatedLevel
+      : undefined,
+  );
+  if (sessionLevel) {
+    return sessionLevel;
+  }
+  return normalizeElevatedLevel(params.cfg.agents?.defaults?.elevatedDefault);
 }

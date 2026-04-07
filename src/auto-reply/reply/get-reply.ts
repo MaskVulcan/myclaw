@@ -340,6 +340,7 @@ export async function getReplyFromConfig(
     ctx: finalized,
     cfg,
     commandAuthorized,
+    touchInboundActivity: opts?.isHeartbeat !== true,
   });
   let {
     sessionCtx,

@@ -38,7 +38,10 @@ import { resolveEffectiveResetTargetSessionKey } from "./acp-reset-target.js";
 import { resolveConversationBindingContextFromMessage } from "./conversation-binding-input.js";
 import { normalizeInboundTextNewlines } from "./inbound-text.js";
 import { stripMentions, stripStructuralPrefixes } from "./mentions.js";
-import { resolveEffectiveElevatedIdleResetAfterMs } from "./reply-elevated.js";
+import {
+  resolveEffectiveElevatedIdleResetAfterMs,
+  resolveEffectiveSessionElevatedLevel,
+} from "./reply-elevated.js";
 import {
   maybeRetireLegacyMainDeliveryRoute,
   resolveLastChannelRaw,
@@ -185,8 +188,10 @@ export async function initSessionState(params: {
   ctx: MsgContext;
   cfg: OpenClawConfig;
   commandAuthorized: boolean;
+  touchInboundActivity?: boolean;
 }): Promise<SessionInitResult> {
   const { ctx, cfg, commandAuthorized } = params;
+  const touchInboundActivity = params.touchInboundActivity !== false;
   const conversationBindingContext = resolveSessionConversationBindingContext(cfg, ctx);
   // Native slash commands (Telegram/Discord/Slack) are delivered on a separate
   // "slash session" key, but should mutate the target chat session.
@@ -355,12 +360,16 @@ export async function initSessionState(params: {
   const now = Date.now();
   const elevatedIdleResetAfterMs = resolveEffectiveElevatedIdleResetAfterMs({ cfg, agentId });
   const storedEntry = sessionStore[sessionKey];
+  const effectiveStoredElevatedLevel = resolveEffectiveSessionElevatedLevel({
+    cfg,
+    sessionEntry: storedEntry,
+  });
   const lastInboundAtForElevated =
     storedEntry?.lastInboundAt ?? storedEntry?.updatedAt ?? Number.NEGATIVE_INFINITY;
   const shouldResetElevatedOnIdle = Boolean(
     storedEntry &&
-    storedEntry.elevatedLevel &&
-    storedEntry.elevatedLevel !== "off" &&
+    effectiveStoredElevatedLevel &&
+    effectiveStoredElevatedLevel !== "off" &&
     elevatedIdleResetAfterMs &&
     now - lastInboundAtForElevated >= elevatedIdleResetAfterMs,
   );
@@ -486,7 +495,7 @@ export async function initSessionState(params: {
     ...baseEntry,
     sessionId,
     updatedAt: Date.now(),
-    lastInboundAt: now,
+    ...(touchInboundActivity ? { lastInboundAt: now } : {}),
     systemSent,
     abortedLastRun,
     // Persist previously stored thinking/verbose levels when present.

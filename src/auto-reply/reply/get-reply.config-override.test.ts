@@ -118,4 +118,14 @@ describe("getReplyFromConfig configOverride", () => {
       }),
     );
   });
+
+  it("does not touch inbound activity for heartbeat runs", async () => {
+    await getReplyFromConfig(buildCtx(), { isHeartbeat: true }, {});
+
+    expect(mocks.initSessionState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        touchInboundActivity: false,
+      }),
+    );
+  });
 });
