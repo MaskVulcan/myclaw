@@ -1,0 +1,230 @@
+// Sanitized backup of a working local OpenClaw runtime config.
+// Restore flow:
+// 1. Copy to ~/.openclaw/openclaw.json
+// 2. Replace placeholder values such as <your-weixin-direct-user-id>
+// 3. Ensure referenced env vars exist on the target machine
+{
+  models: {
+    mode: "merge",
+    providers: {
+      "codex-vip": {
+        baseUrl: "https://<your-openai-compatible-endpoint>/v1",
+        apiKey: {
+          source: "env",
+          provider: "default",
+          id: "OPENAI_API_KEY",
+        },
+        auth: "api-key",
+        api: "openai-responses",
+        models: [
+          {
+            id: "gpt-5.4",
+            name: "GPT-5.4",
+            api: "openai-responses",
+            reasoning: true,
+            input: ["text", "image"],
+            cost: {
+              input: 1.75,
+              output: 14,
+              cacheRead: 0.175,
+              cacheWrite: 0,
+            },
+            contextWindow: 200000,
+            maxTokens: 8192,
+          },
+          {
+            id: "gpt-5.2",
+            name: "GPT-5.2",
+            api: "openai-responses",
+            reasoning: false,
+            input: ["text"],
+            cost: {
+              input: 1.75,
+              output: 14,
+              cacheRead: 0.175,
+              cacheWrite: 0,
+            },
+            contextWindow: 40000,
+            maxTokens: 8192,
+          },
+        ],
+      },
+      kimi: {
+        baseUrl: "https://api.kimi.com/coding/",
+        apiKey: {
+          source: "env",
+          provider: "default",
+          id: "ANTHROPIC_API_KEY",
+        },
+        api: "anthropic-messages",
+        headers: {
+          "User-Agent": "claude-code/0.1.0",
+        },
+        models: [
+          {
+            id: "kimi-code",
+            name: "Kimi Code",
+            reasoning: true,
+            input: ["text", "image"],
+            cost: {
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+            },
+            contextWindow: 262144,
+            maxTokens: 32768,
+          },
+          {
+            id: "k2p5",
+            name: "Kimi Code (legacy model id)",
+            reasoning: true,
+            input: ["text", "image"],
+            cost: {
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+            },
+            contextWindow: 262144,
+            maxTokens: 32768,
+          },
+        ],
+      },
+    },
+  },
+  agents: {
+    defaults: {
+      model: {
+        primary: "codex-vip/gpt-5.4",
+        fallbacks: ["kimi-cli/k2p5"],
+      },
+      models: {
+        "codex-vip/gpt-5.4": {
+          params: {
+            fastMode: true,
+          },
+        },
+        "codex-vip/gpt-5.2": {
+          alias: "GPT-5.2 Fast",
+        },
+        "kimi-cli/k2p5": {
+          alias: "Kimi K2.5 CLI",
+        },
+      },
+      cliBackends: {
+        "kimi-cli": {
+          command: "/usr/local/bin/kimi",
+        },
+      },
+      multiStageRouting: {
+        enabled: true,
+        fastPass: {
+          model: "kimi-cli/k2p5",
+          thinkLevel: "low",
+          fastMode: true,
+          systemPromptMode: "none",
+          skillsPromptMode: "off",
+          bootstrapContextMode: "lightweight",
+          disableTools: true,
+        },
+        escalationPass: {
+          model: "codex-vip/gpt-5.4",
+          thinkLevel: "xhigh",
+          fastMode: false,
+          systemPromptMode: "full",
+          skillsPromptMode: "auto",
+          bootstrapContextMode: "full",
+          disableTools: false,
+        },
+      },
+      workspace: "/root/.openclaw/workspace",
+      bootstrapMaxChars: 6000,
+      sandbox: {
+        mode: "off",
+      },
+      compaction: {
+        mode: "safeguard",
+      },
+      maxConcurrent: 4,
+      elevatedDefault: "off",
+      subagents: {
+        maxConcurrent: 8,
+      },
+    },
+  },
+  tools: {
+    profile: "coding",
+    elevated: {
+      enabled: true,
+      idleResetAfter: "2h",
+      allowFrom: {
+        "openclaw-weixin": ["from:<your-weixin-direct-user-id>"],
+      },
+    },
+  },
+  messages: {
+    ackReactionScope: "group-mentions",
+  },
+  commands: {
+    native: "auto",
+    nativeSkills: "auto",
+    restart: true,
+    ownerDisplay: "raw",
+  },
+  session: {
+    dmScope: "per-account-channel-peer",
+  },
+  channels: {
+    "openclaw-weixin": {
+      dmHistoryLimit: 8,
+      accounts: {},
+    },
+  },
+  gateway: {
+    port: 29173,
+    mode: "local",
+    bind: "loopback",
+    auth: {
+      mode: "token",
+      token: {
+        source: "env",
+        provider: "default",
+        id: "OPENCLAW_GATEWAY_TOKEN",
+      },
+    },
+    tailscale: {
+      mode: "off",
+      resetOnExit: false,
+    },
+    tls: {
+      enabled: true,
+    },
+    http: {
+      endpoints: {
+        chatCompletions: {
+          enabled: true,
+        },
+        responses: {
+          enabled: true,
+        },
+      },
+    },
+  },
+  plugins: {
+    allow: ["openclaw-weixin", "anthropic", "kimi", "moonshot"],
+    entries: {
+      "openclaw-weixin": {
+        enabled: true,
+        config: {},
+      },
+    },
+    installs: {
+      "openclaw-weixin": {
+        source: "npm",
+        spec: "@tencent-weixin/openclaw-weixin",
+        version: "2.1.1",
+      },
+    },
+  },
+}
