@@ -626,3 +626,69 @@ or less aligned with the current `myclaw` direction.
   - iOS app / test target compilation also remains unverified locally in this
     Linux worktree because the required Apple toolchain (`swift`, `xcodegen`,
     `xcodebuild`) is unavailable here.
+
+## 2026-04-09 Campaign PR-09
+
+- Campaign item:
+  `PR-09: iOS Exec Approval Prompt + Bridge`
+- Worktree:
+  `/root/gitsource/.worktrees/myclaw-pr09-ios-exec-approval`
+- Branch:
+  `sync/pr09-ios-exec-approval`
+- Primary upstream source:
+  `28955a36e7`
+  `feat(ios): add exec approval notification flow`
+- Additional upstream source reviewed but intentionally not fully ported here:
+  `6f566585d8`
+  `fix(ios): harden watch exec approval review`
+
+### Landed In This PR
+
+- Added app-side exec-approval notification bridge primitives:
+  - new `apps/ios/Sources/Push/ExecApprovalNotificationBridge.swift`
+    for requested/resolved push parsing and local notification cleanup
+  - expanded `apps/ios/Sources/Services/NotificationService.swift`
+    so iOS notification code can inspect delivered notifications and remove
+    pending/delivered approval prompts by identifier
+- Added a local exec-approval review surface in
+  `apps/ios/Sources/Gateway/ExecApprovalPromptDialog.swift`
+  and mounted it from `RootCanvas` so approval requests opened from
+  notifications can be reviewed in-app without dropping the operator into a
+  generic error state.
+- Updated `apps/ios/Sources/Model/NodeAppModel.swift` to:
+  - keep pending exec-approval prompt state plus resolve/error UX state
+  - fetch approval details through `exec.approval.get`
+  - resolve user decisions through `exec.approval.resolve`
+  - classify stale and allow-always-unavailable gateway errors using
+    structured gateway error metadata
+  - recover an operator connection on demand before approval fetch/resolve
+  - clear matching local UI state when resolved cleanup pushes arrive
+- Updated `apps/ios/Sources/OpenClawApp.swift` so APNs handling and
+  notification taps now:
+  - surface exec-approval notifications as banners
+  - route default notification taps into the new approval prompt flow
+  - process resolved cleanup pushes even before the `NodeAppModel` is attached
+  - queue prompt routing until the app model becomes available during startup
+- Added focused regression coverage for the bridge and prompt-state plumbing in:
+  - `apps/ios/Tests/ExecApprovalNotificationBridgeTests.swift`
+  - `apps/ios/Tests/NodeAppModelInvokeTests.swift`
+
+### Intentionally Deferred
+
+- The broader gateway-side APNs delivery train around exec-approval push
+  generation was not ported in this PR. This branch only lands the iOS
+  app-side prompt / fetch / resolve / cleanup path that can work with existing
+  notification payloads once they are delivered.
+- The watch-specific exec-approval recovery / review train from
+  `6f566585d8` was also deferred. `myclaw` already ships custom watch prompt
+  handling, and folding in the full upstream watch path here would turn this
+  into a wider mobile feature merge rather than a narrow prompt-flow PR.
+
+### Validation On This Branch
+
+- Passed:
+  - `git diff --check`
+- Validation gap:
+  - iOS / Swift target compilation and tests remain unverified in this Linux
+    worktree because the required Apple toolchain is unavailable:
+    `swift`, `xcodebuild`, and related tooling are not installed.
