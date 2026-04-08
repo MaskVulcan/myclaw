@@ -8,14 +8,20 @@ import { captureEnv } from "../test-utils/env.js";
 import {
   maybeRemoveDeprecatedCliAuthProfiles,
   maybeRepairLegacyOAuthProfileIds,
+  noteLegacyCodexProviderOverride,
 } from "./doctor-auth.js";
 import type { DoctorPrompter } from "./doctor-prompter.js";
 import type { DoctorRepairMode } from "./doctor-repair-mode.js";
 
 const resolvePluginProvidersMock = vi.fn<() => ProviderPlugin[]>(() => []);
+const noteMock = vi.fn();
 
 vi.mock("../plugins/providers.runtime.js", () => ({
   resolvePluginProviders: () => resolvePluginProvidersMock(),
+}));
+
+vi.mock("../terminal/note.js", () => ({
+  note: (...args: unknown[]) => noteMock(...args),
 }));
 
 let envSnapshot: ReturnType<typeof captureEnv>;
@@ -48,6 +54,7 @@ beforeEach(() => {
   process.env.PI_CODING_AGENT_DIR = tempAgentDir;
   resolvePluginProvidersMock.mockReset();
   resolvePluginProvidersMock.mockReturnValue([]);
+  noteMock.mockReset();
 });
 
 afterEach(() => {
@@ -209,5 +216,54 @@ describe("maybeRepairLegacyOAuthProfileIds", () => {
       email: "user@example.com",
     });
     expect(next.auth?.order?.anthropic).toEqual(["anthropic:user@example.com"]);
+  });
+});
+
+describe("noteLegacyCodexProviderOverride", () => {
+  it("warns when a legacy Codex transport override shadows OAuth", () => {
+    noteLegacyCodexProviderOverride({
+      auth: {
+        profiles: {
+          "openai-codex:default": { provider: "openai-codex", mode: "oauth" },
+        },
+      },
+      models: {
+        providers: {
+          "openai-codex": {
+            api: "openai-responses",
+            baseUrl: "https://api.openai.com/v1/",
+          },
+        },
+      },
+    } as OpenClawConfig);
+
+    expect(noteMock).toHaveBeenCalledWith(
+      expect.stringContaining("legacy transport override"),
+      "Codex OAuth",
+    );
+    expect(noteMock).toHaveBeenCalledWith(
+      expect.stringContaining("models.providers.openai-codex.api=openai-responses"),
+      "Codex OAuth",
+    );
+  });
+
+  it("does not warn when the Codex override points at a custom proxy", () => {
+    noteLegacyCodexProviderOverride({
+      auth: {
+        profiles: {
+          "openai-codex:default": { provider: "openai-codex", mode: "oauth" },
+        },
+      },
+      models: {
+        providers: {
+          "openai-codex": {
+            api: "openai-responses",
+            baseUrl: "https://proxy.example/v1",
+          },
+        },
+      },
+    } as OpenClawConfig);
+
+    expect(noteMock).not.toHaveBeenCalled();
   });
 });

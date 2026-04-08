@@ -484,3 +484,46 @@ or less aligned with the current `myclaw` direction.
     repo, so the packaging smoke itself was validated via the prepared-artifact
     path after a successful `tsdown` build, runtime postbuild, and Control UI
     build.
+
+## 2026-04-09 Campaign PR-06
+
+- Campaign item:
+  `PR-06: Doctor Auth Warnings`
+- Worktree:
+  `/root/gitsource/.worktrees/myclaw-pr06-doctor-auth`
+- Branch:
+  `sync/pr06-doctor-auth`
+- Primary upstream source:
+  `5050017543`
+  `fix(doctor): warn when stale Codex overrides shadow OAuth`
+
+### Landed In This PR
+
+- Ported a narrow Codex OAuth doctor warning into
+  `src/commands/doctor-auth.ts` that detects the stale override shape:
+  - `models.providers.openai-codex.api` still pinned to legacy OpenAI transport
+    APIs (`openai-responses` / `openai-completions`)
+  - base URL is absent or still points at the default OpenAI endpoint
+  - Codex OAuth is configured in either config or stored auth profiles
+- The warning is intentionally narrow:
+  - custom proxy / gateway base URLs do not trigger it
+  - header-only or other non-transport overrides do not trigger it
+  - it only warns when the stale override can actually shadow the built-in
+    Codex OAuth provider path
+- Wired the warning into the existing doctor auth flow in
+  `src/flows/doctor-health-contributions.ts`
+  immediately after auth profile health checks so operators see it in the same
+  auth remediation pass.
+
+### Intentionally Deferred
+
+- Upstream changes to doctor E2E harness / fast-path mocks around memory health
+  were not ported because the current `myclaw` test harness already covers this
+  auth warning path without those compatibility shims.
+- No broader doctor flow refactor or auth profile storage rewrite was mixed into
+  this PR; only the stale Codex override detection and warning path was landed.
+
+### Validation On This Branch
+
+- Passed:
+  - `node node_modules/vitest/vitest.mjs run src/commands/doctor-auth.deprecated-cli-profiles.test.ts src/commands/doctor-auth.hints.test.ts src/commands/doctor.warns-state-directory-is-missing.e2e.test.ts --reporter=dot`

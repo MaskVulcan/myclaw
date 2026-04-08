@@ -2,7 +2,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import { createDoctorRuntime, mockDoctorConfigSnapshot } from "./doctor.e2e-harness.js";
+import {
+  createDoctorRuntime,
+  ensureAuthProfileStore,
+  mockDoctorConfigSnapshot,
+} from "./doctor.e2e-harness.js";
 import { loadDoctorCommandForTest, terminalNoteMock } from "./doctor.note-test-helpers.js";
 import "./doctor.fast-path-mocks.js";
 
@@ -61,6 +65,44 @@ describe("doctor command", () => {
         title === "OpenCode" &&
         String(message).includes("models.providers.opencode") &&
         String(message).includes("models.providers.opencode-go"),
+    );
+    expect(warned).toBe(true);
+  });
+
+  it("warns when stale Codex transport overrides shadow OAuth", async () => {
+    ensureAuthProfileStore.mockReturnValue({
+      version: 1,
+      profiles: {
+        "openai-codex:default": {
+          type: "oauth",
+          provider: "openai-codex",
+          access: "token-a",
+          refresh: "token-r",
+          expires: Date.now() + 60_000,
+        },
+      },
+    });
+    mockDoctorConfigSnapshot({
+      config: {
+        models: {
+          providers: {
+            "openai-codex": {
+              api: "openai-responses",
+              baseUrl: "https://api.openai.com/v1",
+            },
+          },
+        },
+      },
+    });
+
+    await doctorCommand(createDoctorRuntime(), {
+      nonInteractive: true,
+      workspaceSuggestions: false,
+    });
+
+    const warned = terminalNoteMock.mock.calls.some(
+      ([message, title]) =>
+        title === "Codex OAuth" && String(message).includes("legacy transport override"),
     );
     expect(warned).toBe(true);
   });
