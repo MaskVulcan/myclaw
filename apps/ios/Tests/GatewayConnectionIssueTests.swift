@@ -1,3 +1,4 @@
+import OpenClawKit
 import Testing
 @testable import OpenClaw
 
@@ -29,5 +30,32 @@ import Testing
     @Test func returnsNoneForBenignStatus() {
         let issue = GatewayConnectionIssue.detect(from: "Connected")
         #expect(issue == .none)
+    }
+
+    @Test func detectsStructuredPairingProblem() {
+        let issue = GatewayConnectionIssue.detect(
+            problem: GatewayConnectionProblem(
+                kind: .pairingScopeUpgradeRequired,
+                owner: .gateway,
+                title: "Additional permissions required",
+                message: "Approve the new scopes on the gateway.",
+                requestId: "req-123",
+                retryable: false,
+                pauseReconnect: true))
+
+        #expect(issue == .pairingRequired(requestId: "req-123"))
+    }
+
+    @Test func detectsStructuredNetworkProblem() {
+        let issue = GatewayConnectionIssue.detect(
+            problem: GatewayConnectionProblem(
+                kind: .timeout,
+                owner: .network,
+                title: "Connection timed out",
+                message: "The gateway did not respond in time.",
+                retryable: true,
+                pauseReconnect: false))
+
+        #expect(issue == .network)
     }
 }

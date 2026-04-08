@@ -565,3 +565,64 @@ or less aligned with the current `myclaw` direction.
 
 - Passed:
   - `node node_modules/vitest/vitest.mjs run src/daemon/systemd.test.ts --reporter=dot`
+
+## 2026-04-09 Campaign PR-08
+
+- Campaign item:
+  `PR-08: iOS Gateway Problem UX`
+- Worktree:
+  `/root/gitsource/.worktrees/myclaw-pr08-ios-gateway-problem-ux`
+- Branch:
+  `sync/pr08-ios-gateway-problem-ux`
+- Primary upstream source:
+  `6380c872bc`
+  `feat(ios): improve gateway connection error ux`
+
+### Landed In This PR
+
+- Ported the upstream structured gateway-problem model into
+  `apps/shared/OpenClawKit`:
+  - `GatewayConnectAuthError` now preserves connect-auth metadata such as
+    `requestId`, `reason`, `owner`, title/message overrides, action command,
+    docs URL, and retry/pause hints.
+  - `GatewayChannel` now forwards those fields out of gateway connect failures.
+  - new `GatewayConnectionProblem` and `GatewayConnectionProblemMapper` map auth,
+    response, and transport failures into typed iOS-facing connection problems.
+- Updated `apps/ios/Sources/Model/NodeAppModel.swift` to keep the last
+  structured gateway problem, pause reconnect churn when the problem explicitly
+  requires operator action, preserve pairing/request-id context across cancel
+  disconnects, and expose `gatewayDisplayStatusText` for UI surfaces.
+- Updated the iOS app's problem consumers to use the structured model instead of
+  string parsing only:
+  - `GatewayConnectionIssue.detect(problem:)`
+  - `GatewayStatusBuilder`
+  - `StatusActivityBuilder`
+  - onboarding / quick-setup / settings / root canvas / root tabs problem
+    presentation
+  - added reusable `GatewayProblemBanner` and `GatewayProblemDetailsSheet`
+    surfaces for actionable problem display
+- Added focused regression coverage for the new mapping and status behavior in:
+  - `apps/shared/OpenClawKit/Tests/OpenClawKitTests/GatewayErrorsTests.swift`
+  - `apps/ios/Tests/GatewayConnectionIssueTests.swift`
+  - `apps/ios/Tests/GatewayStatusBuilderTests.swift`
+
+### Intentionally Deferred
+
+- `CHANGELOG.md` was not updated in this campaign PR because `myclaw` does not
+  mirror upstream changelog maintenance commit-for-commit; only code and local
+  sync docs were updated here.
+- This branch did not try to pull in any later iOS approval / watch-bridge
+  trains from upstream `NodeAppModel.swift`; only the gateway-problem UX and
+  reconnect behavior from the reviewed commit were ported.
+
+### Validation On This Branch
+
+- Passed:
+  - `git diff --check`
+- Validation gap:
+  - `swift test --package-path apps/shared/OpenClawKit --filter GatewayErrorsTests`
+    could not run in this environment because the `swift` toolchain is missing
+    (`/bin/bash: swift: command not found`).
+  - iOS app / test target compilation also remains unverified locally in this
+    Linux worktree because the required Apple toolchain (`swift`, `xcodegen`,
+    `xcodebuild`) is unavailable here.
