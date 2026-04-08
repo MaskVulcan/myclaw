@@ -69,8 +69,12 @@ describe("isDangerousHostEnvVarName", () => {
   it("matches dangerous keys and prefixes case-insensitively", () => {
     expect(isDangerousHostEnvVarName("BASH_ENV")).toBe(true);
     expect(isDangerousHostEnvVarName("bash_env")).toBe(true);
+    expect(isDangerousHostEnvVarName("BROWSER")).toBe(true);
+    expect(isDangerousHostEnvVarName("git_editor")).toBe(true);
     expect(isDangerousHostEnvVarName("SHELL")).toBe(true);
     expect(isDangerousHostEnvVarName("GIT_EXTERNAL_DIFF")).toBe(true);
+    expect(isDangerousHostEnvVarName("GIT_DIR")).toBe(true);
+    expect(isDangerousHostEnvVarName("git_work_tree")).toBe(true);
     expect(isDangerousHostEnvVarName("git_exec_path")).toBe(true);
     expect(isDangerousHostEnvVarName("GIT_TEMPLATE_DIR")).toBe(true);
     expect(isDangerousHostEnvVarName("git_template_dir")).toBe(true);
@@ -95,12 +99,15 @@ describe("isDangerousHostEnvVarName", () => {
     expect(isDangerousHostEnvVarName("glibc_tunables")).toBe(true);
     expect(isDangerousHostEnvVarName("MAVEN_OPTS")).toBe(true);
     expect(isDangerousHostEnvVarName("maven_opts")).toBe(true);
+    expect(isDangerousHostEnvVarName("MAKEFLAGS")).toBe(true);
+    expect(isDangerousHostEnvVarName("mflags")).toBe(true);
     expect(isDangerousHostEnvVarName("SBT_OPTS")).toBe(true);
     expect(isDangerousHostEnvVarName("sbt_opts")).toBe(true);
     expect(isDangerousHostEnvVarName("GRADLE_OPTS")).toBe(true);
     expect(isDangerousHostEnvVarName("gradle_opts")).toBe(true);
     expect(isDangerousHostEnvVarName("ANT_OPTS")).toBe(true);
     expect(isDangerousHostEnvVarName("ant_opts")).toBe(true);
+    expect(isDangerousHostEnvVarName("HGRCPATH")).toBe(true);
     expect(isDangerousHostEnvVarName("AWS_CONFIG_FILE")).toBe(false);
     expect(isDangerousHostEnvVarName("aws_config_file")).toBe(false);
     expect(isDangerousHostEnvVarName("PATH")).toBe(false);
@@ -116,7 +123,10 @@ describe("sanitizeHostExecEnv", () => {
         PATH: "/usr/bin:/bin",
         BASH_ENV: "/tmp/pwn.sh",
         GIT_EXTERNAL_DIFF: "/tmp/pwn.sh",
+        GIT_DIR: "/tmp/evil-git-dir",
         GIT_TEMPLATE_DIR: "/tmp/git-template",
+        HGRCPATH: "/tmp/evil-hgrc",
+        MAKEFLAGS: "-f /tmp/evil.mk",
         AWS_CONFIG_FILE: "/tmp/aws-config",
         LD_PRELOAD: "/tmp/pwn.so",
         OK: "1",
@@ -155,6 +165,12 @@ describe("sanitizeHostExecEnv", () => {
         GOFLAGS: "-mod=mod",
         PHPRC: "/tmp/evil-php.ini",
         XDG_CONFIG_HOME: "/tmp/evil-config",
+        HTTP_PROXY: "http://127.0.0.1:8080",
+        NODE_EXTRA_CA_CERTS: "/tmp/evil-ca.pem",
+        DOCKER_HOST: "tcp://127.0.0.1:2375",
+        PIP_INDEX_URL: "https://evil.example/simple",
+        CARGO_HOME: "/tmp/evil-cargo-home",
+        KUBECONFIG: "/tmp/evil-kubeconfig",
         SAFE: "ok",
       },
     });
@@ -175,6 +191,12 @@ describe("sanitizeHostExecEnv", () => {
     expect(env.GOFLAGS).toBeUndefined();
     expect(env.PHPRC).toBeUndefined();
     expect(env.XDG_CONFIG_HOME).toBeUndefined();
+    expect(env.HTTP_PROXY).toBeUndefined();
+    expect(env.NODE_EXTRA_CA_CERTS).toBeUndefined();
+    expect(env.DOCKER_HOST).toBeUndefined();
+    expect(env.PIP_INDEX_URL).toBeUndefined();
+    expect(env.CARGO_HOME).toBeUndefined();
+    expect(env.KUBECONFIG).toBeUndefined();
     expect(env.SAFE).toBe("ok");
     expect(env.HOME).toBe("/tmp/trusted-home");
     expect(env.ZDOTDIR).toBe("/tmp/trusted-zdotdir");
@@ -266,6 +288,12 @@ describe("isDangerousHostEnvOverrideVarName", () => {
     expect(isDangerousHostEnvOverrideVarName("classpath")).toBe(true);
     expect(isDangerousHostEnvOverrideVarName("GOFLAGS")).toBe(true);
     expect(isDangerousHostEnvOverrideVarName("goflags")).toBe(true);
+    expect(isDangerousHostEnvOverrideVarName("HTTP_PROXY")).toBe(true);
+    expect(isDangerousHostEnvOverrideVarName("node_extra_ca_certs")).toBe(true);
+    expect(isDangerousHostEnvOverrideVarName("DOCKER_HOST")).toBe(true);
+    expect(isDangerousHostEnvOverrideVarName("pip_index_url")).toBe(true);
+    expect(isDangerousHostEnvOverrideVarName("CARGO_HOME")).toBe(true);
+    expect(isDangerousHostEnvOverrideVarName("kubeconfig")).toBe(true);
     expect(isDangerousHostEnvOverrideVarName("CORECLR_PROFILER_PATH")).toBe(true);
     expect(isDangerousHostEnvOverrideVarName("coreclr_profiler_path")).toBe(true);
     expect(isDangerousHostEnvOverrideVarName("XDG_CONFIG_HOME")).toBe(true);

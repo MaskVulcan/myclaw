@@ -1,8 +1,8 @@
+import { isDeepStrictEqual } from "node:util";
 import { Type } from "@sinclair/typebox";
 import { isRestartEnabled } from "../../config/commands.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import { parseConfigJson5, resolveConfigSnapshotHash } from "../../config/io.js";
-import { applyLegacyMigrations } from "../../config/legacy.js";
 import { applyMergePatch } from "../../config/merge-patch.js";
 import { extractDeliveryInfo } from "../../config/sessions.js";
 import {
@@ -19,7 +19,14 @@ import { callGatewayTool, readGatewayCallOptions } from "./gateway.js";
 const log = createSubsystemLogger("gateway-tool");
 
 const DEFAULT_UPDATE_TIMEOUT_MS = 20 * 60_000;
-const PROTECTED_GATEWAY_CONFIG_PATHS = ["tools.exec.ask", "tools.exec.security"] as const;
+const PROTECTED_GATEWAY_CONFIG_PATHS = [
+  "tools.exec.ask",
+  "tools.exec.security",
+  "tools.exec.safeBins",
+  "tools.exec.safeBinProfiles",
+  "tools.exec.safeBinTrustedDirs",
+  "tools.exec.strictInlineEval",
+] as const;
 
 function resolveBaseHashFromSnapshot(snapshot: unknown): string | undefined {
   if (!snapshot || typeof snapshot !== "object") {
@@ -63,7 +70,7 @@ function parseGatewayConfigMutationRaw(
   return parsedRes.parsed;
 }
 
-function getValueAtPath(config: Record<string, unknown>, path: string): unknown {
+function getValueAtCanonicalPath(config: Record<string, unknown>, path: string): unknown {
   let current: unknown = config;
   for (const part of path.split(".")) {
     if (!current || typeof current !== "object" || Array.isArray(current)) {
@@ -72,6 +79,17 @@ function getValueAtPath(config: Record<string, unknown>, path: string): unknown 
     current = (current as Record<string, unknown>)[part];
   }
   return current;
+}
+
+function getValueAtPath(config: Record<string, unknown>, path: string): unknown {
+  if (!path.startsWith("tools.exec.")) {
+    return getValueAtCanonicalPath(config, path);
+  }
+  const legacy = getValueAtCanonicalPath(config, path.replace(/^tools\.exec\./, "tools.bash."));
+  if (legacy !== undefined) {
+    return legacy;
+  }
+  return getValueAtCanonicalPath(config, path);
 }
 
 function assertGatewayConfigMutationAllowed(params: {
@@ -86,10 +104,12 @@ function assertGatewayConfigMutationAllowed(params: {
       : (applyMergePatch(params.currentConfig, parsed, {
           mergeObjectArraysById: true,
         }) as Record<string, unknown>);
-  const migratedNextConfig = applyLegacyMigrations(nextConfig).next ?? nextConfig;
   const changedProtectedPaths = PROTECTED_GATEWAY_CONFIG_PATHS.filter(
     (path) =>
-      getValueAtPath(params.currentConfig, path) !== getValueAtPath(migratedNextConfig, path),
+      !isDeepStrictEqual(
+        getValueAtPath(params.currentConfig, path),
+        getValueAtPath(nextConfig, path),
+      ),
   );
   if (changedProtectedPaths.length === 0) {
     return;

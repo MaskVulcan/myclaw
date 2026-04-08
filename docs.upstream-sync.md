@@ -196,3 +196,50 @@ or less aligned with the current `myclaw` direction.
 2. If we do another upstream pass later, start again from
    `de6bac331cde02ea19389e46c7e4385f0b31cc49` and only revisit omitted items
    when they show clear end-user value for `myclaw`.
+
+## 2026-04-08 PR-01 Security Guards
+
+- Campaign branch: `sync/pr01-security-guards`
+- Worktree: `/root/gitsource/.worktrees/myclaw-pr01-security-guards`
+- Integration style: behavior-level ports from local sibling `openclaw`, not
+  wholesale file replacement
+
+### Landed In This Branch
+
+- Gateway config mutation guard:
+  - expanded protected exec paths to cover `safeBins`,
+    `safeBinProfiles`, `safeBinTrustedDirs`, and `strictInlineEval`
+  - restored legacy `tools.bash.*` alias protection without relying on broad
+    config migrations
+  - switched protected-path comparison to deep equality so array/object
+    mutations cannot slip through by reference inequality
+- Fetch guard SSRF hardening:
+  - validate explicit proxy hosts through the same SSRF policy before fetch
+  - block explicit proxies that resolve to private/internal hosts unless
+    `allowPrivateNetwork` is enabled
+  - tighten redirect handling for unsafe methods:
+    `301/302 POST -> GET`, `303 -> GET`, and cross-origin unsafe redirects drop
+    bodies plus body-related headers
+  - close the two-step redirect-loop gap by seeding the visited set with the
+    initial URL
+- Host env security policy refresh:
+  - expanded shared JSON policy with upstream high-risk keys for compilers,
+    VCS, proxy, CA bundle, package manager, container, and credential-path
+    variables
+  - regenerated
+    `apps/macos/Sources/OpenClaw/HostEnvSecurityPolicy.generated.swift`
+    from the shared JSON source
+- Browser blocked-target quarantine:
+  - quarantine tabs/targets after SSRF-denied navigation
+  - keep quarantined tabs out of page enumeration and target resolution
+  - preserve quarantine across reconnects / CDP transport churn until the
+    Playwright session is explicitly closed
+
+### Validation On This Branch
+
+- `node scripts/test-parallel.mjs --files src/agents/openclaw-gateway-tool.test.ts -- --reporter=verbose`
+- `node scripts/test-parallel.mjs --files src/infra/net/fetch-guard.ssrf.test.ts -- --reporter=verbose`
+- `node scripts/test-parallel.mjs --files src/infra/host-env-security.test.ts --files src/infra/host-env-security.policy-parity.test.ts -- --reporter=verbose`
+- `node scripts/test-parallel.mjs --files extensions/browser/src/browser/pw-session.create-page.navigation-guard.test.ts -- --reporter=verbose`
+- Combined regression sweep:
+  `node scripts/test-parallel.mjs --files src/agents/openclaw-gateway-tool.test.ts --files src/infra/net/fetch-guard.ssrf.test.ts --files src/infra/host-env-security.test.ts --files src/infra/host-env-security.policy-parity.test.ts --files extensions/browser/src/browser/pw-session.create-page.navigation-guard.test.ts -- --reporter=dot`
