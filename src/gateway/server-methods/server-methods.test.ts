@@ -331,6 +331,7 @@ describe("gateway chat transcript writes (guardrail)", () => {
 describe("exec approval handlers", () => {
   const execApprovalNoop = () => false;
   type ExecApprovalHandlers = ReturnType<typeof createExecApprovalHandlers>;
+  type ExecApprovalGetArgs = Parameters<ExecApprovalHandlers["exec.approval.get"]>[0];
   type ExecApprovalRequestArgs = Parameters<ExecApprovalHandlers["exec.approval.request"]>[0];
   type ExecApprovalResolveArgs = Parameters<ExecApprovalHandlers["exec.approval.resolve"]>[0];
 
@@ -420,15 +421,48 @@ describe("exec approval handlers", () => {
   async function resolveExecApproval(params: {
     handlers: ExecApprovalHandlers;
     id: string;
+    decision?: string;
     respond: ReturnType<typeof vi.fn>;
     context: { broadcast: (event: string, payload: unknown) => void };
   }) {
     return params.handlers["exec.approval.resolve"]({
-      params: { id: params.id, decision: "allow-once" } as ExecApprovalResolveArgs["params"],
+      params: {
+        id: params.id,
+        decision: params.decision ?? "allow-once",
+      } as ExecApprovalResolveArgs["params"],
       respond: params.respond as unknown as ExecApprovalResolveArgs["respond"],
       context: toExecApprovalResolveContext(params.context),
       client: null,
       req: { id: "req-2", type: "req", method: "exec.approval.resolve" },
+      isWebchatConnect: execApprovalNoop,
+    });
+  }
+
+  async function getExecApproval(params: {
+    handlers: ExecApprovalHandlers;
+    id: string;
+    respond: ReturnType<typeof vi.fn>;
+  }) {
+    return params.handlers["exec.approval.get"]({
+      params: { id: params.id } as ExecApprovalGetArgs["params"],
+      respond: params.respond as unknown as ExecApprovalGetArgs["respond"],
+      context: {} as ExecApprovalGetArgs["context"],
+      client: null,
+      req: { id: "req-3", type: "req", method: "exec.approval.get" },
+      isWebchatConnect: execApprovalNoop,
+    });
+  }
+
+  async function listExecApprovals(params: {
+    handlers: ExecApprovalHandlers;
+    respond: ReturnType<typeof vi.fn>;
+  }) {
+    return params.handlers["exec.approval.list"]({
+      params: {},
+      respond: params.respond as never,
+      context: {} as never,
+      client: null,
+      req: { id: "req-4", type: "req", method: "exec.approval.list" },
       isWebchatConnect: execApprovalNoop,
     });
   }
@@ -444,7 +478,7 @@ describe("exec approval handlers", () => {
       },
       hasExecApprovalClients: () => true,
     };
-    return { handlers, broadcasts, respond, context };
+    return { manager, handlers, broadcasts, respond, context };
   }
 
   function createForwardingExecApprovalFixture() {
@@ -486,6 +520,28 @@ describe("exec approval handlers", () => {
       const params = { ...baseParams, ...extra };
       expect(validateExecApprovalRequestParams(params)).toBe(true);
     });
+  });
+
+  it("rejects reserved plugin approval id prefixes", async () => {
+    const { handlers, respond, context } = createExecApprovalFixture();
+    await requestExecApproval({
+      handlers,
+      respond,
+      context,
+      params: {
+        id: "plugin:reserved",
+        host: "gateway",
+        nodeId: undefined,
+        systemRunPlan: undefined,
+      },
+    });
+    expect(respond).toHaveBeenCalledWith(
+      false,
+      undefined,
+      expect.objectContaining({
+        message: "approval ids starting with plugin: are reserved",
+      }),
+    );
   });
 
   it("rejects host=node approval requests without nodeId", async () => {
@@ -577,6 +633,61 @@ describe("exec approval handlers", () => {
 
     expect(manager.lookupPendingId("abc")).toEqual({ kind: "none" });
     expect(manager.lookupPendingId("abcdef")).toEqual({ kind: "exact", id: "abcdef" });
+  });
+
+  it("returns approval details for a unique pending prefix", async () => {
+    const manager = new ExecApprovalManager();
+    const handlers = createExecApprovalHandlers(manager);
+    const respond = vi.fn();
+    const record = manager.create(
+      { command: "echo ok", ask: "always", host: "gateway" },
+      60_000,
+      "approval-12345678-aaaa",
+    );
+    void manager.register(record, 60_000);
+
+    await getExecApproval({
+      handlers,
+      id: "approval-1234",
+      respond,
+    });
+
+    expect(respond).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({
+        id: "approval-12345678-aaaa",
+        commandText: "echo ok",
+        commandPreview: null,
+        allowedDecisions: ["allow-once", "deny"],
+        host: "gateway",
+      }),
+      undefined,
+    );
+  });
+
+  it("lists only unresolved exec approvals", async () => {
+    const manager = new ExecApprovalManager();
+    const handlers = createExecApprovalHandlers(manager);
+    const respond = vi.fn();
+    const pending = manager.create({ command: "echo pending", host: "gateway" }, 60_000, "p-1");
+    const resolved = manager.create(
+      { command: "echo resolved", host: "gateway" },
+      60_000,
+      "r-1",
+    );
+    void manager.register(pending, 60_000);
+    void manager.register(resolved, 60_000);
+    manager.resolve(resolved.id, "deny");
+
+    await listExecApprovals({ handlers, respond });
+
+    const payload = respond.mock.calls[0]?.[1] as Array<Record<string, unknown>>;
+    expect(payload).toEqual([
+      expect.objectContaining({
+        id: "p-1",
+        request: expect.objectContaining({ command: "echo pending" }),
+      }),
+    ]);
   });
 
   it("stores versioned system.run binding and sorted env keys on approval request", async () => {
@@ -796,6 +907,56 @@ describe("exec approval handlers", () => {
       expect.objectContaining({ id: "approval-123", decision: "allow-once" }),
       undefined,
     );
+    expect(resolveRespond).toHaveBeenCalledWith(true, { ok: true }, undefined);
+  });
+
+  it("rejects allow-always when approval policy requires per-run confirmation", async () => {
+    const { manager, handlers, respond, context } = createExecApprovalFixture();
+    const requestPromise = requestExecApproval({
+      handlers,
+      respond,
+      context,
+      params: {
+        id: "approval-ask-always",
+        host: "gateway",
+        nodeId: undefined,
+        systemRunPlan: undefined,
+        ask: "always",
+        twoPhase: true,
+        timeoutMs: 60_000,
+      },
+    });
+    await drainApprovalRequestTicks();
+
+    const rejectRespond = vi.fn();
+    await resolveExecApproval({
+      handlers,
+      id: "approval-ask-always",
+      decision: "allow-always",
+      respond: rejectRespond,
+      context,
+    });
+
+    expect(rejectRespond).toHaveBeenCalledWith(
+      false,
+      undefined,
+      expect.objectContaining({
+        message:
+          "allow-always is unavailable because the effective policy requires approval every time",
+        details: expect.objectContaining({ reason: "APPROVAL_ALLOW_ALWAYS_UNAVAILABLE" }),
+      }),
+    );
+    expect(manager.getSnapshot("approval-ask-always")?.resolvedAtMs).toBeUndefined();
+
+    const resolveRespond = vi.fn();
+    await resolveExecApproval({
+      handlers,
+      id: "approval-ask-always",
+      respond: resolveRespond,
+      context,
+    });
+    await requestPromise;
+
     expect(resolveRespond).toHaveBeenCalledWith(true, { ok: true }, undefined);
   });
 

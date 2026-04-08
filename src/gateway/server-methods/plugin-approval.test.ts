@@ -45,12 +45,40 @@ describe("createPluginApprovalHandlers", () => {
 
   it("returns handlers for all three plugin approval methods", () => {
     const handlers = createPluginApprovalHandlers(manager);
+    expect(handlers).toHaveProperty("plugin.approval.list");
     expect(handlers).toHaveProperty("plugin.approval.request");
     expect(handlers).toHaveProperty("plugin.approval.waitDecision");
     expect(handlers).toHaveProperty("plugin.approval.resolve");
+    expect(typeof handlers["plugin.approval.list"]).toBe("function");
     expect(typeof handlers["plugin.approval.request"]).toBe("function");
     expect(typeof handlers["plugin.approval.waitDecision"]).toBe("function");
     expect(typeof handlers["plugin.approval.resolve"]).toBe("function");
+  });
+
+  describe("plugin.approval.list", () => {
+    it("returns only unresolved pending approvals", async () => {
+      const handlers = createPluginApprovalHandlers(manager);
+      const pending = manager.create({ title: "Pending", description: "D" }, 60_000, "plugin:p1");
+      const resolved = manager.create(
+        { title: "Resolved", description: "D" },
+        60_000,
+        "plugin:r1",
+      );
+      void manager.register(pending, 60_000);
+      void manager.register(resolved, 60_000);
+      manager.resolve(resolved.id, "deny");
+
+      const opts = createMockOptions("plugin.approval.list", {});
+      await handlers["plugin.approval.list"](opts);
+
+      const payload = opts.respond.mock.calls[0]?.[1] as Array<Record<string, unknown>>;
+      expect(payload).toEqual([
+        expect.objectContaining({
+          id: "plugin:p1",
+          request: expect.objectContaining({ title: "Pending" }),
+        }),
+      ]);
+    });
   });
 
   describe("plugin.approval.request", () => {

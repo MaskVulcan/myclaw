@@ -80,18 +80,22 @@ describe("operator scope authorization", () => {
     });
   });
 
-  it.each(["plugin.approval.request", "plugin.approval.waitDecision", "plugin.approval.resolve"])(
-    "requires approvals scope for %s",
-    (method) => {
-      expect(authorizeOperatorScopesForMethod(method, ["operator.write"])).toEqual({
-        allowed: false,
-        missingScope: "operator.approvals",
-      });
-      expect(authorizeOperatorScopesForMethod(method, ["operator.approvals"])).toEqual({
-        allowed: true,
-      });
-    },
-  );
+  it.each([
+    "exec.approval.get",
+    "exec.approval.list",
+    "plugin.approval.list",
+    "plugin.approval.request",
+    "plugin.approval.waitDecision",
+    "plugin.approval.resolve",
+  ])("requires approvals scope for %s", (method) => {
+    expect(authorizeOperatorScopesForMethod(method, ["operator.write"])).toEqual({
+      allowed: false,
+      missingScope: "operator.approvals",
+    });
+    expect(authorizeOperatorScopesForMethod(method, ["operator.approvals"])).toEqual({
+      allowed: true,
+    });
+  });
 
   it("requires admin for unknown methods", () => {
     expect(authorizeOperatorScopesForMethod("unknown.method", ["operator.read"])).toEqual({
@@ -104,12 +108,18 @@ describe("operator scope authorization", () => {
 describe("plugin approval method registration", () => {
   it("lists all plugin approval methods", () => {
     const methods = listGatewayMethods();
+    expect(methods).toContain("exec.approval.get");
+    expect(methods).toContain("exec.approval.list");
+    expect(methods).toContain("plugin.approval.list");
     expect(methods).toContain("plugin.approval.request");
     expect(methods).toContain("plugin.approval.waitDecision");
     expect(methods).toContain("plugin.approval.resolve");
   });
 
   it("classifies plugin approval methods", () => {
+    expect(isGatewayMethodClassified("exec.approval.get")).toBe(true);
+    expect(isGatewayMethodClassified("exec.approval.list")).toBe(true);
+    expect(isGatewayMethodClassified("plugin.approval.list")).toBe(true);
     expect(isGatewayMethodClassified("plugin.approval.request")).toBe(true);
     expect(isGatewayMethodClassified("plugin.approval.waitDecision")).toBe(true);
     expect(isGatewayMethodClassified("plugin.approval.resolve")).toBe(true);

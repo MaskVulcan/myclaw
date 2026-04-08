@@ -1,6 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../../../src/config/config.js";
 import { TelegramExecApprovalHandler } from "./exec-approvals-handler.js";
+
+const mockGatewayClientStarts = vi.hoisted(() => vi.fn());
+const mockGatewayClientStops = vi.hoisted(() => vi.fn());
+const mockGatewayClientRequests = vi.hoisted(() => vi.fn(async () => [] as unknown));
+const mockCreateOperatorApprovalsGatewayClient = vi.hoisted(() => vi.fn());
 
 const baseRequest = {
   id: "9f1c7d5d-b1fb-46ef-ac45-662723b65bb7",
@@ -24,6 +29,7 @@ function createHandler(cfg: OpenClawConfig) {
     .mockResolvedValueOnce({ messageId: "m1", chatId: "-1003841603622" })
     .mockResolvedValue({ messageId: "m2", chatId: "8460800771" });
   const editReplyMarkup = vi.fn().mockResolvedValue({ ok: true });
+  const createGatewayClient = mockCreateOperatorApprovalsGatewayClient;
   const handler = new TelegramExecApprovalHandler(
     {
       token: "tg-token",
@@ -35,12 +41,29 @@ function createHandler(cfg: OpenClawConfig) {
       sendTyping,
       sendMessage,
       editReplyMarkup,
+      createGatewayClient,
     },
   );
   return { handler, sendTyping, sendMessage, editReplyMarkup };
 }
 
 describe("TelegramExecApprovalHandler", () => {
+  beforeEach(() => {
+    mockGatewayClientStarts.mockReset();
+    mockGatewayClientStops.mockReset();
+    mockGatewayClientRequests.mockReset().mockResolvedValue([]);
+    mockCreateOperatorApprovalsGatewayClient.mockReset().mockImplementation(async (params) => ({
+      start: () => {
+        mockGatewayClientStarts();
+        queueMicrotask(() => {
+          params.onHelloOk?.({ type: "hello-ok" } as never);
+        });
+      },
+      stop: mockGatewayClientStops,
+      request: mockGatewayClientRequests,
+    }));
+  });
+
   it("sends approval prompts to the originating telegram topic when target=channel", async () => {
     const cfg = {
       channels: {
@@ -152,5 +175,44 @@ describe("TelegramExecApprovalHandler", () => {
         accountId: "default",
       }),
     );
+  });
+
+  it("replays pending approvals on start", async () => {
+    const cfg = {
+      channels: {
+        telegram: {
+          execApprovals: {
+            enabled: true,
+            approvers: ["8460800771"],
+            target: "channel",
+          },
+        },
+      },
+    } as OpenClawConfig;
+    mockGatewayClientRequests.mockImplementation(async (method: string) => {
+      if (method === "exec.approval.list") {
+        return [baseRequest];
+      }
+      return [];
+    });
+    const { handler, sendMessage } = createHandler(cfg);
+
+    await handler.start();
+
+    expect(mockGatewayClientStarts).toHaveBeenCalledTimes(1);
+    expect(mockGatewayClientRequests).toHaveBeenCalledWith("exec.approval.list", {});
+    await vi.waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledWith(
+        "-1003841603622",
+        expect.stringContaining("/approve 9f1c7d5d-b1fb-46ef-ac45-662723b65bb7 allow-once"),
+        expect.objectContaining({
+          accountId: "default",
+          messageThreadId: 928,
+        }),
+      );
+    });
+
+    await handler.stop();
+    expect(mockGatewayClientStops).toHaveBeenCalledTimes(1);
   });
 });

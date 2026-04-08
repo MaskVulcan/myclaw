@@ -151,6 +151,17 @@ export class ExecApprovalManager<TPayload = ExecApprovalRequestPayload> {
     return entry?.record ?? null;
   }
 
+  listPendingRecords(): ExecApprovalRecord<TPayload>[] {
+    const records: ExecApprovalRecord<TPayload>[] = [];
+    for (const entry of this.pending.values()) {
+      if (entry.record.resolvedAtMs !== undefined) {
+        continue;
+      }
+      records.push(entry.record);
+    }
+    return records;
+  }
+
   consumeAllowOnce(recordId: string): boolean {
     const entry = this.pending.get(recordId);
     if (!entry) {

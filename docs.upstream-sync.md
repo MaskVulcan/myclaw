@@ -243,3 +243,55 @@ or less aligned with the current `myclaw` direction.
 - `node scripts/test-parallel.mjs --files extensions/browser/src/browser/pw-session.create-page.navigation-guard.test.ts -- --reporter=verbose`
 - Combined regression sweep:
   `node scripts/test-parallel.mjs --files src/agents/openclaw-gateway-tool.test.ts --files src/infra/net/fetch-guard.ssrf.test.ts --files src/infra/host-env-security.test.ts --files src/infra/host-env-security.policy-parity.test.ts --files extensions/browser/src/browser/pw-session.create-page.navigation-guard.test.ts -- --reporter=dot`
+
+## 2026-04-08 Campaign PR-02
+
+- Campaign item:
+  `PR-02: Approval Replay + Channel Runtime`
+- Worktree:
+  `/root/gitsource/.worktrees/myclaw-pr02-approval-runtime`
+- Branch:
+  `sync/pr02-approval-runtime`
+- Primary upstream source:
+  `6484b41eb9`
+  `Approvals: replay pending requests on startup`
+- Additional upstream references used during the port:
+  - `src/gateway/server-methods/approval-shared.ts`
+  - `src/gateway/server-methods/exec-approval.ts`
+  - `src/gateway/server-methods/plugin-approval.ts`
+  - `src/infra/exec-approval-channel-runtime.ts`
+  - `src/infra/exec-approval-channel-runtime.test.ts`
+
+### Landed In This PR
+
+- Added `exec.approval.get`, `exec.approval.list`, and `plugin.approval.list`
+  to the gateway method surface and operator scope map.
+- Added shared approval handler logic for:
+  - stable unknown/expired responses
+  - optional short-prefix lookup for exec approvals
+  - exact-id enforcement for plugin approval resolution
+  - shared wait/resolve/request delivery flow
+- Ported upstream approval replay runtime as
+  `src/infra/exec-approval-channel-runtime.ts`.
+- Wired `extensions/telegram/src/exec-approvals-handler.ts` onto the shared
+  runtime so startup now replays pending exec approvals instead of only handling
+  live events after connect.
+- Carried two correctness deltas from upstream exec approval handling:
+  - reject explicit exec approval ids that collide with the reserved
+    `plugin:` namespace
+  - reject `allow-always` when the effective approval policy requires
+    per-request confirmation
+
+### Intentionally Deferred
+
+- Full upstream `approval-native-runtime` / channel-native approval delivery
+  plan port.
+- Discord-side migration to the shared approval runtime.
+- Broader upstream approval UX reshapes that depend on the native runtime
+  abstraction rather than the replay/runtime core landed here.
+
+### Validation On This Branch
+
+- Passed:
+  - `pnpm exec vitest run src/gateway/server-methods/server-methods.test.ts src/gateway/server-methods/plugin-approval.test.ts src/gateway/method-scopes.test.ts src/infra/exec-approval-channel-runtime.test.ts extensions/telegram/src/exec-approvals-handler.test.ts --reporter=dot`
+  - `pnpm exec vitest run src/gateway/node-invoke-system-run-approval.test.ts src/gateway/server.node-invoke-approval-bypass.test.ts src/infra/exec-approval-command-display.test.ts src/infra/exec-approval-reply.test.ts --reporter=dot`

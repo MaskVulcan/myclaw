@@ -72,6 +72,7 @@ export type ExecApprovalRequestPayload = {
   host?: string | null;
   security?: string | null;
   ask?: string | null;
+  allowedDecisions?: readonly ExecApprovalDecision[];
   agentId?: string | null;
   resolvedPath?: string | null;
   sessionKey?: string | null;
@@ -555,6 +556,41 @@ export function maxAsk(a: ExecAsk, b: ExecAsk): ExecAsk {
 }
 
 export type ExecApprovalDecision = "allow-once" | "allow-always" | "deny";
+export const DEFAULT_EXEC_APPROVAL_DECISIONS = [
+  "allow-once",
+  "allow-always",
+  "deny",
+] as const satisfies readonly ExecApprovalDecision[];
+
+export function resolveExecApprovalAllowedDecisions(params?: {
+  ask?: string | null;
+}): readonly ExecApprovalDecision[] {
+  const ask = normalizeExecAsk(params?.ask);
+  if (ask === "always") {
+    return ["allow-once", "deny"];
+  }
+  return DEFAULT_EXEC_APPROVAL_DECISIONS;
+}
+
+export function resolveExecApprovalRequestAllowedDecisions(params?: {
+  ask?: string | null;
+  allowedDecisions?: readonly ExecApprovalDecision[] | readonly string[] | null;
+}): readonly ExecApprovalDecision[] {
+  const explicit = Array.isArray(params?.allowedDecisions)
+    ? params.allowedDecisions.filter(
+        (decision): decision is ExecApprovalDecision =>
+          decision === "allow-once" || decision === "allow-always" || decision === "deny",
+      )
+    : [];
+  return explicit.length > 0 ? explicit : resolveExecApprovalAllowedDecisions({ ask: params?.ask });
+}
+
+export function isExecApprovalDecisionAllowed(params: {
+  decision: ExecApprovalDecision;
+  ask?: string | null;
+}): boolean {
+  return resolveExecApprovalAllowedDecisions({ ask: params.ask }).includes(params.decision);
+}
 
 export async function requestExecApprovalViaSocket(params: {
   socketPath: string;

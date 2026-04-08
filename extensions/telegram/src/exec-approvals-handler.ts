@@ -7,9 +7,10 @@ import {
   type ExecApprovalResolved,
 } from "openclaw/plugin-sdk/approval-runtime";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-runtime";
-import { GatewayClient } from "openclaw/plugin-sdk/gateway-runtime";
-import { createOperatorApprovalsGatewayClient } from "openclaw/plugin-sdk/gateway-runtime";
-import type { EventFrame } from "openclaw/plugin-sdk/gateway-runtime";
+import {
+  createExecApprovalChannelRuntime,
+  type ExecApprovalChannelRuntime,
+} from "openclaw/plugin-sdk/infra-runtime";
 import { normalizeAccountId, parseAgentSessionKey } from "openclaw/plugin-sdk/routing";
 import { createSubsystemLogger } from "openclaw/plugin-sdk/runtime-env";
 import type { RuntimeEnv } from "openclaw/plugin-sdk/runtime-env";
@@ -27,11 +28,6 @@ const log = createSubsystemLogger("telegram/exec-approvals");
 type PendingMessage = {
   chatId: string;
   messageId: string;
-};
-
-type PendingApproval = {
-  timeoutId: NodeJS.Timeout;
-  messages: PendingMessage[];
 };
 
 type TelegramApprovalTarget = {
@@ -52,6 +48,7 @@ export type TelegramExecApprovalHandlerDeps = {
   sendTyping?: typeof sendTypingTelegram;
   sendMessage?: typeof sendMessageTelegram;
   editReplyMarkup?: typeof editMessageReplyMarkupTelegram;
+  createGatewayClient?: typeof import("openclaw/plugin-sdk/gateway-runtime").createOperatorApprovalsGatewayClient;
 };
 
 function matchesFilters(params: {
@@ -185,13 +182,11 @@ function dedupeTargets(targets: TelegramApprovalTarget[]): TelegramApprovalTarge
 }
 
 export class TelegramExecApprovalHandler {
-  private gatewayClient: GatewayClient | null = null;
-  private pending = new Map<string, PendingApproval>();
-  private started = false;
   private readonly nowMs: () => number;
   private readonly sendTyping: typeof sendTypingTelegram;
   private readonly sendMessage: typeof sendMessageTelegram;
   private readonly editReplyMarkup: typeof editMessageReplyMarkupTelegram;
+  private readonly runtime: ExecApprovalChannelRuntime<ExecApprovalRequest, ExecApprovalResolved>;
 
   constructor(
     private readonly opts: TelegramExecApprovalHandlerOpts,
@@ -201,6 +196,23 @@ export class TelegramExecApprovalHandler {
     this.sendTyping = deps.sendTyping ?? sendTypingTelegram;
     this.sendMessage = deps.sendMessage ?? sendMessageTelegram;
     this.editReplyMarkup = deps.editReplyMarkup ?? editMessageReplyMarkupTelegram;
+    this.runtime = createExecApprovalChannelRuntime<PendingMessage>({
+      label: "telegram/exec-approvals",
+      clientDisplayName: `Telegram Exec Approvals (${this.opts.accountId})`,
+      cfg: this.opts.cfg,
+      gatewayUrl: this.opts.gatewayUrl,
+      createGatewayClient: deps.createGatewayClient,
+      nowMs: this.nowMs,
+      isConfigured: () => isHandlerConfigured({ cfg: this.opts.cfg, accountId: this.opts.accountId }),
+      shouldHandle: (request) => this.shouldHandle(request),
+      deliverRequested: (request) => this.deliverRequested(request),
+      finalizeResolved: async ({ entries }) => {
+        await this.clearPendingMessages(entries);
+      },
+      finalizeExpired: async ({ entries }) => {
+        await this.clearPendingMessages(entries);
+      },
+    });
   }
 
   shouldHandle(request: ExecApprovalRequest): boolean {
@@ -212,45 +224,22 @@ export class TelegramExecApprovalHandler {
   }
 
   async start(): Promise<void> {
-    if (this.started) {
-      return;
-    }
-    this.started = true;
-
-    if (!isHandlerConfigured({ cfg: this.opts.cfg, accountId: this.opts.accountId })) {
-      return;
-    }
-
-    this.gatewayClient = await createOperatorApprovalsGatewayClient({
-      config: this.opts.cfg,
-      gatewayUrl: this.opts.gatewayUrl,
-      clientDisplayName: `Telegram Exec Approvals (${this.opts.accountId})`,
-      onEvent: (evt) => this.handleGatewayEvent(evt),
-      onConnectError: (err) => {
-        log.error(`telegram exec approvals: connect error: ${err.message}`);
-      },
-    });
-    this.gatewayClient.start();
+    await this.runtime.start();
   }
 
   async stop(): Promise<void> {
-    if (!this.started) {
-      return;
-    }
-    this.started = false;
-    for (const pending of this.pending.values()) {
-      clearTimeout(pending.timeoutId);
-    }
-    this.pending.clear();
-    this.gatewayClient?.stop();
-    this.gatewayClient = null;
+    await this.runtime.stop();
   }
 
   async handleRequested(request: ExecApprovalRequest): Promise<void> {
-    if (!this.shouldHandle(request)) {
-      return;
-    }
+    await this.runtime.handleRequested(request);
+  }
 
+  async handleResolved(resolved: ExecApprovalResolved): Promise<void> {
+    await this.runtime.handleResolved(resolved);
+  }
+
+  private async deliverRequested(request: ExecApprovalRequest): Promise<PendingMessage[]> {
     const targetMode = resolveTelegramExecApprovalTarget({
       cfg: this.opts.cfg,
       accountId: this.opts.accountId,
@@ -324,31 +313,15 @@ export class TelegramExecApprovalHandler {
     }
 
     if (sentMessages.length === 0) {
-      return;
+      return [];
     }
 
-    const timeoutMs = Math.max(0, request.expiresAtMs - this.nowMs());
-    const timeoutId = setTimeout(() => {
-      void this.handleResolved({ id: request.id, decision: "deny", ts: Date.now() });
-    }, timeoutMs);
-    timeoutId.unref?.();
-
-    this.pending.set(request.id, {
-      timeoutId,
-      messages: sentMessages,
-    });
+    return sentMessages;
   }
 
-  async handleResolved(resolved: ExecApprovalResolved): Promise<void> {
-    const pending = this.pending.get(resolved.id);
-    if (!pending) {
-      return;
-    }
-    clearTimeout(pending.timeoutId);
-    this.pending.delete(resolved.id);
-
+  private async clearPendingMessages(messages: PendingMessage[]): Promise<void> {
     await Promise.allSettled(
-      pending.messages.map(async (message) => {
+      messages.map(async (message) => {
         await this.editReplyMarkup(message.chatId, message.messageId, [], {
           cfg: this.opts.cfg,
           token: this.opts.token,
@@ -356,15 +329,5 @@ export class TelegramExecApprovalHandler {
         });
       }),
     );
-  }
-
-  private handleGatewayEvent(evt: EventFrame): void {
-    if (evt.event === "exec.approval.requested") {
-      void this.handleRequested(evt.payload as ExecApprovalRequest);
-      return;
-    }
-    if (evt.event === "exec.approval.resolved") {
-      void this.handleResolved(evt.payload as ExecApprovalResolved);
-    }
   }
 }
