@@ -13,6 +13,7 @@ export type AcpxNonInteractivePermissionPolicy = (typeof ACPX_NON_INTERACTIVE_PO
 
 export const ACPX_PINNED_VERSION = "0.3.1";
 export const ACPX_VERSION_ANY = "any";
+export const DEFAULT_ACPX_TIMEOUT_SECONDS = 120;
 const ACPX_BIN_NAME = process.platform === "win32" ? "acpx.cmd" : "acpx";
 
 function isAcpxPluginRoot(dir: string): boolean {
@@ -99,7 +100,7 @@ export type ResolvedAcpxPluginConfig = {
   permissionMode: AcpxPermissionMode;
   nonInteractivePermissions: AcpxNonInteractivePermissionPolicy;
   strictWindowsCmdWrapper: boolean;
-  timeoutSeconds?: number;
+  timeoutSeconds: number;
   queueOwnerTtlSeconds: number;
   mcpServers: Record<string, McpServerConfig>;
 };
@@ -154,7 +155,7 @@ const AcpxPluginConfigSchema = z.strictObject({
   timeoutSeconds: z
     .number({ error: "timeoutSeconds must be a number >= 0.001" })
     .min(0.001, { error: "timeoutSeconds must be a number >= 0.001" })
-    .optional(),
+    .default(DEFAULT_ACPX_TIMEOUT_SECONDS),
   queueOwnerTtlSeconds: z
     .number({ error: "queueOwnerTtlSeconds must be a number >= 0" })
     .min(0, { error: "queueOwnerTtlSeconds must be a number >= 0" })
@@ -253,7 +254,7 @@ export function resolveAcpxPluginConfig(params: {
       normalized.nonInteractivePermissions ?? DEFAULT_NON_INTERACTIVE_POLICY,
     strictWindowsCmdWrapper:
       normalized.strictWindowsCmdWrapper ?? DEFAULT_STRICT_WINDOWS_CMD_WRAPPER,
-    timeoutSeconds: normalized.timeoutSeconds,
+    timeoutSeconds: normalized.timeoutSeconds ?? DEFAULT_ACPX_TIMEOUT_SECONDS,
     queueOwnerTtlSeconds: normalized.queueOwnerTtlSeconds ?? DEFAULT_QUEUE_OWNER_TTL_SECONDS,
     mcpServers: normalized.mcpServers ?? {},
   };

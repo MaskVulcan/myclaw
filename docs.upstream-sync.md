@@ -356,3 +356,46 @@ or less aligned with the current `myclaw` direction.
   container because the TypeScript process exhausted the local Node heap, so
   this branch is currently validated by targeted runtime/auth regressions rather
   than a successful whole-repo typecheck.
+
+## 2026-04-08 Campaign PR-04
+
+- Campaign item:
+  `PR-04: Agent Tooling Follow-ups`
+- Worktree:
+  `/root/gitsource/.worktrees/myclaw-pr04-agent-tooling`
+- Branch:
+  `sync/pr04-agent-tooling`
+- Upstream sources absorbed in this branch:
+  - `8359e5f584`
+    `fix: pass threadId through sessions_send announce delivery`
+  - `6211e3dcd6`
+    `fix: raise acpx runtime timeout`
+
+### Landed In This PR
+
+- `sessions_send` announce delivery now forwards `threadId` to gateway `send`
+  calls so forum/topic sessions can announce back into the correct thread
+  instead of dropping into the channel root.
+- Added a focused A2A regression test for the `threadId` pass-through and kept
+  the existing session-key parsing coverage in `sessions-send-helpers.test.ts`.
+- Raised bundled `acpx` runtime turns to a default 120-second timeout by:
+  - defaulting the plugin config schema value
+  - making the resolved runtime config always carry `timeoutSeconds`
+  - updating the plugin manifest JSON schema and UI help
+  - documenting the operator override path in `docs/tools/acp-agents.md`
+- Added ACPX config/service tests to lock the new default into the runtime
+  factory wiring and manifest/schema contract.
+
+### Intentionally Deferred
+
+- Upstream `9d31c5ad53`
+  `fix: compact update_plan tool result`
+  was not ported in this PR because `myclaw` does not currently ship the
+  built-in `update_plan` tool or the corresponding `tools.experimental.planTool`
+  config gate. Pulling that commit in directly would become a feature train, not
+  a narrow follow-up fix.
+
+### Validation On This Branch
+
+- Passed:
+  - `node node_modules/vitest/vitest.mjs run src/agents/tools/sessions-send-tool.a2a.test.ts src/agents/tools/sessions-send-helpers.test.ts extensions/acpx/src/config.test.ts extensions/acpx/src/service.test.ts --reporter=dot`

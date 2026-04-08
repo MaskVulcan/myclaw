@@ -32,7 +32,8 @@
       },
       "timeoutSeconds": {
         "type": "number",
-        "minimum": 0.001
+        "minimum": 0.001,
+        "default": 120
       },
       "queueOwnerTtlSeconds": {
         "type": "number",
@@ -92,7 +93,7 @@
     },
     "timeoutSeconds": {
       "label": "Prompt Timeout Seconds",
-      "help": "Optional acpx timeout for each runtime turn.",
+      "help": "Timeout for each runtime turn. Defaults to 120 seconds so slower ACPX startups have room to initialize.",
       "advanced": true
     },
     "queueOwnerTtlSeconds": {

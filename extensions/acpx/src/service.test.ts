@@ -6,7 +6,11 @@ import {
   requireAcpRuntimeBackend,
 } from "../../../src/acp/runtime/registry.js";
 import type { AcpRuntime, OpenClawPluginServiceContext } from "../runtime-api.js";
-import { ACPX_BUNDLED_BIN, ACPX_PINNED_VERSION } from "./config.js";
+import {
+  ACPX_BUNDLED_BIN,
+  ACPX_PINNED_VERSION,
+  DEFAULT_ACPX_TIMEOUT_SECONDS,
+} from "./config.js";
 import { createAcpxRuntimeService } from "./service.js";
 
 const { ensureAcpxSpy } = vi.hoisted(() => ({
@@ -157,6 +161,25 @@ describe("createAcpxRuntimeService", () => {
     expect(runtimeFactory).toHaveBeenCalledWith(
       expect.objectContaining({
         queueOwnerTtlSeconds: 0.1,
+      }),
+    );
+  });
+
+  it("passes the default runtime timeout to the embedded runtime factory", async () => {
+    const { runtime } = createRuntimeStub(true);
+    const runtimeFactory = vi.fn(() => runtime);
+    const service = createAcpxRuntimeService({
+      runtimeFactory,
+    });
+    const context = createServiceContext();
+
+    await service.start(context);
+
+    expect(runtimeFactory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pluginConfig: expect.objectContaining({
+          timeoutSeconds: DEFAULT_ACPX_TIMEOUT_SECONDS,
+        }),
       }),
     );
   });

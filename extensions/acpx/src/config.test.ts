@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   ACPX_BUNDLED_BIN,
   ACPX_PINNED_VERSION,
+  DEFAULT_ACPX_TIMEOUT_SECONDS,
   createAcpxPluginConfigSchema,
   resolveAcpxPluginRoot,
   resolveAcpxPluginConfig,
@@ -72,6 +73,18 @@ describe("acpx plugin config parsing", () => {
     expect(resolved.stripProviderAuthEnvVars).toBe(true);
     expect(resolved.cwd).toBe(path.resolve("/tmp/workspace"));
     expect(resolved.strictWindowsCmdWrapper).toBe(true);
+    expect(resolved.timeoutSeconds).toBe(DEFAULT_ACPX_TIMEOUT_SECONDS);
+  });
+
+  it("keeps explicit timeoutSeconds config", () => {
+    const resolved = resolveAcpxPluginConfig({
+      rawConfig: {
+        timeoutSeconds: 300,
+      },
+      workspaceDir: "/tmp/openclaw-acpx",
+    });
+
+    expect(resolved.timeoutSeconds).toBe(300);
   });
 
   it("accepts command override and disables plugin-local auto-install", () => {
@@ -194,5 +207,12 @@ describe("acpx plugin config parsing", () => {
     ) as { configSchema?: unknown };
 
     expect(createAcpxPluginConfigSchema().jsonSchema).toEqual(manifest.configSchema);
+    expect(createAcpxPluginConfigSchema().jsonSchema).toMatchObject({
+      properties: {
+        timeoutSeconds: {
+          default: DEFAULT_ACPX_TIMEOUT_SECONDS,
+        },
+      },
+    });
   });
 });

@@ -670,6 +670,18 @@ Notes:
 - When `command` points to a custom binary/path, plugin-local auto-install is disabled.
 - OpenClaw startup remains non-blocking while the backend health check runs.
 
+### Runtime timeout configuration
+
+The bundled `acpx` plugin defaults embedded runtime turns to a 120-second
+timeout. This gives slower harness startup enough time to complete ACP
+initialization. Override it if your host needs a different runtime limit:
+
+```bash
+openclaw config set plugins.entries.acpx.config.timeoutSeconds 180
+```
+
+Restart the gateway after changing this value.
+
 See [Plugins](/tools/plugin).
 
 ## Permission configuration
