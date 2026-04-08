@@ -71,18 +71,18 @@ or less aligned with the current `myclaw` direction.
 
 ### Integrated In `sync/openclaw-20260402`
 
-| Upstream commit                            | Local commit | Summary                                                                  |
-| ------------------------------------------ | ------------ | ------------------------------------------------------------------------ |
+| Upstream commit                            | Local commit | Summary                                                                                     |
+| ------------------------------------------ | ------------ | ------------------------------------------------------------------------------------------- |
 | `17479ceb439aebe8c73de66698f07904d6720d89` | `65d39a072e` | `fix(auto-reply): suppress JSON-wrapped NO_REPLY payloads before channel delivery (#56612)` |
-| `468185d1b507aa58fda7f6a871d58ce593faaa0e` | `729b2a1a82` | `fix(agents): handle unhandled stop reasons gracefully instead of crashing (#56639)` |
-| `c14b169a1b9be959c02702db15ea865d8f4caa85` | `a31ae200a7` | `fix(acp): repair stale bindings after runtime exits (#56476)` |
-| `4e74e7e26cfdff5474533da5bba73252754ac7c2` | `84a45e3242` | `fix(memory): resolve slugified qmd search paths (#50313)` |
-| `19e52a1ba23eeeb619366384ff016720436364ca` | `24739e0e15` | `fix(memory/qmd): honor embedInterval independent of update interval` |
-| `971ecabe80b632180edddb81f5652436de13ffed` | `9ff467a406` | `fix(memory): account for CJK characters in QMD memory chunking` |
-| `a5147d4d88f1e2db82568efe9414a41e02cd429d` | `66b59370e4` | `fix: address bot review — surrogate-pair counting and CJK line splitting` |
-| `3b95aa8804fb6dd99b0a2302a914ddf50271be0d` | `d6c079001b` | `fix: address second-round review — Latin backward compat and emoji consistency` |
-| `f8547fcae4c05147a6648ed4765dcd1a2026bc72` | `bc74cc95f8` | `fix: guard fine-split against breaking UTF-16 surrogate pairs` |
-| `3ce48aff660a0dca487fb195132d53e6e0e404ed` | `53e3689d1b` | `Memory: add configurable FTS5 tokenizer for CJK text support (openclaw#56707)` |
+| `468185d1b507aa58fda7f6a871d58ce593faaa0e` | `729b2a1a82` | `fix(agents): handle unhandled stop reasons gracefully instead of crashing (#56639)`        |
+| `c14b169a1b9be959c02702db15ea865d8f4caa85` | `a31ae200a7` | `fix(acp): repair stale bindings after runtime exits (#56476)`                              |
+| `4e74e7e26cfdff5474533da5bba73252754ac7c2` | `84a45e3242` | `fix(memory): resolve slugified qmd search paths (#50313)`                                  |
+| `19e52a1ba23eeeb619366384ff016720436364ca` | `24739e0e15` | `fix(memory/qmd): honor embedInterval independent of update interval`                       |
+| `971ecabe80b632180edddb81f5652436de13ffed` | `9ff467a406` | `fix(memory): account for CJK characters in QMD memory chunking`                            |
+| `a5147d4d88f1e2db82568efe9414a41e02cd429d` | `66b59370e4` | `fix: address bot review — surrogate-pair counting and CJK line splitting`                  |
+| `3b95aa8804fb6dd99b0a2302a914ddf50271be0d` | `d6c079001b` | `fix: address second-round review — Latin backward compat and emoji consistency`            |
+| `f8547fcae4c05147a6648ed4765dcd1a2026bc72` | `bc74cc95f8` | `fix: guard fine-split against breaking UTF-16 surrogate pairs`                             |
+| `3ce48aff660a0dca487fb195132d53e6e0e404ed` | `53e3689d1b` | `Memory: add configurable FTS5 tokenizer for CJK text support (openclaw#56707)`             |
 
 ### Deferred This Round
 
@@ -102,3 +102,84 @@ or less aligned with the current `myclaw` direction.
    already landed locally.
 3. Revisit the deferred broad trains only when we intentionally plan a larger
    upstream rebase / feature-sync pass.
+
+## 2026-04-08 Scratch Integration Branch
+
+- Scope: scratch worktree only, based on `myclaw/main`
+- Worktree: `/root/gitsource/.worktrees/myclaw-mainline-effective-20260408`
+- Branch: `integrate/openclaw-effective-20260408`
+- Reviewed upstream range:
+  `a5cd9210536879cf94cde8dc2ea95aa446d019c2..de6bac331cde02ea19389e46c7e4385f0b31cc49`
+- Reviewed upstream head:
+  `de6bac331cde02ea19389e46c7e4385f0b31cc49`
+- Reviewed head subject:
+  `fix(exec): detect cmd wrapper carriers (#62439)`
+- Important note:
+  this section records what has been ported onto the scratch integration branch.
+  It does not mean `myclaw/main` is fully refreshed to the upstream head.
+
+### Upstream Status Train Effectively Integrated On This Branch
+
+- `72dcf94221`
+  `refactor: consolidate status reporting helpers`
+- `e8731589c0`
+  `refactor: share status scan and report helpers`
+- `88aa814226`
+  `refactor: consolidate status runtime and overview helpers`
+- `143f501fe5`
+  `refactor: share status overview and json helpers`
+- Follow-up fixes folded into the port where needed for `myclaw` compatibility:
+  - `279f56e658`
+    `fix: restore status command typing after refactor`
+  - `5fa166ed11`
+    `fix(check): repair status report typing drift`
+
+### Local Integration Commits On This Branch
+
+| Local commit | Summary                                                                |
+| ------------ | ---------------------------------------------------------------------- |
+| `762c40ad6c` | `port(status): consolidate reporting helpers from openclaw`            |
+| `6995bc8f39` | `fix(status): recover port after hook test pollution`                  |
+| `1d6bf46f5c` | `port(status): consolidate runtime and overview helpers from openclaw` |
+| `4ee9bf4ae6` | `port(status): share overview and json helpers from openclaw`          |
+| `7f606482ea` | `feat(status): surface session activity counts in overview`            |
+
+### Notes
+
+- Ported `openclaw -> myclaw`, with `myclaw`-specific compatibility shims where
+  upstream assumptions did not match local task/runtime structure:
+  - `src/cli/command-config-resolution.ts`
+  - `src/gateway/probe-target.ts`
+  - `src/tasks/task-registry.maintenance.ts`
+  - `src/commands/status.node-mode.ts`
+- Re-applied one refresh-branch local carry with clear user-visible value:
+  session activity counts in the `status` overview (`1h` / `24h`).
+- Also carried the remaining reviewed status/session deltas that had direct
+  operator value rather than just internal reshuffling:
+  - suppress false multi-listener warnings for single-process dual-stack
+    loopback gateway listeners (`127.0.0.1` + `::1`)
+  - make `status --all` diagnosis report node-only gateway setups as an
+    expected remote-query case instead of a misleading local gateway failure
+  - align `status summary` aggregation with the reviewed upstream helper shape
+    while keeping `myclaw`'s async task-summary compatibility intact
+  - update `status` / `sessions` CLI docs to match the shipped session
+    overview, transcript preview, cleanup, and usage-reporting behavior
+- Kept the port inside the scratch integration branch only; no claim of
+  completion is made for `myclaw/main`.
+- Remaining reviewed deltas in this upstream range were assessed and left out
+  when they were broad trains or pure internal reshuffles with no clear
+  `myclaw` user value, such as the standalone report-section refactor /
+  formatting-only cleanup commits.
+
+### Validation On The Scratch Branch
+
+- Passed:
+  - `pnpm vitest run src/commands/status.command-report.test.ts src/commands/status.command-sections.test.ts src/commands/status-all/report-tables.test.ts src/commands/status-all/text-report.test.ts src/commands/status.scan-execute.test.ts src/commands/status.scan-overview.test.ts src/commands/status.scan-result.test.ts src/commands/status.scan-memory.test.ts src/commands/status.scan-fast-json.test.ts src/commands/health.command.coverage.test.ts src/commands/status-all/format.test.ts src/commands/status-json-runtime.test.ts src/commands/status-runtime-shared.test.ts src/commands/status.command-report-data.test.ts src/commands/status.gateway-connection.test.ts src/commands/status.summary.test.ts src/commands/status.scan.shared.test.ts src/commands/status-json-command.test.ts src/commands/status-json-payload.test.ts src/commands/status-overview-rows.test.ts src/commands/status-overview-surface.test.ts src/commands/status-overview-values.test.ts src/commands/status-all/diagnosis.test.ts src/commands/status.test.ts`
+
+### Next Step From This Scratch Branch
+
+1. Move the validated subset onto `myclaw/main` from a dedicated mainline
+   worktree instead of reusing the scratch branch directly.
+2. If we do another upstream pass later, start again from
+   `de6bac331cde02ea19389e46c7e4385f0b31cc49` and only revisit omitted items
+   when they show clear end-user value for `myclaw`.
