@@ -399,3 +399,88 @@ or less aligned with the current `myclaw` direction.
 
 - Passed:
   - `node node_modules/vitest/vitest.mjs run src/agents/tools/sessions-send-tool.a2a.test.ts src/agents/tools/sessions-send-helpers.test.ts extensions/acpx/src/config.test.ts extensions/acpx/src/service.test.ts --reporter=dot`
+
+## 2026-04-09 Campaign PR-05
+
+- Campaign item:
+  `PR-05: Bundled Packaging Smoke`
+- Worktree:
+  `/root/gitsource/.worktrees/myclaw-pr05-packaging-smoke`
+- Branch:
+  `sync/pr05-packaging-smoke`
+- Upstream sources reviewed for this branch:
+  - `8069b990a6`
+    `add bundled channel prepack smoke`
+  - `d03fa0899f`
+    `fix: repair bundled channel secret sidecars`
+  - `9163e5bed7`
+    `fix bundled channel entry fallback resolution`
+  - `5982f2e5e4`
+    `fix: repair Telegram setup package entry`
+
+### Landed In This PR
+
+- Broadened `scripts/lib/bundled-plugin-build-entries.mjs` so package-backed
+  runtime support surfaces are built and packed even when they do not ship an
+  `openclaw.plugin.json` manifest:
+  - `extensions/image-generation-core`
+  - `extensions/media-understanding-core`
+  - `extensions/speech-core`
+- Tightened artifact collection so package-backed support packages no longer
+  falsely require `dist/extensions/<id>/openclaw.plugin.json` during pack /
+  release checks.
+- Added a stable build entry for
+  `src/channels/plugins/bundled.ts` as
+  `dist/channels/plugins/bundled.js`
+  so packaged bundled-channel smoke checks can target a deterministic artifact
+  instead of a hashed chunk.
+- Added `scripts/openclaw-prepack.ts` and switched `package.json` `prepack` to
+  use it. The wrapper now:
+  - runs `pnpm build`
+  - runs `pnpm ui:build`
+  - runs bundled-channel built-artifact smoke
+  - runs bundled plugin singleton smoke
+  - supports `OPENCLAW_PREPACK_PREPARED=1` to verify already-built artifacts and
+    re-run the smokes without rebuilding
+- Added `scripts/test-built-bundled-channel-entry-smoke.mjs` to assert the
+  packaged bundled-channel registry can still load Telegram and Slack channel
+  entries plus their `setup-entry` surfaces from built artifacts.
+- Added focused script coverage for the new packaging behavior in:
+  - `test/scripts/bundled-plugin-build-entries.test.ts`
+  - `test/scripts/openclaw-prepack.test.ts`
+- While validating this branch, fixed an existing mainline `status --all`
+  import drift in `src/commands/status-all/report-data.ts` by removing the
+  stray dependency on the non-existent local module
+  `src/agents/exec-defaults.ts` and re-aligning the call site with
+  `myclaw`'s current `getRemoteSkillEligibility()` surface.
+
+### Intentionally Deferred
+
+- Upstream `d03fa0899f`
+  bundled secret-sidecar repair was not ported because `myclaw` does not ship
+  the reviewed `channelSecrets -> secret-contract-api` surface in its bundled
+  channel entries, so there was no local bug-shaped target for that change.
+- Upstream `5982f2e5e4`
+  Telegram setup-entry fix was already effectively present locally:
+  `extensions/telegram/setup-entry.ts` already exports the setup plugin through
+  `defineSetupPluginEntry(...)`, so no additional Telegram-specific port was
+  needed.
+- This branch does not attempt to fix the broader existing
+  `pnpm build:plugin-sdk:dts` type-drift train in the status command area; that
+  surfaced during validation but predates this packaging-focused PR.
+
+### Validation On This Branch
+
+- Passed:
+  - `node node_modules/vitest/vitest.mjs run test/scripts/bundled-plugin-build-entries.test.ts test/scripts/openclaw-prepack.test.ts test/release-check.test.ts --reporter=dot`
+  - `node node_modules/vitest/vitest.mjs run src/commands/status-all/diagnosis.test.ts src/commands/status-all/report-lines.test.ts src/commands/status-all/report-tables.test.ts src/commands/status-overview-rows.test.ts --reporter=dot`
+  - `node scripts/tsdown-build.mjs`
+  - `node scripts/runtime-postbuild.mjs`
+  - `pnpm ui:build`
+  - `OPENCLAW_PREPACK_PREPARED=1 node --import tsx scripts/openclaw-prepack.ts`
+- Validation note:
+  - the full `node --import tsx scripts/openclaw-prepack.ts` path still hits the
+    pre-existing `pnpm build:plugin-sdk:dts` TypeScript error train in this
+    repo, so the packaging smoke itself was validated via the prepared-artifact
+    path after a successful `tsdown` build, runtime postbuild, and Control UI
+    build.

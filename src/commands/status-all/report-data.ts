@@ -1,4 +1,3 @@
-import { canExecRequestNode } from "../../agents/exec-defaults.js";
 import { buildWorkspaceSkillStatus } from "../../agents/skills-status.js";
 import { readConfigFileSnapshot, resolveGatewayPort } from "../../config/config.js";
 import { readLastGatewayErrorLine } from "../../daemon/diagnostics.js";
@@ -103,12 +102,7 @@ async function resolveStatusAllLocalDiagnosis(params: {
             return buildWorkspaceSkillStatus(defaultWorkspace, {
               config: overview.cfg,
               eligibility: {
-                remote: getRemoteSkillEligibility({
-                  advertiseExecNode: canExecRequestNode({
-                    cfg: overview.cfg,
-                    agentId: overview.agentStatus.defaultId,
-                  }),
-                }),
+                remote: getRemoteSkillEligibility(),
               },
             });
           } catch {

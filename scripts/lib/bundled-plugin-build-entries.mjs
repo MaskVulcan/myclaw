@@ -15,7 +15,7 @@ function readBundledPluginPackageJson(packageJsonPath) {
   }
 }
 
-function collectPluginSourceEntries(packageJson) {
+function collectPluginSourceEntries(packageJson, params = {}) {
   let packageEntries = Array.isArray(packageJson?.openclaw?.extensions)
     ? packageJson.openclaw.extensions.filter(
         (entry) => typeof entry === "string" && entry.trim().length > 0,
@@ -29,7 +29,10 @@ function collectPluginSourceEntries(packageJson) {
   if (setupEntry) {
     packageEntries = Array.from(new Set([...packageEntries, setupEntry]));
   }
-  return packageEntries.length > 0 ? packageEntries : ["./index.ts"];
+  if (packageEntries.length > 0) {
+    return packageEntries;
+  }
+  return params.hasPluginManifest ? ["./index.ts"] : [];
 }
 
 function collectTopLevelPublicSurfaceEntries(pluginDir) {
@@ -78,26 +81,34 @@ export function collectBundledPluginBuildEntries(params = {}) {
 
     const pluginDir = path.join(extensionsRoot, dirent.name);
     const manifestPath = path.join(pluginDir, "openclaw.plugin.json");
-    if (!fs.existsSync(manifestPath)) {
+    const hasPluginManifest = fs.existsSync(manifestPath);
+    const packageJsonPath = path.join(pluginDir, "package.json");
+    const packageJson = readBundledPluginPackageJson(packageJsonPath);
+    const hasPackageJson = packageJson !== null;
+    if (!hasPluginManifest && !hasPackageJson) {
       continue;
     }
 
-    const packageJsonPath = path.join(pluginDir, "package.json");
-    const packageJson = readBundledPluginPackageJson(packageJsonPath);
     if (!shouldBuildBundledCluster(dirent.name, env, { packageJson })) {
+      continue;
+    }
+
+    const sourceEntries = Array.from(
+      new Set([
+        ...collectPluginSourceEntries(packageJson, { hasPluginManifest }),
+        ...collectTopLevelPublicSurfaceEntries(pluginDir),
+      ]),
+    );
+    if (sourceEntries.length === 0) {
       continue;
     }
 
     entries.push({
       id: dirent.name,
-      hasPackageJson: packageJson !== null,
+      hasPackageJson,
+      hasPluginManifest,
       packageJson,
-      sourceEntries: Array.from(
-        new Set([
-          ...collectPluginSourceEntries(packageJson),
-          ...collectTopLevelPublicSurfaceEntries(pluginDir),
-        ]),
-      ),
+      sourceEntries,
     });
   }
 
@@ -120,8 +131,10 @@ export function listBundledPluginPackArtifacts(params = {}) {
   const entries = collectBundledPluginBuildEntries(params);
   const artifacts = new Set();
 
-  for (const { id, hasPackageJson, sourceEntries } of entries) {
-    artifacts.add(`dist/extensions/${id}/openclaw.plugin.json`);
+  for (const { id, hasPackageJson, hasPluginManifest, sourceEntries } of entries) {
+    if (hasPluginManifest) {
+      artifacts.add(`dist/extensions/${id}/openclaw.plugin.json`);
+    }
     if (hasPackageJson) {
       artifacts.add(`dist/extensions/${id}/package.json`);
     }
