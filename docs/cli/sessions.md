@@ -14,6 +14,7 @@ openclaw sessions
 openclaw sessions --agent work
 openclaw sessions --all-agents
 openclaw sessions --active 120
+openclaw sessions --verbose
 openclaw sessions --json
 openclaw sessions summary
 openclaw sessions summary --all-agents --recent 3
@@ -22,6 +23,7 @@ openclaw sessions summary --all-agents --recent 3
 Scope selection:
 
 - default: configured default agent store
+- `--verbose`: verbose logging
 - `--agent <id>`: one configured agent store
 - `--all-agents`: aggregate all configured agent stores
 - `--store <path>`: explicit store path (cannot be combined with `--agent` or `--all-agents`)
@@ -55,8 +57,8 @@ JSON examples:
 
 ## Summary overview
 
-Use `openclaw sessions summary` for a lightweight aggregated view inspired by
-Claude Code style session insights, but kept read-only and local:
+Use `openclaw sessions summary` for a lightweight aggregated view with recent
+activity buckets, top models/agents, and transcript previews:
 
 ```bash
 openclaw sessions summary
@@ -73,9 +75,9 @@ What it shows:
 - recent activity windows (`1h`, `24h`, `7d`)
 - top models, top agents, and session-kind distribution
 - known token usage and estimated cost totals when session metadata has them
-- a few recent session previews
+- a few recent transcript previews
 
-`openclaw status` now includes a short version of this overview. Use
+`openclaw status` also includes a compact session overview. Use
 `openclaw sessions summary` when you want the dedicated breakdown.
 
 `openclaw sessions summary --all-agents --json`:
@@ -144,6 +146,7 @@ openclaw sessions cleanup --json
 - `--dry-run`: preview how many entries would be pruned/capped without writing.
   - In text mode, dry-run prints a per-session action table (`Action`, `Key`, `Age`, `Model`, `Flags`) so you can see what would be kept vs removed.
 - `--enforce`: apply maintenance even when `session.maintenance.mode` is `warn`.
+- `--fix-missing`: remove entries whose transcript files are missing, even if they would not normally age/count out yet.
 - `--active-key <key>`: protect a specific active key from disk-budget eviction.
 - `--agent <id>`: run cleanup for one configured agent store.
 - `--all-agents`: run cleanup for all configured agent stores.

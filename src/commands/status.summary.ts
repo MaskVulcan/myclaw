@@ -21,6 +21,9 @@ import type {
 let channelSummaryModulePromise: Promise<typeof import("../infra/channel-summary.js")> | undefined;
 let linkChannelModulePromise: Promise<typeof import("./status.link-channel.js")> | undefined;
 let configIoModulePromise: Promise<typeof import("../config/io.js")> | undefined;
+let taskRegistryMaintenanceModulePromise:
+  | Promise<typeof import("../tasks/task-registry.maintenance.js")>
+  | undefined;
 
 function loadChannelSummaryModule() {
   channelSummaryModulePromise ??= import("../infra/channel-summary.js");
@@ -40,6 +43,11 @@ const loadStatusSummaryRuntimeModule = createLazyRuntimeSurface(
 function loadConfigIoModule() {
   configIoModulePromise ??= import("../config/io.js");
   return configIoModulePromise;
+}
+
+function loadTaskRegistryMaintenanceModule() {
+  taskRegistryMaintenanceModulePromise ??= import("../tasks/task-registry.maintenance.js");
+  return taskRegistryMaintenanceModulePromise;
 }
 
 const buildFlags = (entry?: SessionEntry): string[] => {
@@ -79,55 +87,41 @@ const buildFlags = (entry?: SessionEntry): string[] => {
   return flags;
 };
 
-function sortBuckets(a: { count: number; label: string }, b: { count: number; label: string }) {
-  return b.count - a.count || a.label.localeCompare(b.label);
-}
-
-function buildTopBuckets(rows: SessionStatus[], selectLabel: (row: SessionStatus) => string) {
-  const buckets = new Map<string, number>();
-  for (const row of rows) {
-    const label = selectLabel(row);
-    buckets.set(label, (buckets.get(label) ?? 0) + 1);
-  }
-  return [...buckets.entries()].map(([label, count]) => ({ label, count })).toSorted(sortBuckets);
-}
-
-function buildSessionOverview(rows: SessionStatus[]): StatusSessionOverview {
+function buildStatusSessionOverview(allSessions: SessionStatus[]): StatusSessionOverview {
   const now = Date.now();
-  const countWithin = (minutes: number) =>
-    rows.filter((row) => row.updatedAt !== null && now - row.updatedAt <= minutes * 60_000).length;
+  const countWithin = (windowMs: number) =>
+    allSessions.filter(
+      (session) => session.updatedAt !== null && now - session.updatedAt <= windowMs,
+    ).length;
+  const topModels = new Map<string, number>();
+  const topAgents = new Map<string, number>();
   const kinds = new Map<SessionStatus["kind"], number>();
-  for (const row of rows) {
-    kinds.set(row.kind, (kinds.get(row.kind) ?? 0) + 1);
+
+  for (const session of allSessions) {
+    const model = session.model ?? "unknown";
+    topModels.set(model, (topModels.get(model) ?? 0) + 1);
+    const agentId = session.agentId ?? "unknown";
+    topAgents.set(agentId, (topAgents.get(agentId) ?? 0) + 1);
+    kinds.set(session.kind, (kinds.get(session.kind) ?? 0) + 1);
   }
-  const kindOrder: Record<SessionStatus["kind"], number> = {
-    direct: 0,
-    group: 1,
-    global: 2,
-    unknown: 3,
-  };
 
   return {
     recentActivity: {
-      last60m: countWithin(60),
-      last24h: countWithin(24 * 60),
-      last7d: countWithin(7 * 24 * 60),
+      last60m: countWithin(60 * 60_000),
+      last24h: countWithin(24 * 60 * 60_000),
+      last7d: countWithin(7 * 24 * 60 * 60_000),
     },
-    topModels: buildTopBuckets(rows, (row) => row.model ?? "unknown")
-      .slice(0, 3)
-      .map((entry) => ({
-        model: entry.label,
-        count: entry.count,
-      })),
-    topAgents: buildTopBuckets(rows, (row) => row.agentId ?? "unknown")
-      .slice(0, 3)
-      .map((entry) => ({
-        agentId: entry.label,
-        count: entry.count,
-      })),
+    topModels: [...topModels.entries()]
+      .map(([model, count]) => ({ model, count }))
+      .toSorted((a, b) => b.count - a.count || a.model.localeCompare(b.model))
+      .slice(0, 5),
+    topAgents: [...topAgents.entries()]
+      .map(([agentId, count]) => ({ agentId, count }))
+      .toSorted((a, b) => b.count - a.count || a.agentId.localeCompare(b.agentId))
+      .slice(0, 5),
     kinds: [...kinds.entries()]
       .map(([kind, count]) => ({ kind, count }))
-      .toSorted((a, b) => b.count - a.count || kindOrder[a.kind] - kindOrder[b.kind]),
+      .toSorted((a, b) => b.count - a.count || a.kind.localeCompare(b.kind)),
   };
 }
 
@@ -194,6 +188,9 @@ export async function getStatusSummary(
     : [];
   const mainSessionKey = resolveMainSessionKey(cfg);
   const queuedSystemEvents = peekSystemEvents(mainSessionKey);
+  const taskMaintenanceModule = await loadTaskRegistryMaintenanceModule();
+  const tasks = await taskMaintenanceModule.getInspectableTaskRegistrySummary();
+  const taskAudit = await taskMaintenanceModule.getInspectableTaskAuditSummary();
 
   const resolved = resolveConfiguredStatusModelRef({
     cfg,
@@ -286,11 +283,13 @@ export async function getStatusSummary(
       .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
 
   const paths = new Set<string>();
+  const allAgentSessions: SessionStatus[] = [];
   const byAgent = agentList.agents.map((agent) => {
     const storePath = resolveStorePath(cfg.session?.store, { agentId: agent.id });
     paths.add(storePath);
     const store = loadStore(storePath);
     const sessions = buildSessionRows(store, { agentIdOverride: agent.id });
+    allAgentSessions.push(...sessions);
     return {
       agentId: agent.id,
       path: storePath,
@@ -299,12 +298,10 @@ export async function getStatusSummary(
     };
   });
 
-  const allSessions = byAgent
-    .flatMap((agent) => buildSessionRows(loadStore(agent.path), { agentIdOverride: agent.agentId }))
-    .toSorted((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+  const allSessions = allAgentSessions.toSorted((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
   const recent = allSessions.slice(0, 10);
   const totalSessions = allSessions.length;
-  const overview = buildSessionOverview(allSessions);
+  const overview = buildStatusSessionOverview(allSessions);
 
   const summary: StatusSummary = {
     runtimeVersion: resolveRuntimeServiceVersion(process.env),
@@ -322,6 +319,8 @@ export async function getStatusSummary(
     },
     channelSummary,
     queuedSystemEvents,
+    tasks,
+    taskAudit,
     sessions: {
       paths: Array.from(paths),
       count: totalSessions,

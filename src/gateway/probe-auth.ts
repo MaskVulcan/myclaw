@@ -5,6 +5,8 @@ import {
   isGatewaySecretRefUnavailableError,
   resolveGatewayProbeCredentialsFromConfig,
 } from "./credentials.js";
+export { resolveGatewayProbeTarget } from "./probe-target.js";
+export type { GatewayProbeTargetResolution } from "./probe-target.js";
 
 function buildGatewayProbeCredentialPolicy(params: {
   cfg: OpenClawConfig;

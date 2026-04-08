@@ -9,6 +9,7 @@ type DaemonStatusSummary = {
   managedByOpenClaw: boolean;
   externallyManaged: boolean;
   loadedText: string;
+  runtime: Awaited<ReturnType<typeof readServiceStatusSummary>>["runtime"];
   runtimeShort: string | null;
 };
 
@@ -24,6 +25,7 @@ async function buildDaemonStatusSummary(
     managedByOpenClaw: summary.managedByOpenClaw,
     externallyManaged: summary.externallyManaged,
     loadedText: summary.loadedText,
+    runtime: summary.runtime,
     runtimeShort: formatDaemonRuntimeShort(summary.runtime),
   };
 }

@@ -68,6 +68,40 @@ export type StatusSummary = {
   };
   channelSummary: string[];
   queuedSystemEvents: string[];
+  tasks: {
+    total: number;
+    active: number;
+    terminal: number;
+    failures: number;
+    byStatus: {
+      queued: number;
+      running: number;
+      succeeded: number;
+      failed: number;
+      timed_out: number;
+      cancelled: number;
+      lost: number;
+    };
+    byRuntime: {
+      subagent: number;
+      acp: number;
+      cli: number;
+      cron: number;
+    };
+  };
+  taskAudit: {
+    total: number;
+    warnings: number;
+    errors: number;
+    byCode: {
+      stale_queued: number;
+      stale_running: number;
+      lost: number;
+      delivery_failed: number;
+      missing_cleanup: number;
+      inconsistent_timestamps: number;
+    };
+  };
   sessions: {
     paths: string[];
     count: number;

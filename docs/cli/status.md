@@ -20,9 +20,9 @@ openclaw status --usage
 Notes:
 
 - `--deep` runs live probes (WhatsApp Web + Telegram + Discord + Google Chat + Slack + Signal).
+- `--usage` prints normalized provider usage windows as `X% left`.
 - Output includes per-agent session stores when multiple agents are configured.
-- The Sessions section now includes a compact overview (`1h`/`24h`/`7d` activity, top models, top agents, and kinds).
-- Use `openclaw sessions summary` for the fuller session-only breakdown with recent previews and JSON aggregates.
+- The Sessions overview row includes compact `1h` / `24h` activity counts. Use `openclaw sessions summary` for the fuller session-only breakdown with recent previews and JSON aggregates.
 - Overview includes Gateway + node host service install/runtime status when available.
 - Overview includes update channel + git SHA (for source checkouts).
 - Update info surfaces in the Overview; if an update is available, status prints a hint to run `openclaw update` (see [Updating](/install/updating)).
