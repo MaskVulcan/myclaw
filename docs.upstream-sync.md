@@ -692,3 +692,74 @@ or less aligned with the current `myclaw` direction.
   - iOS / Swift target compilation and tests remain unverified in this Linux
     worktree because the required Apple toolchain is unavailable:
     `swift`, `xcodebuild`, and related tooling are not installed.
+
+## 2026-04-09 Campaign PR-10
+
+- Campaign item:
+  `PR-10: Android Host Security`
+- Worktree:
+  `/root/gitsource/.worktrees/myclaw-pr10-android-gateway-security`
+- Branch:
+  `sync/pr10-android-gateway-security`
+- Primary upstream sources combined for the final behavior:
+  - `a941a4fef9`
+    `fix(android): require TLS for remote gateway endpoints`
+  - `945b198c76`
+    `fix(android): allow cleartext LAN gateways`
+
+### Landed In This PR
+
+- Added `apps/android/app/src/main/java/ai/openclaw/app/gateway/GatewayHostSecurity.kt`
+  to centralize Android gateway host classification:
+  - loopback detection covers `localhost`, `127.0.0.0/8`, `::1`,
+    IPv4-mapped loopback IPv6 literals, and the emulator bridge alias
+    `10.0.2.2`
+  - private-LAN detection covers RFC1918 IPv4, link-local IPv4/IPv6,
+    `.local` mDNS names, bare LAN hostnames, and local IPv6 ULA ranges
+  - Tailnet / public hosts remain outside the cleartext allow-list
+- Tightened `ConnectionManager.resolveTlsParamsForEndpoint(...)` so Android now
+  requires TLS for remote/tailnet/public gateway endpoints even when discovery
+  metadata does not advertise TLS, while still allowing cleartext for loopback
+  and private-LAN manual/discovered endpoints.
+- Updated `GatewayConfigResolver` to validate gateway URLs through the same host
+  security policy:
+  - insecure remote `ws://` / `http://` endpoints are rejected
+  - private-LAN cleartext endpoints remain valid
+  - scanned/setup-code parsing now carries structured validation errors
+  - manual-connect config preserves bootstrap auth only when the manual endpoint
+    is unchanged and no replacement token/password is present
+  - IPv6 hosts render with brackets in `displayUrl`
+- Updated Android connect/onboarding UI flows to surface the new validation
+  messages instead of collapsing all failures into a generic “invalid host”
+  error:
+  - `ConnectTabScreen.kt`
+  - `OnboardingFlow.kt`
+- Added focused regression coverage in:
+  - `apps/android/app/src/test/java/ai/openclaw/app/node/ConnectionManagerTest.kt`
+  - `apps/android/app/src/test/java/ai/openclaw/app/ui/GatewayConfigResolverTest.kt`
+
+### Intentionally Deferred
+
+- The broader upstream Android trust-prompt/auth-preservation train in
+  `NodeRuntime.kt` was not ported here because `myclaw`'s manual-connect flow
+  already persists auth into preferences before connect, so the user-facing
+  security value in this PR comes from host validation and TLS enforcement,
+  not from reshaping the runtime connect API.
+- No attempt was made to pull in unrelated Android gateway/session refactors;
+  this branch keeps the scope on host classification, endpoint parsing, and TLS
+  gating only.
+
+### Validation On This Branch
+
+- Passed:
+  - `git diff --check`
+- Validation gap:
+  - Gradle unit tests could not be completed in this environment because the
+    Android SDK is not configured. The targeted tasks
+    `:app:testPlayDebugUnitTest` and `:app:testThirdPartyDebugUnitTest` fail at
+    configuration time with:
+    `SDK location not found. Define a valid SDK location with an ANDROID_HOME environment variable or by setting the sdk.dir path in local.properties`.
+  - During verification, Gradle's daemon-JVM auto-download path also attempted
+    to fetch a toolchain through Foojay/GitHub and timed out. A temporary local
+    bypass confirmed the real remaining blocker is the missing Android SDK, not
+    the new source changes.

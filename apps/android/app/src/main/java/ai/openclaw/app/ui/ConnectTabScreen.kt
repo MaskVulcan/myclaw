@@ -240,9 +240,13 @@ fun ConnectTabScreen(viewModel: MainViewModel) {
             resolveGatewayConnectConfig(
               useSetupCode = inputMode == ConnectInputMode.SetupCode,
               setupCode = setupCode,
-              manualHost = manualHostInput,
-              manualPort = manualPortInput,
-              manualTls = manualTlsInput,
+              savedManualHost = manualHost,
+              savedManualPort = manualPort.toString(),
+              savedManualTls = manualTls,
+              manualHostInput = manualHostInput,
+              manualPortInput = manualPortInput,
+              manualTlsInput = manualTlsInput,
+              fallbackBootstrapToken = gatewayBootstrapToken,
               fallbackToken = gatewayToken,
               fallbackPassword = passwordInput,
             )
@@ -250,9 +254,23 @@ fun ConnectTabScreen(viewModel: MainViewModel) {
           if (config == null) {
             validationText =
               if (inputMode == ConnectInputMode.SetupCode) {
-                "Paste a valid setup code to connect."
+                val parsedSetup = decodeGatewaySetupCode(setupCode)
+                if (parsedSetup == null) {
+                  "Paste a valid setup code to connect."
+                } else {
+                  val parsedGateway = parseGatewayEndpointResult(parsedSetup.url)
+                  gatewayEndpointValidationMessage(
+                    parsedGateway.error ?: GatewayEndpointValidationError.INVALID_URL,
+                    GatewayEndpointInputSource.SETUP_CODE,
+                  )
+                }
               } else {
-                "Enter a valid manual host and port to connect."
+                val manualUrl = composeGatewayManualUrl(manualHostInput, manualPortInput, manualTlsInput)
+                val parsedGateway = manualUrl?.let(::parseGatewayEndpointResult)
+                gatewayEndpointValidationMessage(
+                  parsedGateway?.error ?: GatewayEndpointValidationError.INVALID_URL,
+                  GatewayEndpointInputSource.MANUAL,
+                )
               }
             return@Button
           }

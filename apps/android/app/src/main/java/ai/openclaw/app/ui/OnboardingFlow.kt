@@ -796,9 +796,13 @@ fun OnboardingFlow(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                     gatewayError = "Scan QR code first, or use Advanced setup."
                     return@Button
                   }
-                  val parsedGateway = parseGatewayEndpoint(parsedSetup.url)
-                  if (parsedGateway == null) {
-                    gatewayError = "Setup code has invalid gateway URL."
+                  val parsedGateway = parseGatewayEndpointResult(parsedSetup.url)
+                  if (parsedGateway.config == null) {
+                    gatewayError =
+                      gatewayEndpointValidationMessage(
+                        parsedGateway.error ?: GatewayEndpointValidationError.INVALID_URL,
+                        GatewayEndpointInputSource.SETUP_CODE,
+                      )
                     return@Button
                   }
                   gatewayUrl = parsedSetup.url
@@ -816,12 +820,16 @@ fun OnboardingFlow(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                   }
                 } else {
                   val manualUrl = composeGatewayManualUrl(manualHost, manualPort, manualTls)
-                  val parsedGateway = manualUrl?.let(::parseGatewayEndpoint)
-                  if (parsedGateway == null) {
-                    gatewayError = "Manual endpoint is invalid."
+                  val parsedGateway = manualUrl?.let(::parseGatewayEndpointResult)
+                  if (parsedGateway?.config == null) {
+                    gatewayError =
+                      gatewayEndpointValidationMessage(
+                        parsedGateway?.error ?: GatewayEndpointValidationError.INVALID_URL,
+                        GatewayEndpointInputSource.MANUAL,
+                      )
                     return@Button
                   }
-                  gatewayUrl = parsedGateway.displayUrl
+                  gatewayUrl = parsedGateway.config.displayUrl
                   viewModel.setGatewayBootstrapToken("")
                 }
                 step = OnboardingStep.Permissions
