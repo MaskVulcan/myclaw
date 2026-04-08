@@ -772,6 +772,8 @@ or less aligned with the current `myclaw` direction.
   `/root/gitsource/.worktrees/myclaw-pr11-android-assistant-notify`
 - Branch:
   `sync/pr11-android-assistant-notify`
+- Merged to `main` as:
+  `1fef94cca6`
 - Primary upstream sources:
   - `e45b29b247`
     `feat: add Android assistant role entrypoint`
@@ -858,3 +860,10 @@ or less aligned with the current `myclaw` direction.
   - The temporary `apps/android/gradle/gradle-daemon-jvm.properties` bypass used
     for local validation was restored after the test attempt; no Gradle
     scaffolding changes were kept in the branch.
+
+## 2026-04-09 Campaign Status
+
+- Planned sync campaign PRs `PR-01` through `PR-11` are now landed on `main`.
+- Remaining upstream ideas that were intentionally not absorbed stay tracked in:
+  - `docs/experiments/plans/upstream-sync-campaign-2026-04-08.md`
+  - the `Intentionally Deferred` sections recorded per PR in this log

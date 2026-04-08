@@ -269,8 +269,11 @@ Per PR routine:
   - `PR-08: iOS Gateway Problem UX`
   - `PR-09: iOS Exec Approval Prompt + Bridge`
   - `PR-10: Android Host Security`
-- In flight in the final worktree at this update:
   - `PR-11: Android Assistant Entry + Notification Forwarding`
+- Campaign status:
+  all planned PRs are complete on `main`; any further upstream follow-up work
+  should come from the deferred/non-goal sections above, not from the original
+  execution queue.
 
 ## Deferred But Valuable
 
