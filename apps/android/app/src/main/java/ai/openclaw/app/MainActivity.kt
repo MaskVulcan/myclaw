@@ -1,5 +1,6 @@
 package ai.openclaw.app
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -23,6 +24,7 @@ class MainActivity : ComponentActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    handleAssistantIntent(intent)
     WindowCompat.setDecorFitsSystemWindows(window, false)
     permissionRequester = PermissionRequester(this)
 
@@ -69,5 +71,16 @@ class MainActivity : ComponentActivity() {
   override fun onStop() {
     viewModel.setForeground(false)
     super.onStop()
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+    handleAssistantIntent(intent)
+  }
+
+  private fun handleAssistantIntent(intent: Intent?) {
+    val request = parseAssistantLaunchIntent(intent) ?: return
+    viewModel.handleAssistantLaunch(request)
   }
 }

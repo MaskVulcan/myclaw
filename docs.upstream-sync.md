@@ -763,3 +763,98 @@ or less aligned with the current `myclaw` direction.
     to fetch a toolchain through Foojay/GitHub and timed out. A temporary local
     bypass confirmed the real remaining blocker is the missing Android SDK, not
     the new source changes.
+
+## 2026-04-09 Campaign PR-11
+
+- Campaign item:
+  `PR-11: Android Assistant Entry + Notification Forwarding`
+- Worktree:
+  `/root/gitsource/.worktrees/myclaw-pr11-android-assistant-notify`
+- Branch:
+  `sync/pr11-android-assistant-notify`
+- Primary upstream sources:
+  - `e45b29b247`
+    `feat: add Android assistant role entrypoint`
+  - `fcf708665c`
+    `feat: route Android assistant launches into chat`
+  - `186647cb74`
+    `feat: auto-send Android assistant prompts`
+  - `aee61dcee0`
+    `fix: finalize android notification forwarding controls`
+
+### Landed In This PR
+
+- Added Android assistant launch parsing in
+  `apps/android/app/src/main/java/ai/openclaw/app/AssistantLaunch.kt` and wired
+  `MainActivity` to consume both `ACTION_ASSIST` and the app-action shortcut
+  intent on cold start and `onNewIntent(...)`.
+- Extended `MainViewModel`, `PostOnboardingTabs`, `ChatSheetContent`, and
+  `ChatComposer` so assistant launches can:
+  - route directly into the Chat tab
+  - prefill a chat draft for non-auto-send launches
+  - auto-send assistant prompts once chat health is ready and there is no
+    pending run
+- Extended `ChatController` and `NodeRuntime` with
+  `sendMessageAwaitAcceptance(...)` / `sendChatAwaitAcceptance(...)` so the
+  auto-send path can wait for the gateway request to be accepted before clearing
+  pending assistant state.
+- Added Android notification forwarding policy primitives in
+  `apps/android/app/src/main/java/ai/openclaw/app/NotificationForwardingPolicy.kt`
+  covering:
+  - allowlist / blocklist package filtering
+  - strict `HH:mm` quiet-hours parsing
+  - wall-clock quiet-hours evaluation
+  - per-minute burst limiting
+- Expanded `SecurePrefs` so notification forwarding is persisted and exposed as
+  observable state:
+  - enabled flag
+  - filter mode
+  - configured package set
+  - quiet-hours enable/start/end
+  - max events per minute
+  - optional session-key route override
+- Hardened `DeviceNotificationListenerService` so forwarded
+  `notifications.changed` events are now:
+  - opt-in instead of unconditional
+  - filtered by allow/block package policy
+  - suppressed during local quiet hours
+  - rate limited through a burst limiter
+  - optionally routed with a pinned `sessionKey`
+  - tracked with recent-package history for settings UX
+- Updated Android settings / manifest / resources to expose the new behavior:
+  - `SettingsSheet.kt` now includes assistant-role setup, notification
+    forwarding controls, app picker, quiet-hours editing, rate controls, and
+    optional session routing
+  - `AndroidManifest.xml` now advertises `ACTION_ASSIST` and app shortcuts
+  - new `res/xml/shortcuts.xml` and `res/values/assistant.xml` wire the
+    `ASK_OPENCLAW` app action capability
+- Added focused regression coverage in:
+  - `apps/android/app/src/test/java/ai/openclaw/app/AssistantLaunchTest.kt`
+  - `apps/android/app/src/test/java/ai/openclaw/app/NotificationForwardingPolicyTest.kt`
+  - `apps/android/app/src/test/java/ai/openclaw/app/SecurePrefsNotificationForwardingTest.kt`
+  - `apps/android/app/src/test/java/ai/openclaw/app/node/DeviceNotificationListenerServiceTest.kt`
+  - `apps/android/app/src/test/java/ai/openclaw/app/ui/SettingsSheetNotificationAppsTest.kt`
+
+### Intentionally Deferred
+
+- The assistant auto-send queue preservation / stale-queue cleanup follow-ups
+  from `5d524617e1` and `34a5c47351` were not ported as-is. `myclaw` now tracks
+  a single in-memory pending assistant prompt, which covers the intended
+  assistant-entry UX here without pulling in the broader upstream queue model.
+- No attempt was made to pull in unrelated Android chat / settings refactors
+  outside the assistant-launch and notification-forwarding surfaces above.
+
+### Validation On This Branch
+
+- Passed:
+  - `git diff --check`
+- Validation gap:
+  - Attempted targeted Gradle unit-test execution with the daemon-JVM download
+    workaround:
+    `./gradlew :app:testPlayDebugUnitTest --tests 'ai.openclaw.app.AssistantLaunchTest' --tests 'ai.openclaw.app.NotificationForwardingPolicyTest' --tests 'ai.openclaw.app.SecurePrefsNotificationForwardingTest' --tests 'ai.openclaw.app.node.DeviceNotificationListenerServiceTest' --tests 'ai.openclaw.app.ui.SettingsSheetNotificationAppsTest'`
+  - The build still stops during configuration because the Android SDK is not
+    configured in this environment:
+    `SDK location not found. Define a valid SDK location with an ANDROID_HOME environment variable or by setting the sdk.dir path in local.properties`.
+  - The temporary `apps/android/gradle/gradle-daemon-jvm.properties` bypass used
+    for local validation was restored after the test attempt; no Gradle
+    scaffolding changes were kept in the branch.

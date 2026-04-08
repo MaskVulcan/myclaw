@@ -256,6 +256,22 @@ Per PR routine:
 - QA Lab / frontier harness / locale automation / docs publishing workflows
 - Large mobile feature trains unrelated to gateway safety or approval closure
 
+## Execution Status (Updated 2026-04-09)
+
+- Completed and merged into `main`:
+  - `PR-01: Security Guards`
+  - `PR-02: Approval Replay + Channel Runtime`
+  - `PR-03: Plugin Runtime Auth`
+  - `PR-04: Agent Tooling Follow-ups`
+  - `PR-05: Bundled Packaging Smoke`
+  - `PR-06: Doctor Auth Warnings`
+  - `PR-07: Systemd Fallback Hardening`
+  - `PR-08: iOS Gateway Problem UX`
+  - `PR-09: iOS Exec Approval Prompt + Bridge`
+  - `PR-10: Android Host Security`
+- In flight in the final worktree at this update:
+  - `PR-11: Android Assistant Entry + Notification Forwarding`
+
 ## Deferred But Valuable
 
 These are not rejected. They are deferred because their current value is more
