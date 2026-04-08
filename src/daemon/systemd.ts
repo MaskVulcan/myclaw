@@ -349,7 +349,12 @@ function resolveSystemctlMachineUserScopeArgs(user: string): string[] {
 }
 
 function shouldFallbackToMachineUserScope(detail: string): boolean {
-  return isSystemdUserBusUnavailableDetail(detail);
+  if (!isSystemdUserBusUnavailableDetail(detail)) {
+    return false;
+  }
+  // A permission-denied bus failure means the user bus exists but is not
+  // accessible to this process, so retrying via machine scope will not help.
+  return !detail.toLowerCase().includes("permission denied");
 }
 
 async function execSystemctlUser(

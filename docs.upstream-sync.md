@@ -527,3 +527,41 @@ or less aligned with the current `myclaw` direction.
 
 - Passed:
   - `node node_modules/vitest/vitest.mjs run src/commands/doctor-auth.deprecated-cli-profiles.test.ts src/commands/doctor-auth.hints.test.ts src/commands/doctor.warns-state-directory-is-missing.e2e.test.ts --reporter=dot`
+
+## 2026-04-09 Campaign PR-07
+
+- Campaign item:
+  `PR-07: Systemd Fallback Hardening`
+- Worktree:
+  `/root/gitsource/.worktrees/myclaw-pr07-systemd-fallback`
+- Branch:
+  `sync/pr07-systemd-fallback`
+- Primary upstream source:
+  `700efe6d16`
+  `fix(daemon): skip machine-scope fallback on permission-denied bus errors`
+
+### Landed In This PR
+
+- Tightened `src/daemon/systemd.ts`
+  machine-scope fallback gating so `systemctl --user` failures with
+  `Failed to connect to bus: Permission denied` no longer retry through
+  `--machine <user>@ --user`.
+- Added a regression test proving the permission-denied case stops after the
+  direct `--user` attempt instead of making a second machine-scope call.
+- Added a second regression test for the existing `myclaw` sudo behavior:
+  when `SUDO_USER` is set, we already scope directly to the invoking user's
+  machine manager and do not fall back to bare `systemctl --user` if that
+  machine-scope call fails. This behavior matched the reviewed upstream state,
+  so the PR only locked it in with coverage.
+
+### Intentionally Deferred
+
+- No broader systemd flow refactor was taken here. The reviewed upstream commit
+  was already narrow, and `myclaw`'s local daemon/service management surface did
+  not need additional restructuring beyond the fallback guard and regression
+  coverage.
+
+### Validation On This Branch
+
+- Passed:
+  - `node node_modules/vitest/vitest.mjs run src/daemon/systemd.test.ts --reporter=dot`
