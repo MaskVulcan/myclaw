@@ -103,6 +103,19 @@ or less aligned with the current `myclaw` direction.
 3. Revisit the deferred broad trains only when we intentionally plan a larger
    upstream rebase / feature-sync pass.
 
+## 2026-04-08 Campaign Note
+
+- A worktree-scoped multi-PR sync campaign plan now lives at
+  `docs/experiments/plans/upstream-sync-campaign-2026-04-08.md`.
+- It records:
+  - the ordered PR queue for safety, approvals, plugin runtime auth, packaging,
+    and mobile UX
+  - the intentionally deferred but still valuable platform items
+  - the Phase 2 backlog for tool registry alignment, model discovery alignment,
+    plugin platform boundary work, QA platform work, and docs/locale automation
+- Use that document as the execution plan for incremental future sync work
+  instead of trying to infer the sequence from chat history.
+
 ## 2026-04-08 Scratch Integration Branch
 
 - Scope: scratch worktree only, based on `myclaw/main`
