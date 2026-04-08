@@ -295,3 +295,64 @@ or less aligned with the current `myclaw` direction.
 - Passed:
   - `pnpm exec vitest run src/gateway/server-methods/server-methods.test.ts src/gateway/server-methods/plugin-approval.test.ts src/gateway/method-scopes.test.ts src/infra/exec-approval-channel-runtime.test.ts extensions/telegram/src/exec-approvals-handler.test.ts --reporter=dot`
   - `pnpm exec vitest run src/gateway/node-invoke-system-run-approval.test.ts src/gateway/server.node-invoke-approval-bypass.test.ts src/infra/exec-approval-command-display.test.ts src/infra/exec-approval-reply.test.ts --reporter=dot`
+
+## 2026-04-08 Campaign PR-03
+
+- Campaign item:
+  `PR-03: Plugin Runtime Auth`
+- Worktree:
+  `/root/gitsource/.worktrees/myclaw-pr03-plugin-runtime-auth`
+- Branch:
+  `sync/pr03-plugin-runtime-auth`
+- Primary upstream sources:
+  - `b8f12d99b2`
+    `fix: expose runtime-ready provider auth to plugins`
+  - `99db33eb39`
+    `fix: keep runtime model lookup on configured workspace`
+
+### Landed In This PR
+
+- Added `runtime.modelAuth.getRuntimeAuthForModel` to the native plugin runtime
+  surface and kept the existing raw auth helpers unchanged.
+- Ported runtime-ready model auth resolution into
+  `src/plugins/runtime/runtime-model-auth.runtime.ts`:
+  - resolve the raw provider auth with `getApiKeyForModel`
+  - skip provider preparation for auth modes without an API key
+  - apply provider-owned `prepareRuntimeAuth` when present
+  - merge prepared runtime fields back onto the raw auth result
+- Threaded `workspaceDir` through the runtime model auth facade so provider
+  runtime hooks resolve against the caller's configured workspace instead of
+  falling back to the package-global default.
+- Added a narrow runtime auth result type for plugins as
+  `src/plugins/runtime/model-auth-types.ts` and exposed it via
+  `openclaw/plugin-sdk/provider-auth-runtime`.
+- Expanded `openclaw/plugin-sdk/provider-auth-runtime` to export:
+  - `getRuntimeAuthForModel`
+  - `NON_ENV_SECRETREF_MARKER`
+  - `ProviderPreparedRuntimeAuth`
+  - `ResolvedProviderRuntimeAuth`
+- Used upstream-style runtime module resolution in
+  `provider-auth-runtime.ts` so the SDK helper can find the runtime auth module
+  from either adjacent runtime staging or the canonical plugin runtime path.
+
+### Intentionally Deferred
+
+- Upstream runtime surface additions unrelated to auth in
+  `src/plugins/runtime/index.ts`
+  (image/video/music/tasks/task-flow expansions) were left out of this PR.
+- Upstream runtime auth transport-override typing was not ported because the
+  current `myclaw` provider runtime auth contract only exposes `apiKey`,
+  `baseUrl`, and `expiresAt`.
+- No broader model discovery or plugin host boundary rewrite was mixed into
+  this pass; only the workspace-scoped runtime auth path was absorbed.
+
+### Validation On This Branch
+
+- Passed:
+  - `node node_modules/vitest/vitest.mjs run src/plugins/runtime/runtime-model-auth.runtime.test.ts src/plugins/runtime/index.test.ts src/plugin-sdk/provider-auth-runtime.test.ts --reporter=dot`
+  - `node node_modules/vitest/vitest.mjs run src/plugins/provider-runtime.test.ts --reporter=dot`
+- Environment note:
+  full repo `tsc -p tsconfig.json --noEmit` could not be completed in this
+  container because the TypeScript process exhausted the local Node heap, so
+  this branch is currently validated by targeted runtime/auth regressions rather
+  than a successful whole-repo typecheck.
