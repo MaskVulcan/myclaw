@@ -556,8 +556,12 @@ export function wrapToolWorkspaceRootGuardWithOptions(
   root: string,
   options?: {
     containerWorkdir?: string;
+    pathParamKeys?: readonly string[];
+    normalizeGuardedPathParams?: boolean;
   },
 ): AnyAgentTool {
+  const pathParamKeys =
+    options?.pathParamKeys && options.pathParamKeys.length > 0 ? options.pathParamKeys : ["path"];
   return {
     ...tool,
     execute: async (toolCallId, args, signal, onUpdate) => {
@@ -565,16 +569,24 @@ export function wrapToolWorkspaceRootGuardWithOptions(
       const record =
         normalized ??
         (args && typeof args === "object" ? (args as Record<string, unknown>) : undefined);
-      const filePath = record?.path;
-      if (typeof filePath === "string" && filePath.trim()) {
+      let guardedRecord: Record<string, unknown> | undefined;
+      for (const key of pathParamKeys) {
+        const filePath = record?.[key];
+        if (typeof filePath !== "string" || !filePath.trim()) {
+          continue;
+        }
         const sandboxPath = mapContainerPathToWorkspaceRoot({
           filePath,
           root,
           containerWorkdir: options?.containerWorkdir,
         });
-        await assertSandboxPath({ filePath: sandboxPath, cwd: root, root });
+        const sandboxResult = await assertSandboxPath({ filePath: sandboxPath, cwd: root, root });
+        if (options?.normalizeGuardedPathParams && record) {
+          guardedRecord ??= { ...record };
+          guardedRecord[key] = sandboxResult.resolved;
+        }
       }
-      return tool.execute(toolCallId, normalized ?? args, signal, onUpdate);
+      return tool.execute(toolCallId, guardedRecord ?? normalized ?? args, signal, onUpdate);
     },
   };
 }

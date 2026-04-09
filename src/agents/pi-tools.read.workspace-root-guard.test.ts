@@ -130,4 +130,44 @@ describe("wrapToolWorkspaceRootGuardWithOptions", () => {
       root,
     });
   });
+
+  it("does not guard outPath by default", async () => {
+    const { wrapToolWorkspaceRootGuardWithOptions } = await loadModule();
+    const { tool } = createToolHarness();
+    const wrapped = wrapToolWorkspaceRootGuardWithOptions(tool, root, {
+      containerWorkdir: "/workspace",
+    });
+
+    await wrapped.execute("tc-outpath-default", { outPath: "/workspace/videos/capture.mp4" });
+
+    expect(mocks.assertSandboxPath).not.toHaveBeenCalled();
+  });
+
+  it("guards custom outPath params when configured", async () => {
+    const { wrapToolWorkspaceRootGuardWithOptions } = await loadModule();
+    const { execute, tool } = createToolHarness();
+    const wrapped = wrapToolWorkspaceRootGuardWithOptions(tool, root, {
+      containerWorkdir: "/workspace",
+      pathParamKeys: ["outPath"],
+      normalizeGuardedPathParams: true,
+    });
+    mocks.assertSandboxPath.mockResolvedValueOnce({
+      resolved: path.resolve(root, "videos", "capture.mp4"),
+      relative: "videos/capture.mp4",
+    });
+
+    await wrapped.execute("tc-outpath-custom", { outPath: "videos/capture.mp4" });
+
+    expect(mocks.assertSandboxPath).toHaveBeenCalledWith({
+      filePath: "videos/capture.mp4",
+      cwd: root,
+      root,
+    });
+    expect(execute).toHaveBeenCalledWith(
+      "tc-outpath-custom",
+      { outPath: path.resolve(root, "videos", "capture.mp4") },
+      undefined,
+      undefined,
+    );
+  });
 });

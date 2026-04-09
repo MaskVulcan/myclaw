@@ -419,7 +419,7 @@ export async function runCronIsolatedAgentTurn(params: {
     sessionStore: cronSession.store,
     sessionKey: agentSessionKey,
     storePath: cronSession.storePath,
-    isNewSession: cronSession.isNewSession,
+    isNewSession: cronSession.isNewSession && params.job.sessionTarget !== "isolated",
   });
   const authProfileIdSource = cronSession.sessionEntry.authProfileOverrideSource;
 

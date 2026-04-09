@@ -116,6 +116,88 @@ describe("resolveIMessageInboundDecision echo detection", () => {
     ).toEqual({ kind: "drop", reason: "self-chat echo" });
   });
 
+  it("dispatches real self-chat messages when destination_caller_id matches the sender", () => {
+    const selfChatCache = createSelfChatCache();
+
+    const decision = resolveDecision({
+      message: {
+        id: 9643,
+        sender: "+15555550123",
+        chat_identifier: "+15555550123",
+        destination_caller_id: "+15555550123",
+        text: "self chat",
+        is_from_me: true,
+      },
+      messageText: "self chat",
+      bodyText: "self chat",
+      selfChatCache,
+    });
+
+    expect(decision.kind).toBe("dispatch");
+  });
+
+  it("treats blank destination_caller_id as missing for self-chat detection", () => {
+    const selfChatCache = createSelfChatCache();
+
+    const decision = resolveDecision({
+      message: {
+        id: 9644,
+        sender: "+15555550123",
+        chat_identifier: "+15555550123",
+        destination_caller_id: "",
+        text: "self chat",
+        is_from_me: true,
+      },
+      messageText: "self chat",
+      bodyText: "self chat",
+      selfChatCache,
+    });
+
+    expect(decision.kind).toBe("dispatch");
+  });
+
+  it("drops agent self-chat echoes when the echo cache matches", () => {
+    const selfChatCache = createSelfChatCache();
+    const echoHas = vi.fn(() => true);
+
+    expect(
+      resolveDecision({
+        message: {
+          id: 9645,
+          sender: "+15555550123",
+          chat_identifier: "+15555550123",
+          destination_caller_id: "+15555550123",
+          text: "echoed reply",
+          is_from_me: true,
+        },
+        messageText: "echoed reply",
+        bodyText: "echoed reply",
+        selfChatCache,
+        echoCache: { has: echoHas },
+      }),
+    ).toEqual({ kind: "drop", reason: "agent echo in self-chat" });
+  });
+
+  it("uses destination_caller_id to avoid DM self-chat false positives", () => {
+    const selfChatCache = createSelfChatCache();
+
+    expect(
+      resolveDecision({
+        message: {
+          id: 9646,
+          sender: "+15555550123",
+          chat_identifier: "+15555550123",
+          destination_caller_id: "+15555550999",
+          text: "dm row",
+          is_from_me: true,
+        },
+        messageText: "dm row",
+        bodyText: "dm row",
+        selfChatCache,
+      }),
+    ).toEqual({ kind: "drop", reason: "from me" });
+  });
+
   it("does not drop same-text messages when created_at differs", () => {
     const selfChatCache = createSelfChatCache();
 

@@ -1,5 +1,4 @@
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
-import { listChannelPluginCatalogEntries } from "../channels/plugins/catalog.js";
 import { resolveChannelDefaultAccountId } from "../channels/plugins/helpers.js";
 import {
   getChannelSetupPlugin,
@@ -14,6 +13,7 @@ import {
   loadChannelSetupPluginRegistrySnapshotForChannel,
 } from "../commands/channel-setup/plugin-install.js";
 import { resolveChannelSetupWizardAdapterForPlugin } from "../commands/channel-setup/registry.js";
+import { listTrustedChannelPluginCatalogEntries } from "../commands/channel-setup/trusted-catalog.js";
 import type {
   ChannelSetupConfiguredResult,
   ChannelSetupResult,
@@ -139,7 +139,7 @@ export async function setupChannels(
   const preloadConfiguredExternalPlugins = () => {
     // Keep setup memory bounded by snapshot-loading only configured external plugins.
     const workspaceDir = resolveWorkspaceDir();
-    for (const entry of listChannelPluginCatalogEntries({ workspaceDir })) {
+    for (const entry of listTrustedChannelPluginCatalogEntries({ cfg: next, workspaceDir })) {
       const channel = entry.id as ChannelChoice;
       if (getVisibleChannelPlugin(channel)) {
         continue;

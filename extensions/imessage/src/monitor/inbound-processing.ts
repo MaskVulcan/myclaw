@@ -117,7 +117,10 @@ export function resolveIMessageInboundDecision(params: {
   const chatId = params.message.chat_id ?? undefined;
   const chatGuid = params.message.chat_guid ?? undefined;
   const chatIdentifier = params.message.chat_identifier ?? undefined;
+  const destinationCallerId = params.message.destination_caller_id ?? undefined;
   const createdAt = params.message.created_at ? Date.parse(params.message.created_at) : undefined;
+  const messageText = params.messageText.trim();
+  const bodyText = params.bodyText.trim();
 
   const groupIdCandidate = chatId !== undefined ? String(chatId) : undefined;
   const groupListPolicy = groupIdCandidate
@@ -145,12 +148,45 @@ export function resolveIMessageInboundDecision(params: {
     isGroup,
     chatId,
     sender,
-    text: params.bodyText,
+    text: bodyText,
     createdAt,
   };
+  const chatIdentifierNormalized = normalizeIMessageHandle(chatIdentifier ?? "") || undefined;
+  const destinationCallerIdNormalized =
+    normalizeIMessageHandle(destinationCallerId ?? "") || undefined;
+  const matchesSelfChatDestination =
+    destinationCallerIdNormalized == null || destinationCallerIdNormalized === senderNormalized;
+  const isSelfChat =
+    !isGroup &&
+    chatIdentifierNormalized != null &&
+    senderNormalized === chatIdentifierNormalized &&
+    matchesSelfChatDestination;
+  let skipSelfChatHasCheck = false;
+  const inboundMessageId = params.message.id != null ? String(params.message.id) : undefined;
+
   if (params.message.is_from_me) {
     params.selfChatCache?.remember(selfChatLookup);
-    return { kind: "drop", reason: "from me" };
+    if (isSelfChat) {
+      if (params.echoCache && (messageText || inboundMessageId)) {
+        const echoScope = buildIMessageEchoScope({
+          accountId: params.accountId,
+          isGroup,
+          chatId,
+          sender,
+        });
+        if (
+          params.echoCache.has(echoScope, {
+            text: messageText || undefined,
+            messageId: inboundMessageId,
+          })
+        ) {
+          return { kind: "drop", reason: "agent echo in self-chat" };
+        }
+      }
+      skipSelfChatHasCheck = true;
+    } else {
+      return { kind: "drop", reason: "from me" };
+    }
   }
   if (isGroup && !chatId) {
     return { kind: "drop", reason: "group without chat_id" };
@@ -222,13 +258,12 @@ export function resolveIMessageInboundDecision(params: {
     chatId,
   });
   const mentionRegexes = buildMentionRegexes(params.cfg, route.agentId);
-  const messageText = params.messageText.trim();
-  const bodyText = params.bodyText.trim();
   if (!bodyText) {
     return { kind: "drop", reason: "empty body" };
   }
 
   if (
+    !skipSelfChatHasCheck &&
     params.selfChatCache?.has({
       ...selfChatLookup,
       text: bodyText,
@@ -241,7 +276,6 @@ export function resolveIMessageInboundDecision(params: {
 
   // Echo detection: check if the received message matches a recently sent message.
   // Scope by conversation so same text in different chats is not conflated.
-  const inboundMessageId = params.message.id != null ? String(params.message.id) : undefined;
   if (params.echoCache && (messageText || inboundMessageId)) {
     const echoScope = buildIMessageEchoScope({
       accountId: params.accountId,

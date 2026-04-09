@@ -1233,3 +1233,84 @@ or less aligned with the current `myclaw` direction.
 - Remaining upstream ideas that were intentionally not absorbed stay tracked in:
   - `docs/experiments/plans/upstream-sync-campaign-2026-04-08.md`
   - the `Intentionally Deferred` sections recorded per PR in this log
+
+## 2026-04-09 Post-Campaign Selective Upstream Sweep
+
+- Worktree:
+  `/root/gitsource/.worktrees/myclaw-upstream-valuable-20260409`
+- Branch:
+  `sync/upstream-valuable-20260409`
+- Review source:
+  local sibling repo `openclaw/main`
+- Previous explicit review anchor:
+  `de6bac331cde02ea19389e46c7e4385f0b31cc49`
+  `fix(exec): detect cmd wrapper carriers (#62439)`
+- Refreshed upstream head reviewed in this pass:
+  `06dea262c4fd82de0a3c58e77d5674ab8842bce2`
+- Refreshed head subject:
+  `docs-i18n: chunk raw doc translation (#62969)`
+- Sync-state note:
+  `myclaw/main` is now selectively refreshed through the reviewed upstream head
+  above. This is not a wholesale mirror of every upstream commit in that range;
+  it records the latest upstream commit that was reviewed and the subset of
+  changes intentionally integrated.
+
+### Integrated In This Branch
+
+- `2645ed154b425ead760484a97bf7520f3e16e457`
+  `fix: provider-qualified session context limits (#62493)`
+- `12544e24d7abc520bd966feb337d8a8184bae97b`
+  `fix: stable auth profile resolution for isolated cron jobs (#62797)`
+- `9267c3f8f2f2fd243c52184b4529899f74e124f4`
+  `fix: preserve iMessage self-chat aliases (#61619)`
+- `1ee4a1606e9a5afc13b91b49304d58b84d90c770`
+  `fix: exclude DM participant lists from iMessage self-chat check`
+- `5577e2d4410ae1036f0576d3cd8afc2ce828b3db`
+  `fix: keep gateway RPC up during startup (#63480)`
+- `53c29df2a9eb242a70d0ff29f3d1e67c8d6801f0`
+  `Channel setup: ignore untrusted workspace shadows (#59158)`
+- `1fede43b948df40ca8674511d4bd08d39f6c5837`
+  `fix: exclude workspace shadows from channel setup catalog lookups`
+- `635bb35b68d8faa5bfa2fda35feadd315122748a`
+  `fix(agents): guard nodes tool outPath against workspace boundary (#63551)`
+
+### Notes
+
+- The two channel-setup hardening commits were landed together as one behavior
+  port because `myclaw` did not yet have upstream's initial trusted-catalog
+  seam. The follow-up (`1fede43b94`) depended on the earlier shadow-ignore
+  behavior (`53c29df2a9`) to be meaningful locally.
+- The gateway startup port intentionally kept the temporary `chat.history`
+  startup gating that upstream added so RPC stays available while websocket
+  handlers are still attaching.
+- The nodes-tool port extends `workspaceOnly` enforcement to `outPath`, not
+  just `path`, so screen-record output cannot escape the workspace boundary.
+
+### Intentionally Skipped / Not Applicable
+
+- `06dea262c4fd82de0a3c58e77d5674ab8842bce2`
+  `docs-i18n: chunk raw doc translation (#62969)`
+  was reviewed but left out because `myclaw` already carried the more relevant
+  docs-i18n relocalize/parser fixes and does not need the full upstream raw-doc
+  chunking train right now.
+- Upstream QQBot deltas in this review window were not applicable because
+  `myclaw` does not ship `extensions/qqbot`.
+- The upstream Matrix dead-wrapper deletion was left out because `myclaw` still
+  relies on that wrapper path.
+- The upstream task-registry cancellation changes were not carried because
+  `myclaw`'s task registry implementation has materially diverged.
+
+### Validation On This Branch
+
+- Passed:
+  - `git diff --check`
+  - `pnpm vitest run src/auto-reply/reply/followup-runner.test.ts`
+  - `pnpm vitest run src/auto-reply/reply/reply-state.test.ts`
+  - `pnpm vitest run src/cron/isolated-agent.isolated-auth-session-flag.test.ts`
+  - `pnpm vitest run extensions/imessage/src/monitor.gating.test.ts extensions/imessage/src/monitor/inbound-processing.test.ts`
+  - `pnpm vitest run src/gateway/server-methods.control-plane-rate-limit.test.ts`
+  - `pnpm vitest run src/commands/channel-setup/channel-plugin-resolution.test.ts`
+  - `pnpm vitest run src/commands/channel-setup/workspace-shadow-bypass.test.ts`
+  - `pnpm vitest run src/flows/channel-setup.test.ts`
+  - `pnpm vitest run src/agents/pi-tools.read.workspace-root-guard.test.ts`
+  - `pnpm vitest run src/agents/openclaw-tools.nodes-workspace-guard.test.ts`

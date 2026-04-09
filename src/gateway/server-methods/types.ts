@@ -83,6 +83,7 @@ export type GatewayRequestContext = {
   findRunningWizard: () => string | null;
   purgeWizardSession: (id: string) => void;
   getRuntimeSnapshot: () => ChannelRuntimeSnapshot;
+  unavailableGatewayMethods?: ReadonlySet<string>;
   startChannel: (
     channel: import("../../channels/plugins/types.js").ChannelId,
     accountId?: string,

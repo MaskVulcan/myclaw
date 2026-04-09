@@ -30,6 +30,7 @@ export type ChannelUiCatalog = {
 export type ChannelPluginCatalogEntry = {
   id: string;
   pluginId?: string;
+  origin?: PluginOrigin;
   meta: ChannelMeta;
   install: {
     npmSpec: string;
@@ -43,6 +44,7 @@ type CatalogOptions = {
   catalogPaths?: string[];
   officialCatalogPaths?: string[];
   env?: NodeJS.ProcessEnv;
+  excludeWorkspace?: boolean;
 };
 
 const ORIGIN_PRIORITY: Record<PluginOrigin, number> = {
@@ -291,6 +293,7 @@ function buildCatalogEntry(candidate: {
   return {
     id,
     ...(pluginId ? { pluginId } : {}),
+    ...(candidate.origin ? { origin: candidate.origin } : {}),
     meta,
     install,
   };
@@ -382,6 +385,9 @@ export function listChannelPluginCatalogEntries(
   const resolved = new Map<string, { entry: ChannelPluginCatalogEntry; priority: number }>();
 
   for (const candidate of discovery.candidates) {
+    if (options.excludeWorkspace && candidate.origin === "workspace") {
+      continue;
+    }
     const entry = buildCatalogEntry(candidate);
     if (!entry) {
       continue;

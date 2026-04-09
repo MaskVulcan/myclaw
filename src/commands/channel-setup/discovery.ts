@@ -1,14 +1,15 @@
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../../agents/agent-scope.js";
-import {
-  listChannelPluginCatalogEntries,
-  type ChannelPluginCatalogEntry,
-} from "../../channels/plugins/catalog.js";
+import { type ChannelPluginCatalogEntry } from "../../channels/plugins/catalog.js";
 import type { ChannelMeta, ChannelPlugin } from "../../channels/plugins/types.js";
 import { listChatChannels } from "../../channels/registry.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import { applyPluginAutoEnable } from "../../config/plugin-auto-enable.js";
 import { loadPluginManifestRegistry } from "../../plugins/manifest-registry.js";
 import type { ChannelChoice } from "../onboard-types.js";
+import {
+  listSetupDiscoveryChannelPluginCatalogEntries,
+  listTrustedChannelPluginCatalogEntries,
+} from "./trusted-catalog.js";
 
 type ChannelCatalogEntry = {
   id: ChannelChoice;
@@ -68,12 +69,21 @@ export function resolveChannelSetupEntries(params: {
     env: params.env,
   });
   const installedPluginIds = new Set(params.installedPlugins.map((plugin) => plugin.id));
-  const catalogEntries = listChannelPluginCatalogEntries({ workspaceDir });
-  const installedCatalogEntries = catalogEntries.filter(
+  const installedCatalogEntriesSource = listTrustedChannelPluginCatalogEntries({
+    cfg: params.cfg,
+    workspaceDir,
+    env: params.env,
+  });
+  const installableCatalogEntriesSource = listSetupDiscoveryChannelPluginCatalogEntries({
+    cfg: params.cfg,
+    workspaceDir,
+    env: params.env,
+  });
+  const installedCatalogEntries = installedCatalogEntriesSource.filter(
     (entry) =>
       !installedPluginIds.has(entry.id) && manifestInstalledIds.has(entry.id as ChannelChoice),
   );
-  const installableCatalogEntries = catalogEntries.filter(
+  const installableCatalogEntries = installableCatalogEntriesSource.filter(
     (entry) =>
       !installedPluginIds.has(entry.id) && !manifestInstalledIds.has(entry.id as ChannelChoice),
   );

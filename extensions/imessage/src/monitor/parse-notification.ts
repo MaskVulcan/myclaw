@@ -61,8 +61,10 @@ export function parseIMessageNotification(raw: unknown): IMessagePayload | null 
   const message: IMessagePayload = maybeMessage;
   if (
     !isOptionalNumber(message.id) ||
+    !isOptionalString(message.guid) ||
     !isOptionalNumber(message.chat_id) ||
     !isOptionalString(message.sender) ||
+    !isOptionalString(message.destination_caller_id) ||
     !isOptionalBoolean(message.is_from_me) ||
     !isOptionalString(message.text) ||
     !isOptionalStringOrNumber(message.reply_to_id) ||

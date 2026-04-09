@@ -586,8 +586,14 @@ export async function startGatewayServer(
   const channelRuntimeEnvs = Object.fromEntries(
     Object.entries(channelLogs).map(([id, logger]) => [id, runtimeForLogger(logger)]),
   ) as unknown as Record<ChannelId, RuntimeEnv>;
-  const channelMethods = listChannelPlugins().flatMap((plugin) => plugin.gatewayMethods ?? []);
-  const gatewayMethods = Array.from(new Set([...baseGatewayMethods, ...channelMethods]));
+  const listActiveGatewayMethods = (nextBaseGatewayMethods: string[]) =>
+    Array.from(
+      new Set([
+        ...nextBaseGatewayMethods,
+        ...listChannelPlugins().flatMap((plugin) => plugin.gatewayMethods ?? []),
+      ]),
+    );
+  let gatewayMethods = listActiveGatewayMethods(baseGatewayMethods);
   let pluginServices: PluginServicesHandle | null = null;
   const runtimeConfig = await resolveGatewayRuntimeConfig({
     cfg: cfgAtStart,
@@ -1181,6 +1187,7 @@ export async function startGatewayServer(
 
     const canvasHostServerPort = (canvasHostServer as CanvasHostServer | null)?.port;
 
+    const unavailableGatewayMethods = new Set<string>(minimalTestGateway ? [] : ["chat.history"]);
     const gatewayRequestContext: import("./server-methods/types.js").GatewayRequestContext = {
       deps,
       cron,
@@ -1260,12 +1267,25 @@ export async function startGatewayServer(
       markChannelLoggedOut,
       wizardRunner,
       broadcastVoiceWakeChanged,
+      unavailableGatewayMethods,
     };
 
     // Register a lazy fallback for plugin subagent dispatch in non-WS paths
     // (Telegram polling, WhatsApp, etc.) so later runtime swaps can expose the
     // current gateway context without relying on a startup snapshot.
     setFallbackGatewayContextResolver(() => gatewayRequestContext);
+
+    if (!minimalTestGateway && deferredConfiguredChannelPluginIds.length > 0) {
+      ({ pluginRegistry, gatewayMethods: baseGatewayMethods } = reloadDeferredGatewayPlugins({
+        cfg: gatewayPluginConfigAtStart,
+        workspaceDir: defaultWorkspaceDir,
+        log,
+        coreGatewayHandlers,
+        baseMethods,
+        logDiagnostics: false,
+      }));
+      gatewayMethods = listActiveGatewayMethods(baseGatewayMethods);
+    }
 
     attachGatewayWsHandlers({
       wss,
@@ -1323,16 +1343,6 @@ export async function startGatewayServer(
         });
 
     if (!minimalTestGateway) {
-      if (deferredConfiguredChannelPluginIds.length > 0) {
-        ({ pluginRegistry } = reloadDeferredGatewayPlugins({
-          cfg: gatewayPluginConfigAtStart,
-          workspaceDir: defaultWorkspaceDir,
-          log,
-          coreGatewayHandlers,
-          baseMethods,
-          logDiagnostics: false,
-        }));
-      }
       ({ pluginServices } = await startGatewaySidecars({
         cfg: gatewayPluginConfigAtStart,
         pluginRegistry,
@@ -1343,6 +1353,7 @@ export async function startGatewayServer(
         logHooks,
         logChannels,
       }));
+      unavailableGatewayMethods.delete("chat.history");
     }
 
     // Run gateway_start plugin hook (fire-and-forget)

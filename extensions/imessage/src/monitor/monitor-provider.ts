@@ -270,6 +270,7 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       // are normal and should not escalate.
       const isLoopDrop =
         decision.reason === "echo" ||
+        decision.reason === "agent echo in self-chat" ||
         decision.reason === "self-chat echo" ||
         decision.reason === "reflected assistant content" ||
         decision.reason === "from me";

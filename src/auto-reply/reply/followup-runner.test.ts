@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { OpenClawConfig } from "../../config/config.js";
 import type { SessionEntry } from "../../config/sessions/types.js";
 import type { FollowupRun, QueueSettings } from "./queue.js";
 
@@ -1095,5 +1096,65 @@ describe("createFollowupRunner agentDir forwarding", () => {
     expect(runEmbeddedPiAgentMock).toHaveBeenCalledTimes(1);
     const call = runEmbeddedPiAgentMock.mock.calls.at(-1)?.[0] as { agentDir?: string };
     expect(call?.agentDir).toBe(agentDir);
+  });
+});
+
+describe("createFollowupRunner usage persistence", () => {
+  it("uses providerUsed for snapshot freshness when agent metadata overrides the run provider", async () => {
+    const storePath = "/tmp/openclaw-followup-usage-provider.json";
+    const sessionKey = "main";
+    const sessionEntry: SessionEntry = { sessionId: "session", updatedAt: Date.now() };
+    const sessionStore: Record<string, SessionEntry> = { [sessionKey]: sessionEntry };
+    const persistSpy = vi.spyOn(sessionRunAccounting, "persistRunSessionUsage");
+
+    runEmbeddedPiAgentMock.mockResolvedValueOnce({
+      payloads: [{ text: "hello world!" }],
+      meta: {
+        agentMeta: {
+          usage: { input: 10, output: 5 },
+          lastCallUsage: { input: 6, output: 3 },
+          model: "claude-opus-4-6",
+          provider: "anthropic",
+        },
+      },
+    });
+
+    const runner = createFollowupRunner({
+      opts: { onBlockReply: vi.fn(async () => {}) },
+      typing: createMockTypingController(),
+      typingMode: "instant",
+      defaultModel: "anthropic/claude-opus-4-6",
+      sessionEntry,
+      sessionStore,
+      sessionKey,
+      storePath,
+    });
+
+    await expect(
+      runner(
+        createQueuedRun({
+          run: {
+            provider: "openai",
+            config: {
+              agents: {
+                defaults: {
+                  cliBackends: {
+                    anthropic: {},
+                  },
+                },
+              },
+            } as OpenClawConfig,
+          },
+        }),
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(persistSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerUsed: "anthropic",
+        usageIsContextSnapshot: true,
+      }),
+    );
+    persistSpy.mockRestore();
   });
 });

@@ -4,6 +4,7 @@ import { getActiveRuntimeWebToolsMetadata } from "../secrets/runtime.js";
 import type { GatewayMessageChannel } from "../utils/message-channel.js";
 import { resolveAgentWorkspaceDir, resolveSessionAgentId } from "./agent-scope.js";
 import { resolveOpenClawPluginToolsForOptions } from "./openclaw-plugin-tools.js";
+import { wrapToolWorkspaceRootGuardWithOptions } from "./pi-tools.read.js";
 import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
 import type { SpawnedToolContext } from "./spawned-context.js";
 import type { ToolFsPolicy } from "./tool-fs-policy.js";
@@ -66,6 +67,7 @@ export function createOpenClawTools(
     agentThreadId?: string | number;
     agentDir?: string;
     sandboxRoot?: string;
+    sandboxContainerWorkdir?: string;
     sandboxFsBridge?: SandboxFsBridge;
     fsPolicy?: ToolFsPolicy;
     sandboxed?: boolean;
@@ -187,18 +189,27 @@ export function createOpenClawTools(
         requireExplicitTarget: options?.requireExplicitMessageTarget,
         requesterSenderId: options?.requesterSenderId ?? undefined,
       });
+  const nodesToolBase = createNodesTool({
+    agentSessionKey: options?.agentSessionKey,
+    agentChannel: options?.agentChannel,
+    agentAccountId: options?.agentAccountId,
+    currentChannelId: options?.currentChannelId,
+    currentThreadTs: options?.currentThreadTs,
+    config: options?.config,
+    modelHasVision: options?.modelHasVision,
+    allowMediaInvokeCommands: options?.allowMediaInvokeCommands,
+  });
+  const nodesTool =
+    options?.fsPolicy?.workspaceOnly === true
+      ? wrapToolWorkspaceRootGuardWithOptions(nodesToolBase, options?.sandboxRoot ?? workspaceDir, {
+          containerWorkdir: options?.sandboxContainerWorkdir,
+          pathParamKeys: ["outPath"],
+          normalizeGuardedPathParams: true,
+        })
+      : nodesToolBase;
   const tools: AnyAgentTool[] = [
     createCanvasTool({ config: options?.config }),
-    createNodesTool({
-      agentSessionKey: options?.agentSessionKey,
-      agentChannel: options?.agentChannel,
-      agentAccountId: options?.agentAccountId,
-      currentChannelId: options?.currentChannelId,
-      currentThreadTs: options?.currentThreadTs,
-      config: options?.config,
-      modelHasVision: options?.modelHasVision,
-      allowMediaInvokeCommands: options?.allowMediaInvokeCommands,
-    }),
+    nodesTool,
     createCronTool({
       agentSessionKey: options?.agentSessionKey,
     }),
