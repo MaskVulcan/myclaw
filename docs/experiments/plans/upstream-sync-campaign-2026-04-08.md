@@ -375,6 +375,17 @@ stable.
 - Goal:
   reconcile model discovery with workspace/runtime auth behavior after plugin
   runtime auth is stable
+- Execution note (2026-04-09):
+  scoped to the highest-value discovery seams:
+  provider-owned resolved-model compat/transport hooks, synthetic-auth-backed
+  discovery credentials, `pi-coding-agent` model-registry instantiation
+  compatibility, and focused helper exports/tests rather than a full
+  `pi-model-discovery.ts` rewrite.
+- Recorded issue (2026-04-09):
+  `src/agents/pi-model-discovery.compat.e2e.test.ts` remains outside routine
+  targeted validation because the repo Vitest config excludes `*.e2e.test.ts`.
+  Keep using focused `*.test.ts` coverage for this PR unless we intentionally
+  revisit the test-inclusion policy.
 
 ### PR-14: Plugin Platform Boundary
 

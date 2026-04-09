@@ -930,6 +930,76 @@ or less aligned with the current `myclaw` direction.
     environment. Focused replacement coverage was added for the new `PR-12`
     behavior instead of forcing higher-memory runs.
 
+## 2026-04-09 Campaign PR-13
+
+- Campaign item:
+  `PR-13: Model Discovery Alignment`
+- Worktree:
+  `/root/gitsource/.worktrees/myclaw-pr13-model-discovery-alignment`
+- Branch:
+  `sync/pr13-model-discovery-alignment`
+- Primary upstream references reviewed for this port:
+  - `openclaw/src/agents/pi-model-discovery.ts`
+  - `openclaw/src/plugins/provider-runtime.ts`
+  - `openclaw/src/plugins/synthetic-auth.runtime.ts`
+  - `openclaw/src/agents/model-auth-env-vars.ts`
+
+### Landed In This PR
+
+- Added discovery-time provider-runtime helpers in
+  `src/plugins/provider-runtime.ts`:
+  - `applyProviderResolvedModelCompatWithPlugins`
+  - `applyProviderResolvedTransportWithPlugin`
+  - compat-hook ordering that lets an owning plugin plus foreign
+    transport-family plugins contribute resolved-model compat patches
+- Extended `ProviderPlugin` in `src/plugins/types.ts` with the narrow
+  `contributeResolvedModelCompat` hook so future provider plugins can describe
+  vendor compat behind proxy/custom transports without taking over provider
+  ownership.
+- Added `src/plugins/synthetic-auth.runtime.ts` so model discovery can inspect
+  active plugin providers / CLI backends for synthetic auth support, with a
+  conservative bundled fallback list for startup-time discovery.
+- Updated `src/agents/pi-model-discovery.ts` to:
+  - export focused discovery helpers
+    (`normalizeDiscoveredPiModel`,
+    `scrubLegacyStaticAuthJsonEntriesForDiscovery`,
+    `addEnvBackedPiCredentials`,
+    `resolvePiCredentialsForDiscovery`)
+  - run discovered models through plugin normalization, compat contribution,
+    and transport normalization before final generic compat cleanup
+  - mirror plugin/CLI synthetic auth into Pi auth storage so discovery sees the
+    same providers runtime auth can use
+  - instantiate the Pi model registry through a class-or-factory compatibility
+    shim instead of depending on subclassing only
+- Added `resolveProviderEnvApiKeyCandidates()` to
+  `src/agents/model-auth-env-vars.ts` so discovery helpers can query the
+  provider env-candidate table through an exported function, matching the
+  upstream seam without rewriting the broader secrets layer.
+- Added focused low-memory tests:
+  - `src/plugins/provider-runtime.discovery-hooks.test.ts`
+  - `src/plugins/synthetic-auth.runtime.test.ts`
+  - `src/agents/pi-model-discovery.normalize.test.ts`
+  - `src/agents/pi-model-discovery.synthetic-auth.test.ts`
+
+### Intentionally Deferred
+
+- Did not pull in the full upstream `pi-model-discovery.ts` rewrite or the
+  wider plugin/runtime boundary expansion. This PR stays on the discovery-time
+  seams that directly improve parity with runtime auth.
+- Did not broaden validation into large legacy suites or unrelated model/runtime
+  trains. The goal here is to make discovery honor provider hooks and synthetic
+  auth, not to rebase the entire provider platform.
+
+### Validation On This Branch
+
+- Passed:
+  - `git diff --check`
+  - `NODE_OPTIONS='--max-old-space-size=768' pnpm vitest run --maxWorkers=1 src/plugins/provider-runtime.discovery-hooks.test.ts src/plugins/synthetic-auth.runtime.test.ts src/agents/pi-model-discovery.auth.test.ts src/agents/pi-model-discovery.normalize.test.ts src/agents/pi-model-discovery.synthetic-auth.test.ts`
+- Validation note:
+  - `src/agents/pi-model-discovery.compat.e2e.test.ts` exists as a compatibility
+    smoke, but the repo Vitest config excludes `*.e2e.test.ts`, so it is not
+    part of routine targeted validation in this environment.
+
 ## 2026-04-09 Campaign Status
 
 - Planned sync campaign PRs `PR-01` through `PR-11` are now landed on `main`.
