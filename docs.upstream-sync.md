@@ -1122,10 +1122,69 @@ or less aligned with the current `myclaw` direction.
   - `NODE_OPTIONS='--max-old-space-size=768' pnpm vitest run --maxWorkers=1 test/scripts/pnpm-runner.test.ts test/scripts/vitest-process-group.test.ts test/scripts/run-vitest.test.ts test/scripts/run-vitest-profile.test.ts`
   - `NODE_OPTIONS='--max-old-space-size=768' node scripts/run-vitest.mjs run --config vitest.unit.config.ts --maxWorkers=1 test/scripts/pnpm-runner.test.ts test/scripts/vitest-process-group.test.ts test/scripts/run-vitest.test.ts`
 
+## 2026-04-09 Campaign PR-16
+
+- Campaign item:
+  `PR-16: Docs / Locale Automation`
+- Worktree:
+  `/root/gitsource/.worktrees/myclaw-pr16-docs-locale-automation`
+- Branch:
+  `sync/pr16-docs-locale-automation`
+- Primary upstream sources:
+  - `openclaw/scripts/docs-i18n/main.go`
+  - `openclaw/scripts/docs-i18n/doc_mode.go`
+  - `openclaw/scripts/docs-i18n/process.go`
+  - `openclaw/scripts/docs-i18n/localized_links.go`
+  - `openclaw/scripts/docs-i18n/relocalize.go`
+
+### Landed In This PR
+
+- Updated `scripts/docs-i18n` to match the upstream post-translation workflow
+  shape more closely:
+  - introduced `docsTranslator` / `docsTranslatorFactory` seams so the docs
+    pipeline can be exercised with deterministic test doubles instead of only
+    the live Pi client
+  - threaded output-path tracking through segment-mode and doc-mode processing
+    so later postprocessing can operate only on the files written in the
+    current run
+  - added a final `postprocessLocalizedDocs()` pass that rewrites internal docs
+    links to locale-prefixed routes when the translated destination page exists
+- Added route-aware localized-link automation in
+  `scripts/docs-i18n/localized_links.go`:
+  - follows `docs/docs.json` redirects to canonical routes
+  - discovers source and localized routes from the docs tree plus permalink
+    frontmatter
+  - rewrites Markdown links and `href=` attributes while preserving fragments
+    and avoiding already localized links, assets, external URLs, inline code,
+    and fenced code blocks
+- Hardened doc-mode parsing in `scripts/docs-i18n/doc_mode.go` so a translated
+  response that omits the final `</body>` tag at EOF is treated as a
+  recoverable formatting slip instead of failing the entire document run.
+- Added focused Go regression coverage:
+  - `scripts/docs-i18n/doc_mode_test.go`
+  - `scripts/docs-i18n/localized_links_test.go`
+  - `scripts/docs-i18n/relocalize_test.go`
+  - `scripts/docs-i18n/main_test.go`
+
+### Intentionally Deferred
+
+- Did not port the broader upstream docs automation wave:
+  `scripts/control-ui-i18n.ts`, the control-ui locale refresh workflow, and the
+  docs publish-repo mirroring workflow remain out of scope because the current
+  repo has a narrower locale surface and no established publish-repo target.
+- Did not regenerate or widen the shipped locale assets themselves. This PR is
+  about making the existing docs-translation pipeline produce cleaner localized
+  links and be easier to validate offline.
+
+### Validation On This Branch
+
+- Passed:
+  - `git diff --check`
+  - `GOMAXPROCS=1 go test ./...`
+
 ## 2026-04-09 Campaign Status
 
-- Planned sync campaign PRs `PR-01` through `PR-11` are now landed on `main`.
-- Planned sync campaign PRs `PR-12` through `PR-15` are now landed on `main`.
+- Planned sync campaign PRs `PR-01` through `PR-16` are now landed on `main`.
 - Remaining upstream ideas that were intentionally not absorbed stay tracked in:
   - `docs/experiments/plans/upstream-sync-campaign-2026-04-08.md`
   - the `Intentionally Deferred` sections recorded per PR in this log

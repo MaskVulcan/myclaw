@@ -431,6 +431,17 @@ stable.
 - Worktree: `/root/gitsource/.worktrees/myclaw-pr16-docs-locale-automation`
 - Goal:
   optional docs/release automation parity after runtime/platform work is done
+- Execution note (2026-04-09):
+  scoped to the upstream `scripts/docs-i18n` post-translation automation that
+  best fits the current repo:
+  route-aware localized link relocalization, injectable translator seams for
+  deterministic testing, and doc-mode parser tolerance for missing closing body
+  tags.
+- Recorded issue (2026-04-09):
+  the wider upstream docs automation train remains deferred here:
+  `scripts/control-ui-i18n.ts`, locale refresh workflows, and docs publish-repo
+  mirroring were not ported because `myclaw` has a narrower UI locale surface
+  and no established separate publish-repo release target yet.
 
 ## Execution Order
 
