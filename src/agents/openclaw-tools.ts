@@ -1,11 +1,9 @@
 import type { OpenClawConfig } from "../config/config.js";
 import { callGateway } from "../gateway/call.js";
-import { resolvePluginTools } from "../plugins/tools.js";
 import { getActiveRuntimeWebToolsMetadata } from "../secrets/runtime.js";
-import { normalizeDeliveryContext } from "../utils/delivery-context.js";
 import type { GatewayMessageChannel } from "../utils/message-channel.js";
 import { resolveAgentWorkspaceDir, resolveSessionAgentId } from "./agent-scope.js";
-import { applyPluginToolDeliveryDefaults } from "./plugin-tool-delivery-defaults.js";
+import { resolveOpenClawPluginToolsForOptions } from "./openclaw-plugin-tools.js";
 import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
 import type { SpawnedToolContext } from "./spawned-context.js";
 import type { ToolFsPolicy } from "./tool-fs-policy.js";
@@ -27,6 +25,7 @@ import { createSessionsSpawnTool } from "./tools/sessions-spawn-tool.js";
 import { createSessionsYieldTool } from "./tools/sessions-yield-tool.js";
 import { createSubagentsTool } from "./tools/subagents-tool.js";
 import { createTtsTool } from "./tools/tts-tool.js";
+import { createUpdatePlanTool } from "./tools/update-plan-tool.js";
 import { createWebFetchTool, createWebSearchTool } from "./tools/web-tools.js";
 import { resolveWorkspaceRoot } from "./workspace-dir.js";
 
@@ -40,6 +39,19 @@ const defaultOpenClawToolsDeps: OpenClawToolsDeps = {
 };
 
 let openClawToolsDeps: OpenClawToolsDeps = defaultOpenClawToolsDeps;
+
+function isOpenAIProvider(provider?: string): boolean {
+  const normalized = provider?.trim().toLowerCase();
+  return normalized === "openai" || normalized === "openai-codex";
+}
+
+function isUpdatePlanToolEnabled(config: OpenClawConfig | undefined, provider?: string): boolean {
+  const configured = config?.tools?.experimental?.planTool;
+  if (configured !== undefined) {
+    return configured;
+  }
+  return isOpenAIProvider(provider);
+}
 
 export function createOpenClawTools(
   options?: {
@@ -71,6 +83,8 @@ export function createOpenClawTools(
     hasRepliedRef?: { value: boolean };
     /** If true, the model has native vision capability */
     modelHasVision?: boolean;
+    /** Active model provider for provider-specific tool gating. */
+    modelProvider?: string;
     /** If true, nodes action="invoke" can call media-returning commands directly. */
     allowMediaInvokeCommands?: boolean;
     /** Explicit agent ID override for cron/hook sessions. */
@@ -79,6 +93,8 @@ export function createOpenClawTools(
     requireExplicitMessageTarget?: boolean;
     /** If true, omit the message tool from the tool list. */
     disableMessageTool?: boolean;
+    /** If true, skip plugin tool resolution and return only shipped core tools. */
+    disablePluginTools?: boolean;
     /** Trusted sender id from inbound context (not tool args). */
     requesterSenderId?: string | null;
     /** Whether the requesting sender is an owner. */
@@ -113,12 +129,6 @@ export function createOpenClawTools(
   const spawnWorkspaceDir = resolveWorkspaceRoot(
     options?.spawnWorkspaceDir ?? options?.workspaceDir ?? inferredWorkspaceDir,
   );
-  const deliveryContext = normalizeDeliveryContext({
-    channel: options?.agentChannel,
-    to: options?.agentTo,
-    accountId: options?.agentAccountId,
-    threadId: options?.agentThreadId,
-  });
   const runtimeWebTools = getActiveRuntimeWebToolsMetadata();
   const sandbox =
     options?.sandboxRoot && options?.sandboxFsBridge
@@ -206,6 +216,9 @@ export function createOpenClawTools(
       agentSessionKey: options?.agentSessionKey,
       requesterAgentIdOverride: options?.requesterAgentIdOverride,
     }),
+    ...(isUpdatePlanToolEnabled(resolvedConfig, options?.modelProvider)
+      ? [createUpdatePlanTool()]
+      : []),
     createSessionsListTool({
       agentSessionKey: options?.agentSessionKey,
       sandboxed: options?.sandboxed,
@@ -256,33 +269,10 @@ export function createOpenClawTools(
     ...(pdfTool ? [pdfTool] : []),
   ];
 
-  const pluginTools = resolvePluginTools({
-    context: {
-      config: options?.config,
-      workspaceDir,
-      agentDir: options?.agentDir,
-      agentId: sessionAgentId,
-      sessionKey: options?.agentSessionKey,
-      sessionId: options?.sessionId,
-      browser: {
-        sandboxBridgeUrl: options?.sandboxBrowserBridgeUrl,
-        allowHostControl: options?.allowHostBrowserControl,
-      },
-      messageChannel: options?.agentChannel,
-      agentAccountId: options?.agentAccountId,
-      deliveryContext,
-      requesterSenderId: options?.requesterSenderId ?? undefined,
-      senderIsOwner: options?.senderIsOwner ?? undefined,
-      sandboxed: options?.sandboxed,
-    },
+  const wrappedPluginTools = resolveOpenClawPluginToolsForOptions({
+    options,
+    resolvedConfig,
     existingToolNames: new Set(tools.map((tool) => tool.name)),
-    toolAllowlist: options?.pluginToolAllowlist,
-    allowGatewaySubagentBinding: options?.allowGatewaySubagentBinding,
-  });
-
-  const wrappedPluginTools = applyPluginToolDeliveryDefaults({
-    tools: pluginTools,
-    deliveryContext,
   });
 
   return [...tools, ...wrappedPluginTools];

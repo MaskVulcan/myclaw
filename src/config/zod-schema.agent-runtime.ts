@@ -862,6 +862,12 @@ export const ToolsSchema = z
       })
       .strict()
       .optional(),
+    experimental: z
+      .object({
+        planTool: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
     elevated: z
       .object({
         enabled: z.boolean().optional(),

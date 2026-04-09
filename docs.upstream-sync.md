@@ -861,6 +861,75 @@ or less aligned with the current `myclaw` direction.
     for local validation was restored after the test attempt; no Gradle
     scaffolding changes were kept in the branch.
 
+## 2026-04-09 Campaign PR-12
+
+- Campaign item:
+  `PR-12: Tool Registry Alignment`
+- Worktree:
+  `/root/gitsource/.worktrees/myclaw-pr12-tool-registry-alignment`
+- Branch:
+  `sync/pr12-tool-registry-alignment`
+- Primary upstream sources:
+  - `a705845e18`
+    `feat(agents): add experimental structured plan updates`
+  - `9d31c5ad53`
+    `fix: compact update_plan tool result`
+  - `43cc92dc07`
+    `perf(agents): isolate plugin tool resolution for tests`
+
+### Landed In This PR
+
+- Added the experimental `update_plan` tool in
+  `src/agents/tools/update-plan-tool.ts` with compact success payloads and
+  validation that keeps the structured plan shape tight.
+- Registered `update_plan` in `src/agents/openclaw-tools.ts` with narrow
+  gating:
+  - explicit `tools.experimental.planTool`
+  - OpenAI / OpenAI Codex auto-enable when the flag is unset
+  - no change to `myclaw`'s fast-pass or capability-first routing logic
+- Forwarded `modelProvider` from `src/agents/pi-tools.ts` so provider-aware
+  gating can activate without broad tool-registry churn.
+- Isolated plugin-tool resolution into:
+  - `src/agents/openclaw-tools.plugin-context.ts`
+  - `src/agents/openclaw-plugin-tools.ts`
+  This keeps future registry-sync work localized without replacing
+  `myclaw`'s existing plugin/tool policy pipeline.
+- Added `update_plan` to the shipped tool surface metadata:
+  - tool catalog / coding profile policy
+  - system prompt availability + usage guidance
+  - shared tool display metadata
+- Added the minimum config/schema surface needed to make the tool explicitly
+  configurable:
+  - `tools.experimental.planTool` in runtime schema + types
+  - labels/help entries
+  - minimal generated schema/doc baseline entries for that path only
+
+### Intentionally Deferred
+
+- Did not pull in the broader upstream `openclaw-tools.ts` rewrite, music/video
+  registry additions, or wider plugin/runtime refactors. This PR keeps the
+  change set centered on `update_plan` plus helper extraction only.
+- Did not trust a full `config:schema:gen` / `config:docs:gen` rewrite while
+  using the sibling `openclaw/node_modules` dependency tree for local
+  validation. That path surfaced unrelated baseline drift outside `PR-12`.
+  The branch keeps only the minimal generated deltas for
+  `tools.experimental.planTool` and leaves the broader baseline refresh for a
+  separate maintenance pass.
+
+### Validation On This Branch
+
+- Passed:
+  - `git diff --check`
+  - `NODE_OPTIONS='--max-old-space-size=768' pnpm vitest run --maxWorkers=1 src/agents/tools/update-plan-tool.test.ts src/agents/openclaw-plugin-tools.test.ts src/agents/system-prompt.update-plan.test.ts src/agents/tool-catalog.test.ts src/config/schema.experimental-plan-tool.test.ts src/config/schema.base.generated.test.ts`
+  - `NODE_OPTIONS='--max-old-space-size=768' pnpm vitest run --maxWorkers=1 src/agents/openclaw-tools.update-plan.test.ts`
+- Validation gap:
+  - The broader legacy suites
+    `src/agents/system-prompt.test.ts` and
+    `src/agents/openclaw-tools.plugin-context.test.ts`
+    exceeded the local heap budget during single-worker runs in this
+    environment. Focused replacement coverage was added for the new `PR-12`
+    behavior instead of forcing higher-memory runs.
+
 ## 2026-04-09 Campaign Status
 
 - Planned sync campaign PRs `PR-01` through `PR-11` are now landed on `main`.

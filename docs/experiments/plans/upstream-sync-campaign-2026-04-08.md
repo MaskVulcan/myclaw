@@ -357,6 +357,16 @@ stable.
 - Goal:
   selectively absorb upstream tool registration and delivery-default behavior
   without overwriting `myclaw` fast-pass routing
+- Execution note (2026-04-09):
+  scoped down to the highest-value, lowest-risk subset:
+  `update_plan` registration/gating, minimal plugin-tool helper extraction, and
+  the smallest config/generated-surface additions needed for
+  `tools.experimental.planTool`.
+- Recorded issue (2026-04-09):
+  full schema/doc regeneration under the borrowed sibling-repo dependency tree
+  surfaced unrelated baseline drift outside `PR-12`; keep only the minimal
+  `planTool` generated deltas in this PR and revisit the wider baseline refresh
+  in a separate maintenance pass.
 
 ### PR-13: Model Discovery Alignment
 

@@ -2,11 +2,12 @@ import { describe, expect, it } from "vitest";
 import { resolveCoreToolProfilePolicy } from "./tool-catalog.js";
 
 describe("tool-catalog", () => {
-  it("includes web_search and web_fetch in the coding profile policy", () => {
+  it("includes web_search, web_fetch, image_generate, and update_plan in the coding profile policy", () => {
     const policy = resolveCoreToolProfilePolicy("coding");
     expect(policy).toBeDefined();
     expect(policy!.allow).toContain("web_search");
     expect(policy!.allow).toContain("web_fetch");
     expect(policy!.allow).toContain("image_generate");
+    expect(policy!.allow).toContain("update_plan");
   });
 });

@@ -574,6 +574,11 @@ export type ToolsConfig = {
     /** Allowlist of agent ids or patterns (implementation-defined). */
     allow?: string[];
   };
+  /** Experimental built-in tool flags. */
+  experimental?: {
+    /** Enable or disable the structured update_plan tool. */
+    planTool?: boolean;
+  };
   /**
    * Session tool visibility controls which sessions can be targeted by session tools
    * (sessions_list, sessions_history, sessions_send).

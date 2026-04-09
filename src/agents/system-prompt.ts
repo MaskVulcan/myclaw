@@ -246,6 +246,7 @@ export function buildAgentSystemPrompt(params: {
     agents_list: acpSpawnRuntimeEnabled
       ? 'List OpenClaw agent ids allowed for sessions_spawn when runtime="subagent" (not ACP harness ids)'
       : "List OpenClaw agent ids allowed for sessions_spawn",
+    update_plan: "Track a short structured work plan",
     sessions_list: "List other sessions (incl. sub-agents) with filters/last",
     sessions_history: "Fetch history for another session/sub-agent",
     sessions_send: "Send a message to another session/sub-agent",
@@ -278,6 +279,7 @@ export function buildAgentSystemPrompt(params: {
     "message",
     "gateway",
     "agents_list",
+    "update_plan",
     "sessions_list",
     "sessions_history",
     "sessions_send",
@@ -303,6 +305,7 @@ export function buildAgentSystemPrompt(params: {
   const normalizedTools = canonicalToolNames.map((tool) => tool.toLowerCase());
   const availableTools = new Set(normalizedTools);
   const hasSessionsSpawn = availableTools.has("sessions_spawn");
+  const hasUpdatePlanTool = availableTools.has("update_plan");
   const acpHarnessSpawnAllowed = hasSessionsSpawn && acpSpawnRuntimeEnabled;
   const externalToolSummaries = new Map<string, string>();
   for (const [key, value] of Object.entries(params.toolSummaries ?? {})) {
@@ -440,6 +443,14 @@ export function buildAgentSystemPrompt(params: {
         ].join("\n"),
     "TOOLS.md does not control tool availability; it is user guidance for how to use external tools.",
     `For long waits, avoid rapid poll loops: use ${execToolName} with enough yieldMs or ${processToolName}(action=poll, timeout=<ms>).`,
+    ...(hasUpdatePlanTool
+      ? [
+          "For non-trivial multi-step work, keep a short plan updated with `update_plan`.",
+          "Skip `update_plan` for simple tasks, obvious one-step fixes, or work you can finish in a few direct actions.",
+          "When you use `update_plan`, keep exactly one step `in_progress` until the work is done.",
+          "After calling `update_plan`, continue the work and do not repeat the full plan unless the user asks.",
+        ]
+      : []),
     "If a task is more complex or takes longer, spawn a sub-agent. Completion is push-based: it will auto-announce when done.",
     ...(acpHarnessSpawnAllowed
       ? [

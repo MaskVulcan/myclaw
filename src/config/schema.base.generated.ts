@@ -7077,6 +7077,15 @@ export const GENERATED_BASE_CONFIG_SCHEMA = {
             },
             additionalProperties: false,
           },
+          experimental: {
+            type: "object",
+            properties: {
+              planTool: {
+                type: "boolean",
+              },
+            },
+            additionalProperties: false,
+          },
           elevated: {
             type: "object",
             properties: {
@@ -12578,6 +12587,16 @@ export const GENERATED_BASE_CONFIG_SCHEMA = {
       label: "Agent-to-Agent Target Allowlist",
       help: "Allowlist of target agent IDs permitted for agent_to_agent calls when orchestration is enabled. Use explicit allowlists to avoid uncontrolled cross-agent call graphs.",
       tags: ["access", "tools"],
+    },
+    "tools.experimental": {
+      label: "Experimental Tools",
+      help: "Experimental built-in tool flags. Keep these off by default and enable only when you are intentionally testing a preview surface.",
+      tags: ["security", "tools", "advanced"],
+    },
+    "tools.experimental.planTool": {
+      label: "Enable Structured Plan Tool",
+      help: "Enable or disable the experimental structured `update_plan` tool for non-trivial multi-step work tracking. OpenAI and OpenAI Codex runs auto-enable it when this flag is unset; set false to disable that auto-enable.",
+      tags: ["security", "tools", "advanced"],
     },
     "tools.elevated": {
       label: "Elevated Tool Access",

@@ -60703,6 +60703,38 @@
       "hasChildren": false
     },
     {
+      "path": "tools.experimental",
+      "kind": "core",
+      "type": "object",
+      "required": false,
+      "deprecated": false,
+      "sensitive": false,
+      "tags": [
+        "advanced",
+        "security",
+        "tools"
+      ],
+      "label": "Experimental Tools",
+      "help": "Experimental built-in tool flags. Keep these off by default and enable only when you are intentionally testing a preview surface.",
+      "hasChildren": true
+    },
+    {
+      "path": "tools.experimental.planTool",
+      "kind": "core",
+      "type": "boolean",
+      "required": false,
+      "deprecated": false,
+      "sensitive": false,
+      "tags": [
+        "advanced",
+        "security",
+        "tools"
+      ],
+      "label": "Enable Structured Plan Tool",
+      "help": "Enable or disable the experimental structured `update_plan` tool for non-trivial multi-step work tracking. OpenAI and OpenAI Codex runs auto-enable it when this flag is unset; set false to disable that auto-enable.",
+      "hasChildren": false
+    },
+    {
       "path": "tools.fs",
       "kind": "core",
       "type": "object",

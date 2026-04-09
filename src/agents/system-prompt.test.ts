@@ -243,13 +243,33 @@ describe("buildAgentSystemPrompt", () => {
   it("lists available tools when provided", () => {
     const prompt = buildAgentSystemPrompt({
       workspaceDir: "/tmp/openclaw",
-      toolNames: ["exec", "sessions_list", "sessions_history", "sessions_send"],
+      toolNames: ["exec", "update_plan", "sessions_list", "sessions_history", "sessions_send"],
     });
 
     expect(prompt).toContain("Tool availability (filtered by policy):");
+    expect(prompt).toContain("update_plan");
     expect(prompt).toContain("sessions_list");
     expect(prompt).toContain("sessions_history");
     expect(prompt).toContain("sessions_send");
+  });
+
+  it("adds update_plan guidance only when the tool is available", () => {
+    const withPlanTool = buildAgentSystemPrompt({
+      workspaceDir: "/tmp/openclaw",
+      toolNames: ["exec", "update_plan"],
+    });
+    const withoutPlanTool = buildAgentSystemPrompt({
+      workspaceDir: "/tmp/openclaw",
+      toolNames: ["exec"],
+    });
+
+    expect(withPlanTool).toContain(
+      "For non-trivial multi-step work, keep a short plan updated with `update_plan`.",
+    );
+    expect(withPlanTool).toContain(
+      "When you use `update_plan`, keep exactly one step `in_progress` until the work is done.",
+    );
+    expect(withoutPlanTool).not.toContain("keep a short plan updated with `update_plan`");
   });
 
   it("documents ACP sessions_spawn agent targeting requirements", () => {
