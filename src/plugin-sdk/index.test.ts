@@ -1,6 +1,28 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import type {
+  AssembleResult as RootAssembleResult,
+  BootstrapResult as RootBootstrapResult,
+  CompactResult as RootCompactResult,
+  IngestBatchResult as RootIngestBatchResult,
+  IngestResult as RootIngestResult,
+  ProviderPreparedRuntimeAuth as RootProviderPreparedRuntimeAuth,
+  ResolvedProviderRuntimeAuth as RootResolvedProviderRuntimeAuth,
+  SubagentEndReason as RootSubagentEndReason,
+  SubagentSpawnPreparation as RootSubagentSpawnPreparation,
+} from "./index.js";
+import type {
+  AssembleResult,
+  BootstrapResult,
+  CompactResult,
+  IngestBatchResult,
+  IngestResult,
+  SubagentEndReason,
+  SubagentSpawnPreparation,
+} from "../context-engine/types.js";
+import type { ProviderPreparedRuntimeAuth } from "../plugins/types.js";
+import type { ResolvedProviderRuntimeAuth } from "../plugins/runtime/model-auth-types.js";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import { buildPluginSdkPackageExports } from "./entrypoints.js";
 
 async function collectRuntimeExports(filePath: string, seen = new Set<string>()) {
@@ -110,5 +132,17 @@ describe("plugin-sdk exports", () => {
     );
 
     expect(currentPluginSdkExports).toEqual(buildPluginSdkPackageExports());
+  });
+
+  it("re-exports runtime auth and context-engine types on the root surface", () => {
+    expectTypeOf<RootProviderPreparedRuntimeAuth>().toEqualTypeOf<ProviderPreparedRuntimeAuth>();
+    expectTypeOf<RootResolvedProviderRuntimeAuth>().toEqualTypeOf<ResolvedProviderRuntimeAuth>();
+    expectTypeOf<RootAssembleResult>().toEqualTypeOf<AssembleResult>();
+    expectTypeOf<RootBootstrapResult>().toEqualTypeOf<BootstrapResult>();
+    expectTypeOf<RootCompactResult>().toEqualTypeOf<CompactResult>();
+    expectTypeOf<RootIngestResult>().toEqualTypeOf<IngestResult>();
+    expectTypeOf<RootIngestBatchResult>().toEqualTypeOf<IngestBatchResult>();
+    expectTypeOf<RootSubagentSpawnPreparation>().toEqualTypeOf<SubagentSpawnPreparation>();
+    expectTypeOf<RootSubagentEndReason>().toEqualTypeOf<SubagentEndReason>();
   });
 });

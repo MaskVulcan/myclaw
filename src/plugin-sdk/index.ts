@@ -50,9 +50,11 @@ export type {
   PluginLogger,
   ProviderAuthContext,
   ProviderAuthResult,
+  ProviderPreparedRuntimeAuth,
   ProviderRuntimeModel,
   SpeechProviderPlugin,
 } from "../plugins/types.js";
+export type { ResolvedProviderRuntimeAuth } from "../plugins/runtime/model-auth-types.js";
 export type {
   PluginRuntime,
   RuntimeLogger,
@@ -72,10 +74,17 @@ export type { WizardPrompter } from "../wizard/prompts.js";
 export type { ContextEngineFactory } from "../context-engine/registry.js";
 export type { DiagnosticEventPayload } from "../infra/diagnostic-events.js";
 export type {
+  AssembleResult,
+  BootstrapResult,
+  CompactResult,
   ContextEngine,
   ContextEngineInfo,
+  IngestBatchResult,
+  IngestResult,
   ContextEngineMaintenanceResult,
   ContextEngineRuntimeContext,
+  SubagentEndReason,
+  SubagentSpawnPreparation,
   TranscriptRewriteReplacement,
   TranscriptRewriteRequest,
   TranscriptRewriteResult,

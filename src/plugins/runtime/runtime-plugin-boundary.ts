@@ -5,6 +5,7 @@ import { loadConfig } from "../../config/config.js";
 import { loadPluginManifestRegistry } from "../manifest-registry.js";
 import {
   buildPluginLoaderJitiOptions,
+  normalizeJitiAliasTargetPath,
   resolvePluginSdkAliasFile,
   resolvePluginSdkScopedAliasMap,
   shouldPreferNativeJiti,
@@ -87,7 +88,12 @@ export function getPluginBoundaryJiti(
     modulePath,
   });
   const aliasMap = {
-    ...(pluginSdkAlias ? { "openclaw/plugin-sdk": pluginSdkAlias } : {}),
+    ...(pluginSdkAlias
+      ? {
+          "openclaw/plugin-sdk": normalizeJitiAliasTargetPath(pluginSdkAlias),
+          "@openclaw/plugin-sdk": normalizeJitiAliasTargetPath(pluginSdkAlias),
+        }
+      : {}),
     ...resolvePluginSdkScopedAliasMap({ modulePath }),
   };
   const loader = createJiti(import.meta.url, {

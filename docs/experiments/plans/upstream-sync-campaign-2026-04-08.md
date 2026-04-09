@@ -394,6 +394,16 @@ stable.
 - Goal:
   take the plugin SDK and plugin runtime boundary improvements that reduce
   future drift and improve plugin-host contracts
+- Execution note (2026-04-09):
+  scoped to loader/boundary alias correctness and root plugin-sdk surface
+  parity:
+  dual `openclaw` / `@openclaw` plugin-sdk alias handling, Windows-safe Jiti
+  alias targets, and the missing runtime-auth / context-engine type exports on
+  the root SDK surface.
+- Intentionally deferred inside this PR (2026-04-09):
+  the wider public-surface loader/runtime train, facade runtime expansion, and
+  task-domain runtime surfaces remain out of scope for this branch and should
+  stay separate from boundary-loader cleanup.
 
 ### PR-15: QA Platform
 

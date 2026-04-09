@@ -1000,6 +1000,68 @@ or less aligned with the current `myclaw` direction.
     smoke, but the repo Vitest config excludes `*.e2e.test.ts`, so it is not
     part of routine targeted validation in this environment.
 
+## 2026-04-09 Campaign PR-14
+
+- Campaign item:
+  `PR-14: Plugin Platform Boundary`
+- Worktree:
+  `/root/gitsource/.worktrees/myclaw-pr14-plugin-platform-boundary`
+- Branch:
+  `sync/pr14-plugin-platform-boundary`
+- Primary upstream sources:
+  - `df993291b6`
+    `refactor: share bundled loader Jiti config helpers`
+  - `3a4b96bfbf`
+    `fix: normalize plugin SDK aliases on Windows`
+  - `03be4c2489`
+    `fix(plugin-sdk): export missing context-engine types (#61251)`
+  - targeted remainder from
+    `b8f12d99b2`
+    `fix: expose runtime-ready provider auth to plugins (#62753)`
+
+### Landed In This PR
+
+- Aligned `src/plugins/sdk-alias.ts` with the narrower upstream boundary-loader
+  improvements:
+  - plugin-sdk alias maps now resolve both `openclaw/plugin-sdk/*` and
+    `@openclaw/plugin-sdk/*`
+  - alias targets are normalized before handing them to Jiti on Windows
+  - `shouldPreferNativeJiti()` now avoids native Jiti loading on Windows while
+    preserving the existing Bun guard
+- Updated `src/plugins/runtime/runtime-plugin-boundary.ts` so runtime boundary
+  Jiti loaders mirror the dual root alias behavior instead of only wiring the
+  unscoped package name.
+- Expanded the root `src/plugin-sdk/index.ts` type surface with the already
+  shipped local runtime-auth and context-engine contracts:
+  - `ProviderPreparedRuntimeAuth`
+  - `ResolvedProviderRuntimeAuth`
+  - `AssembleResult`, `BootstrapResult`, `CompactResult`
+  - `IngestResult`, `IngestBatchResult`
+  - `SubagentSpawnPreparation`, `SubagentEndReason`
+- Added focused regression coverage:
+  - `src/plugins/sdk-alias.test.ts`
+    now verifies dual-package alias targets, scoped runtime-shim loading, and
+    Windows alias normalization behavior
+  - `src/plugin-sdk/index.test.ts`
+    now locks the root plugin-sdk type re-export contract for runtime-auth and
+    context-engine result types
+
+### Intentionally Deferred
+
+- Did not pull in the broader upstream public-surface loader/runtime train,
+  task-domain runtime surfaces, or facade-runtime expansion. This PR keeps the
+  scope on boundary alias correctness and root SDK contract parity only.
+- Did not attempt the full plugin host/runtime refactor wave. The goal here is
+  to reduce immediate boundary drift around loader aliases and root SDK types
+  without widening the plugin execution surface.
+
+### Validation On This Branch
+
+- Passed:
+  - `git diff --check`
+  - `NODE_OPTIONS='--max-old-space-size=768' pnpm vitest run --maxWorkers=1 src/plugins/sdk-alias.test.ts src/plugin-sdk/index.test.ts`
+  - `NODE_OPTIONS='--max-old-space-size=768' pnpm vitest run --maxWorkers=1 src/plugins/loader.git-path-regression.test.ts src/plugins/runtime-plugin-boundary.whatsapp.test.ts`
+
 ## 2026-04-09 Campaign Status
 
 - Planned sync campaign PRs `PR-01` through `PR-11` are now landed on `main`.
