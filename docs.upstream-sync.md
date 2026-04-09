@@ -1062,9 +1062,70 @@ or less aligned with the current `myclaw` direction.
   - `NODE_OPTIONS='--max-old-space-size=768' pnpm vitest run --maxWorkers=1 src/plugins/sdk-alias.test.ts src/plugin-sdk/index.test.ts`
   - `NODE_OPTIONS='--max-old-space-size=768' pnpm vitest run --maxWorkers=1 src/plugins/loader.git-path-regression.test.ts src/plugins/runtime-plugin-boundary.whatsapp.test.ts`
 
+## 2026-04-09 Campaign PR-15
+
+- Campaign item:
+  `PR-15: QA Platform`
+- Worktree:
+  `/root/gitsource/.worktrees/myclaw-pr15-qa-platform`
+- Branch:
+  `sync/pr15-qa-platform`
+- Primary upstream sources:
+  - `openclaw/scripts/pnpm-runner.mjs`
+  - `openclaw/scripts/run-vitest.mjs`
+  - `openclaw/scripts/vitest-process-group.mjs`
+  - `openclaw/scripts/windows-cmd-helpers.mjs`
+  - focused behavior from `openclaw/scripts/test-live.mjs`
+
+### Landed In This PR
+
+- Added shared scripted Vitest launch helpers:
+  - `scripts/windows-cmd-helpers.mjs`
+  - `scripts/pnpm-runner.mjs`
+  - `scripts/vitest-process-group.mjs`
+  - `scripts/run-vitest.mjs`
+- The new runner layer brings in the narrow upstream behaviors that matter for
+  local low-memory test execution:
+  - prefer `npm_execpath` when `pnpm` is being brokered through Corepack
+  - use Windows-safe `cmd.exe` argument escaping when `pnpm.cmd` fallback is
+    required
+  - disable Maglev for child Vitest processes by default unless
+    `OPENCLAW_VITEST_ENABLE_MAGLEV=1`
+  - forward shutdown signals to detached Unix Vitest process groups so wrapper
+    scripts do not strand child workers
+  - suppress known rolldown plugin timing noise from Vitest stderr
+- Updated `scripts/test-live.mjs` to use the shared `pnpm` runner and emit a
+  periodic heartbeat when the wrapped live suite stays silent for a while.
+- Switched the direct package-script Vitest entrypoints in `package.json`
+  (`test:fast`, `test:coverage`, `test:e2e`, `test:gateway`, contracts, auth
+  compat, sectriage, targeted tooling/live Android/voice-call runs) to the new
+  wrapper while leaving the planner-backed `scripts/test-parallel.mjs` flow
+  unchanged.
+- Added focused regression coverage:
+  - `test/scripts/pnpm-runner.test.ts`
+  - `test/scripts/vitest-process-group.test.ts`
+  - `test/scripts/run-vitest.test.ts`
+
+### Intentionally Deferred
+
+- Did not pull in the broader upstream QA platform train:
+  `extensions/qa-lab`, QA skills, bakeoff loops, or `scripts/test-projects.mjs`
+  remain separate work because `myclaw` already has a customized
+  planner-backed `scripts/test-parallel.mjs`.
+- Did not replace the main `test` / `test:max` / `test:serial` flows. This PR
+  only aligns the direct scripted Vitest entrypoints and `test:live` wrapper.
+
+### Validation On This Branch
+
+- Passed:
+  - `git diff --check`
+  - `NODE_OPTIONS='--max-old-space-size=768' pnpm vitest run --maxWorkers=1 test/scripts/pnpm-runner.test.ts test/scripts/vitest-process-group.test.ts test/scripts/run-vitest.test.ts test/scripts/run-vitest-profile.test.ts`
+  - `NODE_OPTIONS='--max-old-space-size=768' node scripts/run-vitest.mjs run --config vitest.unit.config.ts --maxWorkers=1 test/scripts/pnpm-runner.test.ts test/scripts/vitest-process-group.test.ts test/scripts/run-vitest.test.ts`
+
 ## 2026-04-09 Campaign Status
 
 - Planned sync campaign PRs `PR-01` through `PR-11` are now landed on `main`.
+- Planned sync campaign PRs `PR-12` through `PR-15` are now landed on `main`.
 - Remaining upstream ideas that were intentionally not absorbed stay tracked in:
   - `docs/experiments/plans/upstream-sync-campaign-2026-04-08.md`
   - the `Intentionally Deferred` sections recorded per PR in this log

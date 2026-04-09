@@ -412,6 +412,18 @@ stable.
 - Goal:
   bring in the most useful QA harness and test-layer improvements for future
   sync work
+- Execution note (2026-04-09):
+  scoped down to the highest-value low-memory runner seams instead of the full
+  upstream QA lab train:
+  shared `pnpm` / Vitest launch helpers, detached-process cleanup for scripted
+  Vitest runs, `test:live` heartbeat logging, and package-script adoption for
+  the direct Vitest entrypoints that still bypassed the local wrappers.
+- Recorded issue (2026-04-09):
+  the broader upstream QA platform remains intentionally deferred:
+  `extensions/qa-lab`, frontier bakeoff loops, and multi-project runner
+  adoption (`scripts/test-projects.mjs`) were left out because `myclaw` already
+  has a customized planner-backed `scripts/test-parallel.mjs` flow and this
+  campaign is keeping memory use constrained.
 
 ### PR-16: Docs / Locale Automation
 
