@@ -8,13 +8,11 @@ describe("pi-model-discovery module compatibility", () => {
 
   it("loads when InMemoryAuthStorageBackend is not exported", async () => {
     vi.resetModules();
-    vi.doMock("@mariozechner/pi-coding-agent", () => {
-      class MockAuthStorage {}
-      class MockModelRegistry {}
-
+    vi.doMock("@mariozechner/pi-coding-agent", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("@mariozechner/pi-coding-agent")>();
       return {
-        AuthStorage: MockAuthStorage,
-        ModelRegistry: MockModelRegistry,
+        ...actual,
+        InMemoryAuthStorageBackend: undefined,
       };
     });
 

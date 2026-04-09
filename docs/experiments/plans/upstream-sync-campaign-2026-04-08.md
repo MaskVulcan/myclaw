@@ -345,10 +345,11 @@ about long-term platform leverage than immediate `myclaw` stability.
 - When to do it:
   last
 
-## Phase 2 Backlog
+## Phase 2 Outcome (Completed 2026-04-09)
 
-These are candidate follow-up PRs after the first 11 PRs are landed or mostly
-stable.
+This was the former Phase 2 backlog. `PR-12` through `PR-16` are now landed on
+`main`, so the items below are kept as historical execution notes rather than a
+future queue.
 
 ### PR-12: Tool Registry Alignment
 
@@ -367,6 +368,10 @@ stable.
   surfaced unrelated baseline drift outside `PR-12`; keep only the minimal
   `planTool` generated deltas in this PR and revisit the wider baseline refresh
   in a separate maintenance pass.
+- Follow-up validation closure (2026-04-09):
+  `src/agents/system-prompt.test.ts` and a refocused
+  `src/agents/openclaw-tools.plugin-context.test.ts` now both pass under
+  `NODE_OPTIONS='--max-old-space-size=768'` with `--maxWorkers=1`.
 
 ### PR-13: Model Discovery Alignment
 
@@ -382,10 +387,11 @@ stable.
   compatibility, and focused helper exports/tests rather than a full
   `pi-model-discovery.ts` rewrite.
 - Recorded issue (2026-04-09):
-  `src/agents/pi-model-discovery.compat.e2e.test.ts` remains outside routine
-  targeted validation because the repo Vitest config excludes `*.e2e.test.ts`.
-  Keep using focused `*.test.ts` coverage for this PR unless we intentionally
-  revisit the test-inclusion policy.
+  `src/agents/pi-model-discovery.compat.e2e.test.ts` is still outside the
+  routine unit-test config because the repo excludes `*.e2e.test.ts` there.
+- Follow-up validation closure (2026-04-09):
+  the compat smoke now passes explicitly under `vitest.e2e.config.ts` with
+  `NODE_OPTIONS='--max-old-space-size=768'` and `--maxWorkers=1`.
 
 ### PR-14: Plugin Platform Boundary
 
@@ -442,6 +448,32 @@ stable.
   `scripts/control-ui-i18n.ts`, locale refresh workflows, and docs publish-repo
   mirroring were not ported because `myclaw` has a narrower UI locale surface
   and no established separate publish-repo release target yet.
+
+## Remaining Validation Blockers (Updated 2026-04-09)
+
+- `pnpm build:plugin-sdk:dts`
+  (`tsc -p tsconfig.plugin-sdk.dts.json`) still exhausts the local Node heap in
+  this environment. Re-validation with
+  `NODE_OPTIONS='--max-old-space-size=1024'` and
+  `NODE_OPTIONS='--max-old-space-size=1536'` both ended in OOM before reaching
+  a stable build/prepack result, so the broader `PR-05` packaging closure is
+  still blocked here.
+- iOS validation remains blocked by missing Apple toolchain support in this
+  Linux environment (`swift`, `xcodebuild`, related signing/generation tools).
+- Android validation remains blocked by the missing Android SDK / `ANDROID_HOME`
+  configuration in this environment.
+
+## Remaining Deferred Backlog
+
+Future upstream follow-up work should come from the deferred-value sections in
+this document, not from the original `PR-01` to `PR-16` execution queue. The
+most meaningful remaining buckets are:
+
+- broader tool registry alignment beyond `update_plan`
+- broader model discovery rewrite beyond the landed compat/runtime seams
+- broader plugin host boundary / SDK expansion
+- QA lab / multi-project harness adoption
+- broader docs / locale automation beyond localized-link relocalization
 
 ## Execution Order
 

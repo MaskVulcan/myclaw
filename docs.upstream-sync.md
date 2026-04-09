@@ -892,8 +892,8 @@ or less aligned with the current `myclaw` direction.
 - Isolated plugin-tool resolution into:
   - `src/agents/openclaw-tools.plugin-context.ts`
   - `src/agents/openclaw-plugin-tools.ts`
-  This keeps future registry-sync work localized without replacing
-  `myclaw`'s existing plugin/tool policy pipeline.
+    This keeps future registry-sync work localized without replacing
+    `myclaw`'s existing plugin/tool policy pipeline.
 - Added `update_plan` to the shipped tool surface metadata:
   - tool catalog / coding profile policy
   - system prompt availability + usage guidance
@@ -1182,9 +1182,54 @@ or less aligned with the current `myclaw` direction.
   - `git diff --check`
   - `GOMAXPROCS=1 go test ./...`
 
+## 2026-04-09 Campaign PR-17
+
+- Campaign item:
+  `PR-17: Campaign Sync / Gap Closure`
+- Worktree:
+  `/root/gitsource/.worktrees/myclaw-pr17-campaign-sync-gap-closure`
+- Branch:
+  `sync/pr17-campaign-sync-gap-closure`
+
+### Landed In This PR
+
+- Synced the campaign plan doc so it no longer presents `PR-12` through
+  `PR-16` as a future backlog after those branches were already merged to
+  `main`.
+- Closed the practical `PR-13` compat-validation gap by fixing
+  `src/agents/pi-model-discovery.compat.e2e.test.ts` to mock the current
+  `@mariozechner/pi-coding-agent` surface while explicitly hiding the optional
+  `InMemoryAuthStorageBackend` export.
+- Closed the practical `PR-12` plugin-context validation gap by rewriting
+  `src/agents/openclaw-tools.plugin-context.test.ts` around the extracted
+  helper seams (`openclaw-tools.plugin-context.ts`,
+  `openclaw-plugin-tools.ts`) instead of importing the heavyweight tool-factory
+  graph that previously OOMed in this environment.
+
+### Validation On This Branch
+
+- Passed:
+  - `git diff --check`
+  - `NODE_OPTIONS='--max-old-space-size=768' ./node_modules/.bin/vitest run --maxWorkers=1 src/agents/system-prompt.test.ts`
+  - `NODE_OPTIONS='--max-old-space-size=768' ./node_modules/.bin/vitest run --maxWorkers=1 src/agents/openclaw-plugin-tools.test.ts`
+  - `NODE_OPTIONS='--max-old-space-size=768' ./node_modules/.bin/vitest run --maxWorkers=1 src/agents/openclaw-tools.plugin-context.test.ts`
+  - `NODE_OPTIONS='--max-old-space-size=768' ./node_modules/.bin/vitest run --config vitest.e2e.config.ts --maxWorkers=1 src/agents/pi-model-discovery.compat.e2e.test.ts`
+- Remaining validation blocker:
+  - `NODE_OPTIONS='--max-old-space-size=1024' ./node_modules/.bin/tsc -p tsconfig.plugin-sdk.dts.json --pretty false`
+    and
+    `NODE_OPTIONS='--max-old-space-size=1536' ./node_modules/.bin/tsc -p tsconfig.plugin-sdk.dts.json --pretty false`
+    both still OOM in this environment, so the broader `PR-05` full-build /
+    prepack closure remains blocked on heap pressure.
+
 ## 2026-04-09 Campaign Status
 
 - Planned sync campaign PRs `PR-01` through `PR-16` are now landed on `main`.
+- `PR-17` closed the feasible post-campaign doc sync and low-memory validation
+  gaps that were still actionable in this environment.
+- Remaining environment blockers are now limited to:
+  - `build:plugin-sdk:dts` heap exhaustion
+  - missing Apple/iOS toolchain
+  - missing Android SDK / `ANDROID_HOME`
 - Remaining upstream ideas that were intentionally not absorbed stay tracked in:
   - `docs/experiments/plans/upstream-sync-campaign-2026-04-08.md`
   - the `Intentionally Deferred` sections recorded per PR in this log
