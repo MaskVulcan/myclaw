@@ -1,6 +1,7 @@
 import type { IncomingMessage } from "node:http";
 import os from "node:os";
 import type { WebSocket } from "ws";
+import { resolveDefaultPolicyKernel } from "../../../agents/policy-kernel.js";
 import { loadConfig } from "../../../config/config.js";
 import { verifyDeviceBootstrapToken } from "../../../infra/device-bootstrap.js";
 import {
@@ -45,7 +46,6 @@ import {
   isTrustedProxyAddress,
   resolveClientIp,
 } from "../../net.js";
-import { resolveNodeCommandAllowlist } from "../../node-command-policy.js";
 import { checkBrowserOrigin } from "../../origin-check.js";
 import {
   ConnectErrorDetailCodes,
@@ -966,9 +966,10 @@ export function attachGatewayWsMessageHandler(params: {
 
         if (role === "node") {
           const cfg = loadConfig();
+          const policyKernel = resolveDefaultPolicyKernel();
           const nodeId = connectParams.device?.id ?? connectParams.client.id;
           const pairedNode = await getPairedNode(nodeId);
-          const allowlist = resolveNodeCommandAllowlist(cfg, {
+          const allowlist = policyKernel.resolveNodeCommandAllowlist(cfg, {
             platform: connectParams.client.platform,
             deviceFamily: connectParams.client.deviceFamily,
           });

@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   onSubagentEnded: vi.fn(async () => {}),
   runSubagentEnded: vi.fn(async () => {}),
   resolveAgentTimeoutMs: vi.fn(() => 1_000),
+  removeSubagentGitWorktree: vi.fn(async () => {}),
 }));
 
 vi.mock("../gateway/call.js", () => ({
@@ -95,6 +96,15 @@ vi.mock("../context-engine/registry.js", () => ({
 vi.mock("./timeout.js", () => ({
   resolveAgentTimeoutMs: mocks.resolveAgentTimeoutMs,
 }));
+
+vi.mock("./subagent-worktree.js", async () => {
+  const actual =
+    await vi.importActual<typeof import("./subagent-worktree.js")>("./subagent-worktree.js");
+  return {
+    ...actual,
+    removeSubagentGitWorktree: mocks.removeSubagentGitWorktree,
+  };
+});
 
 describe("subagent registry seam flow", () => {
   let mod: typeof import("./subagent-registry.js");
@@ -484,6 +494,8 @@ describe("subagent registry seam flow", () => {
       cleanup: "delete",
       expectsCompletionMessage: undefined,
       spawnMode: "run",
+      worktreeDir: "/state/subagent-worktrees/main/release-delete",
+      worktreeRepoDir: "/repo",
       attachmentsDir,
       attachmentsRootDir,
       createdAt: 1,
@@ -497,6 +509,12 @@ describe("subagent registry seam flow", () => {
 
     await vi.waitFor(async () => {
       await expect(fs.access(attachmentsDir)).rejects.toMatchObject({ code: "ENOENT" });
+    });
+    await vi.waitFor(() => {
+      expect(mocks.removeSubagentGitWorktree).toHaveBeenCalledWith({
+        repoDir: "/repo",
+        worktreeDir: "/state/subagent-worktrees/main/release-delete",
+      });
     });
     await vi.waitFor(() => {
       expect(mocks.onSubagentEnded).toHaveBeenCalledWith({

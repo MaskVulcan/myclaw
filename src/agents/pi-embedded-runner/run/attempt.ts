@@ -53,6 +53,7 @@ import { DEFAULT_CONTEXT_TOKENS } from "../../defaults.js";
 import { resolveOpenClawDocsPath } from "../../docs-path.js";
 import { isTimeoutError } from "../../failover-error.js";
 import { resolveImageSanitizationLimits } from "../../image-sanitization.js";
+import { resolveDefaultMemoryProviderKernel } from "../../memory-provider-kernel.js";
 import { buildModelAliasLines } from "../../model-alias-lines.js";
 import { resolveModelAuthMode } from "../../model-auth.js";
 import { resolveDefaultModelForAgent } from "../../model-selection.js";
@@ -99,7 +100,6 @@ import { DEFAULT_BOOTSTRAP_FILENAME } from "../../workspace.js";
 import { isRunnerAbortError } from "../abort.js";
 import { isCacheTtlEligibleProvider } from "../cache-ttl.js";
 import { resolveCompactionTimeoutMs } from "../compaction-safety-timeout.js";
-import { runContextEngineMaintenance } from "../context-engine-maintenance.js";
 import { buildEmbeddedExtensionFactories } from "../extensions.js";
 import { applyExtraParamsToAgent, resolveAgentTransportOverride } from "../extra-params.js";
 import {
@@ -131,11 +131,7 @@ import { installToolResultContextGuard } from "../tool-result-context-guard.js";
 import { splitSdkTools } from "../tool-split.js";
 import { describeUnknownError, mapThinkingLevel } from "../utils.js";
 import { flushPendingToolResultsAfterIdle } from "../wait-for-idle-before-flush.js";
-import {
-  assembleAttemptContextEngine,
-  finalizeAttemptContextEngineTurn,
-  runAttemptContextEngineBootstrap,
-} from "./attempt.context-engine-helpers.js";
+import { assembleAttemptContextEngine } from "./attempt.context-engine-helpers.js";
 import {
   buildAfterTurnRuntimeContext,
   prependSystemPromptAddition,
@@ -151,6 +147,7 @@ import {
   stripSessionsYieldArtifacts,
   waitForSessionsYieldAbortSettle,
 } from "./attempt.sessions-yield.js";
+import { wrapStreamFnHandleSensitiveStopReason } from "./attempt.stop-reason-recovery.js";
 import {
   appendAttemptCacheTtlIfNeeded,
   composeSystemPromptWithHookContext,
@@ -162,7 +159,6 @@ import {
   wrapStreamFnDecodeXaiToolCallArguments,
   wrapStreamFnRepairMalformedToolCallArguments,
 } from "./attempt.tool-call-argument-repair.js";
-import { wrapStreamFnHandleSensitiveStopReason } from "./attempt.stop-reason-recovery.js";
 import {
   wrapStreamFnSanitizeMalformedToolCalls,
   wrapStreamFnTrimToolCallNames,
@@ -694,7 +690,7 @@ export async function runEmbeddedAttempt(
       });
       trackSessionManagerAccess(params.sessionFile);
 
-      await runAttemptContextEngineBootstrap({
+      await resolveDefaultMemoryProviderKernel().bootstrap({
         hadSessionFile,
         contextEngine: params.contextEngine,
         sessionId: params.sessionId,
@@ -707,7 +703,7 @@ export async function runEmbeddedAttempt(
           agentDir,
         }),
         runMaintenance: async (contextParams) =>
-          await runContextEngineMaintenance({
+          await resolveDefaultMemoryProviderKernel().maintain({
             contextEngine: contextParams.contextEngine as never,
             sessionId: contextParams.sessionId,
             sessionKey: contextParams.sessionKey,
@@ -1654,7 +1650,7 @@ export async function runEmbeddedAttempt(
             workspaceDir: effectiveWorkspace,
             agentDir,
           });
-          await finalizeAttemptContextEngineTurn({
+          await resolveDefaultMemoryProviderKernel().syncTurn({
             contextEngine: params.contextEngine,
             promptError: Boolean(promptError),
             aborted,
@@ -1667,7 +1663,7 @@ export async function runEmbeddedAttempt(
             tokenBudget: params.contextTokenBudget,
             runtimeContext: afterTurnRuntimeContext,
             runMaintenance: async (contextParams) =>
-              await runContextEngineMaintenance({
+              await resolveDefaultMemoryProviderKernel().maintain({
                 contextEngine: contextParams.contextEngine as never,
                 sessionId: contextParams.sessionId,
                 sessionKey: contextParams.sessionKey,

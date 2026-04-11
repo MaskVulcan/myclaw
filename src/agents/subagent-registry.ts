@@ -1,12 +1,9 @@
-import { loadConfig } from "../config/config.js";
-import { ensureContextEnginesInitialized } from "../context-engine/init.js";
-import { resolveContextEngine } from "../context-engine/registry.js";
 import type { SubagentEndReason } from "../context-engine/types.js";
 import { callGateway } from "../gateway/call.js";
 import { onAgentEvent } from "../infra/agent-events.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { type DeliveryContext, normalizeDeliveryContext } from "../utils/delivery-context.js";
-import { ensureRuntimePluginsLoaded } from "./runtime-plugins.js";
+import { resolveDefaultMemoryProviderKernel } from "./memory-provider-kernel.js";
 import { resetAnnounceQueuesForTests } from "./subagent-announce-queue.js";
 import type { SubagentRunOutcome } from "./subagent-announce.js";
 import {
@@ -28,6 +25,7 @@ import {
   resolveSubagentRunOrphanReason,
   resolveSubagentSessionStatus,
   safeRemoveAttachmentsDir,
+  safeRemoveSubagentWorktree,
 } from "./subagent-registry-helpers.js";
 import { createSubagentRegistryLifecycleController } from "./subagent-registry-lifecycle.js";
 import { subagentRuns } from "./subagent-registry-memory.js";
@@ -145,22 +143,7 @@ async function notifyContextEngineSubagentEnded(params: {
   reason: SubagentEndReason;
   workspaceDir?: string;
 }) {
-  try {
-    const cfg = loadConfig();
-    ensureRuntimePluginsLoaded({
-      config: cfg,
-      workspaceDir: params.workspaceDir,
-      allowGatewaySubagentBinding: true,
-    });
-    ensureContextEnginesInitialized();
-    const engine = await resolveContextEngine(cfg);
-    if (!engine.onSubagentEnded) {
-      return;
-    }
-    await engine.onSubagentEnded(params);
-  } catch (err) {
-    log.warn("context-engine onSubagentEnded failed (best-effort)", { err });
-  }
+  await resolveDefaultMemoryProviderKernel().onDelegationEnded(params);
 }
 
 function suppressAnnounceForSteerRestart(entry?: SubagentRunRecord) {
@@ -411,6 +394,7 @@ async function sweepSubagentRuns() {
     mutated = true;
     // Archive/purge is terminal for the run record; remove any retained attachments too.
     await safeRemoveAttachmentsDir(entry);
+    await safeRemoveSubagentWorktree(entry);
     try {
       await callGateway({
         method: "sessions.delete",

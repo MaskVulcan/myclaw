@@ -15,6 +15,8 @@ export type SubagentRunRecord = {
   label?: string;
   model?: string;
   workspaceDir?: string;
+  worktreeDir?: string;
+  worktreeRepoDir?: string;
   runTimeoutSeconds?: number;
   spawnMode?: SpawnSubagentMode;
   createdAt: number;

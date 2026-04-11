@@ -1,17 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../config/config.js";
 
-const { getMemorySearchManagerMock } = vi.hoisted(() => ({
-  getMemorySearchManagerMock: vi.fn(),
+const { prefetchMock, resolveBackendConfigMock } = vi.hoisted(() => ({
+  prefetchMock: vi.fn(),
+  resolveBackendConfigMock: vi.fn(),
 }));
 
-const { resolveActiveMemoryBackendConfigMock } = vi.hoisted(() => ({
-  resolveActiveMemoryBackendConfigMock: vi.fn(),
-}));
-
-vi.mock("../plugins/memory-runtime.js", () => ({
-  getActiveMemorySearchManager: getMemorySearchManagerMock,
-  resolveActiveMemoryBackendConfig: resolveActiveMemoryBackendConfigMock,
+vi.mock("../agents/memory-provider-kernel.js", () => ({
+  resolveDefaultMemoryProviderKernel: () => ({
+    resolveBackendConfig: resolveBackendConfigMock,
+    prefetch: prefetchMock,
+  }),
 }));
 
 import { startGatewayMemoryBackend } from "./server-startup-memory.js";
@@ -29,9 +28,9 @@ function createGatewayLogMock() {
 
 describe("startGatewayMemoryBackend", () => {
   beforeEach(() => {
-    getMemorySearchManagerMock.mockClear();
-    resolveActiveMemoryBackendConfigMock.mockReset();
-    resolveActiveMemoryBackendConfigMock.mockImplementation(({ cfg }: { cfg: OpenClawConfig }) => ({
+    prefetchMock.mockClear();
+    resolveBackendConfigMock.mockReset();
+    resolveBackendConfigMock.mockImplementation(({ cfg }: { cfg: OpenClawConfig }) => ({
       backend: cfg.memory?.backend === "qmd" ? "qmd" : "builtin",
       qmd: cfg.memory?.backend === "qmd" ? {} : undefined,
     }));
@@ -46,7 +45,7 @@ describe("startGatewayMemoryBackend", () => {
 
     await startGatewayMemoryBackend({ cfg, log });
 
-    expect(getMemorySearchManagerMock).not.toHaveBeenCalled();
+    expect(prefetchMock).not.toHaveBeenCalled();
     expect(log.info).not.toHaveBeenCalled();
     expect(log.warn).not.toHaveBeenCalled();
   });
@@ -54,13 +53,13 @@ describe("startGatewayMemoryBackend", () => {
   it("initializes qmd backend for each configured agent", async () => {
     const cfg = createQmdConfig({ list: [{ id: "ops", default: true }, { id: "main" }] });
     const log = createGatewayLogMock();
-    getMemorySearchManagerMock.mockResolvedValue({ manager: { search: vi.fn() } });
+    prefetchMock.mockResolvedValue({ manager: { search: vi.fn() } });
 
     await startGatewayMemoryBackend({ cfg, log });
 
-    expect(getMemorySearchManagerMock).toHaveBeenCalledTimes(2);
-    expect(getMemorySearchManagerMock).toHaveBeenNthCalledWith(1, { cfg, agentId: "ops" });
-    expect(getMemorySearchManagerMock).toHaveBeenNthCalledWith(2, { cfg, agentId: "main" });
+    expect(prefetchMock).toHaveBeenCalledTimes(2);
+    expect(prefetchMock).toHaveBeenNthCalledWith(1, { cfg, agentId: "ops" });
+    expect(prefetchMock).toHaveBeenNthCalledWith(2, { cfg, agentId: "main" });
     expect(log.info).toHaveBeenNthCalledWith(
       1,
       'qmd memory startup initialization armed for agent "ops"',
@@ -75,7 +74,7 @@ describe("startGatewayMemoryBackend", () => {
   it("logs a warning when qmd manager init fails and continues with other agents", async () => {
     const cfg = createQmdConfig({ list: [{ id: "main", default: true }, { id: "ops" }] });
     const log = createGatewayLogMock();
-    getMemorySearchManagerMock
+    prefetchMock
       .mockResolvedValueOnce({ manager: null, error: "qmd missing" })
       .mockResolvedValueOnce({ manager: { search: vi.fn() } });
 
@@ -98,12 +97,12 @@ describe("startGatewayMemoryBackend", () => {
       ],
     });
     const log = createGatewayLogMock();
-    getMemorySearchManagerMock.mockResolvedValue({ manager: { search: vi.fn() } });
+    prefetchMock.mockResolvedValue({ manager: { search: vi.fn() } });
 
     await startGatewayMemoryBackend({ cfg, log });
 
-    expect(getMemorySearchManagerMock).toHaveBeenCalledTimes(1);
-    expect(getMemorySearchManagerMock).toHaveBeenCalledWith({ cfg, agentId: "main" });
+    expect(prefetchMock).toHaveBeenCalledTimes(1);
+    expect(prefetchMock).toHaveBeenCalledWith({ cfg, agentId: "main" });
     expect(log.info).toHaveBeenCalledWith(
       'qmd memory startup initialization armed for agent "main"',
     );

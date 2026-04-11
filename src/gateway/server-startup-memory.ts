@@ -1,21 +1,19 @@
 import { listAgentIds } from "../agents/agent-scope.js";
+import { resolveDefaultMemoryProviderKernel } from "../agents/memory-provider-kernel.js";
 import { resolveMemorySearchConfig } from "../agents/memory-search.js";
 import type { OpenClawConfig } from "../config/config.js";
-import {
-  getActiveMemorySearchManager,
-  resolveActiveMemoryBackendConfig,
-} from "../plugins/memory-runtime.js";
 
 export async function startGatewayMemoryBackend(params: {
   cfg: OpenClawConfig;
   log: { info?: (msg: string) => void; warn: (msg: string) => void };
 }): Promise<void> {
+  const memoryProviderKernel = resolveDefaultMemoryProviderKernel();
   const agentIds = listAgentIds(params.cfg);
   for (const agentId of agentIds) {
     if (!resolveMemorySearchConfig(params.cfg, agentId)) {
       continue;
     }
-    const resolved = resolveActiveMemoryBackendConfig({ cfg: params.cfg, agentId });
+    const resolved = memoryProviderKernel.resolveBackendConfig({ cfg: params.cfg, agentId });
     if (!resolved) {
       continue;
     }
@@ -23,7 +21,10 @@ export async function startGatewayMemoryBackend(params: {
       continue;
     }
 
-    const { manager, error } = await getActiveMemorySearchManager({ cfg: params.cfg, agentId });
+    const { manager, error } = await memoryProviderKernel.prefetch({
+      cfg: params.cfg,
+      agentId,
+    });
     if (!manager) {
       params.log.warn(
         `qmd memory startup initialization failed for agent "${agentId}": ${error ?? "unknown error"}`,

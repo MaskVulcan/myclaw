@@ -26,8 +26,9 @@ async function closeCliMemoryManagers(): Promise<void> {
     return;
   }
   try {
-    const { closeActiveMemorySearchManagers } = await import("../plugins/memory-runtime.js");
-    await closeActiveMemorySearchManagers();
+    const { resolveDefaultMemoryProviderKernel } =
+      await import("../agents/memory-provider-kernel.js");
+    await resolveDefaultMemoryProviderKernel().shutdown();
   } catch {
     // Best-effort teardown for short-lived CLI processes.
   }

@@ -1,24 +1,19 @@
 import { resolveAgentWorkspaceDir } from "../../../agents/agent-scope.js";
 import {
-  stewardCurateCommand,
-  stewardIngestExplicitSession,
-  stewardIncubateSkillsCommand,
-  stewardMaintainCommand,
-  stewardPromoteSkillsCommand,
-} from "../../../commands/steward.js";
+  DEFAULT_MEMORY_STEWARD_CURATE_LIMIT,
+  DEFAULT_MEMORY_STEWARD_INCUBATE_LIMIT,
+  DEFAULT_MEMORY_STEWARD_MIN_CANDIDATES,
+  DEFAULT_MEMORY_STEWARD_PROMOTE_LIMIT,
+  resolveDefaultMemoryProviderKernel,
+} from "../../../agents/memory-provider-kernel.js";
 import type { OpenClawConfig } from "../../../config/config.js";
 import type { SessionEntry } from "../../../config/sessions.js";
 import { createSubsystemLogger } from "../../../logging/subsystem.js";
 import { resolveAgentIdFromSessionKey } from "../../../routing/session-key.js";
-import type { RuntimeEnv } from "../../../runtime.js";
 import { resolveHookConfig } from "../../config.js";
 import type { HookHandler } from "../../hooks.js";
 
 const HOOK_KEY = "knowledge-steward";
-const DEFAULT_CURATE_LIMIT = 20;
-const DEFAULT_INCUBATE_LIMIT = 50;
-const DEFAULT_PROMOTE_LIMIT = 50;
-const DEFAULT_MIN_CANDIDATES = 2;
 
 const log = createSubsystemLogger("hooks/knowledge-steward");
 
@@ -33,18 +28,6 @@ function resolveHookPositiveInt(raw: unknown, fallback: number): string {
     }
   }
   return String(fallback);
-}
-
-function createSilentRuntime(): RuntimeEnv {
-  return {
-    log: () => {},
-    error: (value: unknown) => {
-      throw new Error(String(value));
-    },
-    exit: (code: number) => {
-      throw new Error(`exit ${code}`);
-    },
-  };
 }
 
 const runKnowledgeSteward: HookHandler = async (event) => {
@@ -73,16 +56,30 @@ const runKnowledgeSteward: HookHandler = async (event) => {
     }
 
     const hookConfig = resolveHookConfig(cfg, HOOK_KEY);
-    const runtime = createSilentRuntime();
-    const ingest = await stewardIngestExplicitSession({
+    const result = await resolveDefaultMemoryProviderKernel().runSessionStewardCycle({
       sessionKey: event.sessionKey,
       agentId,
       workspaceDir,
       entry: previousSessionEntry,
-      apply: true,
+      curateLimit: resolveHookPositiveInt(
+        hookConfig?.curateLimit,
+        DEFAULT_MEMORY_STEWARD_CURATE_LIMIT,
+      ),
+      incubateLimit: resolveHookPositiveInt(
+        hookConfig?.incubateLimit,
+        DEFAULT_MEMORY_STEWARD_INCUBATE_LIMIT,
+      ),
+      promoteLimit: resolveHookPositiveInt(
+        hookConfig?.promoteLimit,
+        DEFAULT_MEMORY_STEWARD_PROMOTE_LIMIT,
+      ),
+      minCandidates: resolveHookPositiveInt(
+        hookConfig?.minCandidates,
+        DEFAULT_MEMORY_STEWARD_MIN_CANDIDATES,
+      ),
     });
 
-    if (ingest.keptSessions === 0) {
+    if (result.keptSessions === 0) {
       log.debug("knowledge-steward skipped follow-up passes: no durable candidates found", {
         sessionKey: event.sessionKey,
         sessionId: previousSessionEntry.sessionId,
@@ -90,49 +87,12 @@ const runKnowledgeSteward: HookHandler = async (event) => {
       return;
     }
 
-    await stewardCurateCommand(
-      {
-        workspace: workspaceDir,
-        agent: agentId,
-        limit: resolveHookPositiveInt(hookConfig?.curateLimit, DEFAULT_CURATE_LIMIT),
-        apply: true,
-      },
-      runtime,
-    );
-    await stewardMaintainCommand(
-      {
-        workspace: workspaceDir,
-        agent: agentId,
-        apply: true,
-      },
-      runtime,
-    );
-    await stewardIncubateSkillsCommand(
-      {
-        workspace: workspaceDir,
-        agent: agentId,
-        limit: resolveHookPositiveInt(hookConfig?.incubateLimit, DEFAULT_INCUBATE_LIMIT),
-        apply: true,
-      },
-      runtime,
-    );
-    await stewardPromoteSkillsCommand(
-      {
-        workspace: workspaceDir,
-        agent: agentId,
-        limit: resolveHookPositiveInt(hookConfig?.promoteLimit, DEFAULT_PROMOTE_LIMIT),
-        minCandidates: resolveHookPositiveInt(hookConfig?.minCandidates, DEFAULT_MIN_CANDIDATES),
-        apply: true,
-      },
-      runtime,
-    );
-
     log.info("knowledge-steward completed", {
       sessionKey: event.sessionKey,
       sessionId: previousSessionEntry.sessionId,
       workspaceDir,
-      memoryCandidates: ingest.memoryCandidates,
-      skillCandidates: ingest.skillCandidates,
+      memoryCandidates: result.memoryCandidates,
+      skillCandidates: result.skillCandidates,
     });
   } catch (err) {
     log.error("knowledge-steward failed", {

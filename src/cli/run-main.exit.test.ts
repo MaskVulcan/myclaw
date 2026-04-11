@@ -6,7 +6,7 @@ const loadDotEnvMock = vi.hoisted(() => vi.fn());
 const normalizeEnvMock = vi.hoisted(() => vi.fn());
 const ensurePathMock = vi.hoisted(() => vi.fn());
 const assertRuntimeMock = vi.hoisted(() => vi.fn());
-const closeActiveMemorySearchManagersMock = vi.hoisted(() => vi.fn(async () => {}));
+const shutdownMemoryProviderMock = vi.hoisted(() => vi.fn(async () => {}));
 const hasMemoryRuntimeMock = vi.hoisted(() => vi.fn(() => false));
 const outputRootHelpMock = vi.hoisted(() => vi.fn());
 const buildProgramMock = vi.hoisted(() => vi.fn());
@@ -41,8 +41,10 @@ vi.mock("../infra/runtime-guard.js", () => ({
   assertSupportedRuntime: assertRuntimeMock,
 }));
 
-vi.mock("../plugins/memory-runtime.js", () => ({
-  closeActiveMemorySearchManagers: closeActiveMemorySearchManagersMock,
+vi.mock("../agents/memory-provider-kernel.js", () => ({
+  resolveDefaultMemoryProviderKernel: () => ({
+    shutdown: shutdownMemoryProviderMock,
+  }),
 }));
 
 vi.mock("../plugins/memory-state.js", () => ({
@@ -75,7 +77,7 @@ describe("runCli exit behavior", () => {
 
     expect(maybeRunCliInContainerMock).toHaveBeenCalledWith(["node", "openclaw", "status"]);
     expect(tryRouteCliMock).toHaveBeenCalledWith(["node", "openclaw", "status"]);
-    expect(closeActiveMemorySearchManagersMock).not.toHaveBeenCalled();
+    expect(shutdownMemoryProviderMock).not.toHaveBeenCalled();
     expect(exitSpy).not.toHaveBeenCalled();
     exitSpy.mockRestore();
   });
@@ -91,7 +93,7 @@ describe("runCli exit behavior", () => {
     expect(tryRouteCliMock).not.toHaveBeenCalled();
     expect(outputRootHelpMock).toHaveBeenCalledTimes(1);
     expect(buildProgramMock).not.toHaveBeenCalled();
-    expect(closeActiveMemorySearchManagersMock).not.toHaveBeenCalled();
+    expect(shutdownMemoryProviderMock).not.toHaveBeenCalled();
     expect(exitSpy).not.toHaveBeenCalled();
     exitSpy.mockRestore();
   });
@@ -102,7 +104,7 @@ describe("runCli exit behavior", () => {
 
     await runCli(["node", "openclaw", "status"]);
 
-    expect(closeActiveMemorySearchManagersMock).toHaveBeenCalledTimes(1);
+    expect(shutdownMemoryProviderMock).toHaveBeenCalledTimes(1);
   });
 
   it("returns after a handled container-target invocation", async () => {
@@ -119,7 +121,7 @@ describe("runCli exit behavior", () => {
     ]);
     expect(loadDotEnvMock).not.toHaveBeenCalled();
     expect(tryRouteCliMock).not.toHaveBeenCalled();
-    expect(closeActiveMemorySearchManagersMock).not.toHaveBeenCalled();
+    expect(shutdownMemoryProviderMock).not.toHaveBeenCalled();
   });
 
   it("propagates a handled container-target exit code", async () => {

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import { resolveBootstrapWarningSignaturesSeen } from "../../agents/bootstrap-budget.js";
 import { estimateMessagesTokens } from "../../agents/compaction.js";
+import { resolveDefaultMemoryProviderKernel } from "../../agents/memory-provider-kernel.js";
 import { runWithModelFallback } from "../../agents/model-fallback.js";
 import { isCliProvider } from "../../agents/model-selection.js";
 import { compactEmbeddedPiSession, runEmbeddedPiAgent } from "../../agents/pi-embedded.js";
@@ -25,7 +26,6 @@ import {
 import { readSessionMessages } from "../../gateway/session-utils.fs.js";
 import { logVerbose } from "../../globals.js";
 import { registerAgentRunContext } from "../../infra/agent-events.js";
-import { resolveMemoryFlushPlan } from "../../plugins/memory-state.js";
 import type { TemplateContext } from "../templating.js";
 import type { VerboseLevel } from "../thinking.js";
 import type { GetReplyOptions } from "../types.js";
@@ -333,7 +333,9 @@ export async function runPreflightCompactionIfNeeded(params: {
     modelId: params.followupRun.run.model ?? params.defaultModel,
     agentCfgContextTokens: params.agentCfgContextTokens,
   });
-  const memoryFlushPlan = resolveMemoryFlushPlan({ cfg: params.cfg });
+  const memoryFlushPlan = resolveDefaultMemoryProviderKernel().resolveFlushPlan({
+    cfg: params.cfg,
+  });
   const reserveTokensFloor =
     memoryFlushPlan?.reserveTokensFloor ??
     params.cfg.agents?.defaults?.compaction?.reserveTokensFloor ??
@@ -465,7 +467,9 @@ export async function runMemoryFlushIfNeeded(params: {
   storePath?: string;
   isHeartbeat: boolean;
 }): Promise<SessionEntry | undefined> {
-  const memoryFlushPlan = resolveMemoryFlushPlan({ cfg: params.cfg });
+  const memoryFlushPlan = resolveDefaultMemoryProviderKernel().resolveFlushPlan({
+    cfg: params.cfg,
+  });
   if (!memoryFlushPlan) {
     return params.sessionEntry;
   }
@@ -669,7 +673,7 @@ export async function runMemoryFlushIfNeeded(params: {
   let memoryCompactionCompleted = false;
   const memoryFlushNowMs = Date.now();
   const activeMemoryFlushPlan =
-    resolveMemoryFlushPlan({
+    resolveDefaultMemoryProviderKernel().resolveFlushPlan({
       cfg: params.cfg,
       nowMs: memoryFlushNowMs,
     }) ?? memoryFlushPlan;

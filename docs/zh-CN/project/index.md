@@ -23,6 +23,8 @@ title: 项目文档索引
   - 当前稳定设计
 - `roadmap.md`
   - 分阶段路线图
+- `architecture-convergence-roadmap.md`
+  - `myclaw` 吸收 `Hermes` / `OpenHarness` 的架构收敛主线
 - `todo.md`
   - 还没做但明确值得做的项
 - `boundaries.md`

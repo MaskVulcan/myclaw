@@ -26,6 +26,7 @@ import {
   persistSubagentSessionTiming,
   resolveAnnounceRetryDelayMs,
   safeRemoveAttachmentsDir,
+  safeRemoveSubagentWorktree,
 } from "./subagent-registry-helpers.js";
 import type { SubagentRunRecord } from "./subagent-registry.types.js";
 
@@ -233,6 +234,7 @@ export function createSubagentRegistryLifecycleController(params: {
   }) => {
     if (cleanupParams.cleanup === "delete") {
       params.clearPendingLifecycleError(cleanupParams.runId);
+      void safeRemoveSubagentWorktree(cleanupParams.entry);
       void params.notifyContextEngineSubagentEnded({
         childSessionKey: cleanupParams.entry.childSessionKey,
         reason: "deleted",

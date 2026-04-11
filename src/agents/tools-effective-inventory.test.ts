@@ -43,8 +43,10 @@ async function loadHarness(options?: {
   vi.doMock("./channel-tools.js", () => ({
     getChannelAgentToolMeta: (tool: { name: string }) => options?.channelMeta?.[tool.name],
   }));
-  vi.doMock("./pi-tools.policy.js", () => ({
-    resolveEffectiveToolPolicy: () => options?.effectivePolicy ?? {},
+  vi.doMock("./policy-kernel.js", () => ({
+    resolveDefaultPolicyKernel: () => ({
+      resolveToolPolicy: () => options?.effectivePolicy ?? {},
+    }),
   }));
   return await import("./tools-effective-inventory.js");
 }

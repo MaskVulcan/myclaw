@@ -23,6 +23,7 @@ const hoisted = vi.hoisted(() => ({
   callGatewayMock: vi.fn(),
   configOverride: {} as Record<string, unknown>,
   registerSubagentRunMock: vi.fn(),
+  prepareMemoryProviderDelegationMock: vi.fn(),
   hookRunner: {
     hasHooks: vi.fn(() => false),
     runSubagentSpawning: vi.fn(),
@@ -98,6 +99,7 @@ describe("spawnSubagentDirect workspace inheritance", () => {
       callGatewayMock: hoisted.callGatewayMock,
       loadConfig: () => hoisted.configOverride,
       registerSubagentRunMock: hoisted.registerSubagentRunMock,
+      prepareMemoryProviderDelegationMock: hoisted.prepareMemoryProviderDelegationMock,
       hookRunner: hoisted.hookRunner,
       resolveAgentConfig: resolveTestAgentConfig,
       resolveAgentWorkspaceDir: resolveTestAgentWorkspace,
@@ -105,6 +107,7 @@ describe("spawnSubagentDirect workspace inheritance", () => {
     resetSubagentRegistryForTests();
     hoisted.callGatewayMock.mockClear();
     hoisted.registerSubagentRunMock.mockClear();
+    hoisted.prepareMemoryProviderDelegationMock.mockReset().mockResolvedValue(undefined);
     hoisted.hookRunner.hasHooks.mockReset();
     hoisted.hookRunner.hasHooks.mockImplementation(() => false);
     hoisted.hookRunner.runSubagentSpawning.mockReset();
@@ -144,7 +147,31 @@ describe("spawnSubagentDirect workspace inheritance", () => {
     });
   });
 
+  it("prepares the memory provider delegation before launching the child run", async () => {
+    await spawnSubagentDirect(
+      {
+        task: "prepare delegation",
+      },
+      {
+        agentSessionKey: "agent:main:main",
+        agentChannel: "telegram",
+        agentAccountId: "123",
+        agentTo: "456",
+        workspaceDir: "/tmp/requester-workspace",
+      },
+    );
+
+    expect(hoisted.prepareMemoryProviderDelegationMock).toHaveBeenCalledWith({
+      config: hoisted.configOverride,
+      parentSessionKey: "agent:main:main",
+      childSessionKey: expect.stringMatching(/^agent:main:subagent:/),
+      workspaceDir: "/tmp/requester-workspace",
+    });
+  });
+
   it("deletes the provisional child session when a non-thread subagent start fails", async () => {
+    const rollback = vi.fn(async () => {});
+    hoisted.prepareMemoryProviderDelegationMock.mockResolvedValue({ rollback });
     hoisted.callGatewayMock.mockImplementation(
       async (request: {
         method?: string;
@@ -182,6 +209,7 @@ describe("spawnSubagentDirect workspace inheritance", () => {
     });
     expect(result.childSessionKey).toMatch(/^agent:main:subagent:/);
     expect(hoisted.registerSubagentRunMock).not.toHaveBeenCalled();
+    expect(rollback).toHaveBeenCalledTimes(1);
 
     const deleteCall = hoisted.callGatewayMock.mock.calls.find(
       ([request]) => (request as { method?: string }).method === "sessions.delete",
@@ -203,6 +231,8 @@ describe("spawnSubagentDirect workspace inheritance", () => {
   });
 
   it("keeps lifecycle hooks enabled when registerSubagentRun fails after thread binding succeeds", async () => {
+    const rollback = vi.fn(async () => {});
+    hoisted.prepareMemoryProviderDelegationMock.mockResolvedValue({ rollback });
     hoisted.hookRunner.hasHooks.mockImplementation((name?: string) => name === "subagent_spawning");
     hoisted.hookRunner.runSubagentSpawning.mockResolvedValue({
       status: "ok",
@@ -250,6 +280,7 @@ describe("spawnSubagentDirect workspace inheritance", () => {
       childSessionKey: expect.stringMatching(/^agent:main:subagent:/),
       runId: "run-thread-register-fail",
     });
+    expect(rollback).toHaveBeenCalledTimes(1);
 
     const deleteCall = hoisted.callGatewayMock.mock.calls.findLast(
       ([request]) => (request as { method?: string }).method === "sessions.delete",

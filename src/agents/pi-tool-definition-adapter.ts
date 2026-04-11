@@ -8,10 +8,8 @@ import { logDebug, logError } from "../logger.js";
 import { isPlainObject } from "../utils.js";
 import type { ClientToolDefinition } from "./pi-embedded-runner/run/params.js";
 import type { HookContext } from "./pi-tools.before-tool-call.js";
-import {
-  isToolWrappedWithBeforeToolCallHook,
-  runBeforeToolCallHook,
-} from "./pi-tools.before-tool-call.js";
+import { isToolWrappedWithBeforeToolCallHook } from "./pi-tools.before-tool-call.js";
+import { resolveDefaultPolicyKernel } from "./policy-kernel.js";
 import { normalizeToolName } from "./tool-policy.js";
 import { jsonResult, payloadTextResult } from "./tools/common.js";
 
@@ -115,6 +113,7 @@ function splitToolExecuteArgs(args: ToolExecuteArgsAny): {
 }
 
 export function toToolDefinitions(tools: AnyAgentTool[]): ToolDefinition[] {
+  const policyKernel = resolveDefaultPolicyKernel();
   return tools.map((tool) => {
     const name = tool.name || "tool";
     const normalizedName = normalizeToolName(name);
@@ -129,7 +128,7 @@ export function toToolDefinitions(tools: AnyAgentTool[]): ToolDefinition[] {
         let executeParams = params;
         try {
           if (!beforeHookWrapped) {
-            const hookOutcome = await runBeforeToolCallHook({
+            const hookOutcome = await policyKernel.runBeforeToolCall({
               toolName: name,
               params,
               toolCallId,
@@ -179,6 +178,7 @@ export function toClientToolDefinitions(
   onClientToolCall?: (toolName: string, params: Record<string, unknown>) => void,
   hookContext?: HookContext,
 ): ToolDefinition[] {
+  const policyKernel = resolveDefaultPolicyKernel();
   return tools.map((tool) => {
     const func = tool.function;
     return {
@@ -188,7 +188,7 @@ export function toClientToolDefinitions(
       parameters: func.parameters as ToolDefinition["parameters"],
       execute: async (...args: ToolExecuteArgs): Promise<AgentToolResult<unknown>> => {
         const { toolCallId, params } = splitToolExecuteArgs(args);
-        const outcome = await runBeforeToolCallHook({
+        const outcome = await policyKernel.runBeforeToolCall({
           toolName: func.name,
           params,
           toolCallId,

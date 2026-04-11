@@ -8,6 +8,18 @@ title: 路线图
 
 # 路线图
 
+## 当前新增主线
+
+- 架构收敛主线已单独落盘：
+  - `docs/zh-CN/project/architecture-convergence-roadmap.md`
+- 这条主线的原则是：
+  - 保留 `gateway / control-plane`
+  - 保留插件 capability ownership
+  - 不重写现有 skills / subagents / memory
+  - 先做 `AgentKernel` 收口
+  - 再做 subagent `worktree` 隔离
+  - 再把 `memory + steward + capabilities` 串成显式闭环
+
 ## 已完成
 
 - 微信私聊 session 按用户隔离

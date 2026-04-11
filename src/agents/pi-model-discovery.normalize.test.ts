@@ -10,12 +10,10 @@ const normalizeProviderResolvedModelWithPlugin = vi.hoisted(() =>
 const applyProviderResolvedModelCompatWithPlugins = vi.hoisted(() =>
   vi.fn((params: { context: { model: ProviderRuntimeModel } }) => {
     expect(params.context.model.baseUrl).toBe("https://plugin.example.com/v1");
+    const compat = params.context.model.compat;
     return {
       ...params.context.model,
-      compat: {
-        ...(params.context.model.compat ?? {}),
-        supportsStrictMode: true,
-      },
+      compat: compat ? { ...compat, supportsStrictMode: true } : { supportsStrictMode: true },
     };
   }),
 );

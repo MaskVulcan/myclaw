@@ -16,6 +16,7 @@ import {
 } from "./subagent-lifecycle-events.js";
 import { runOutcomesEqual } from "./subagent-registry-completion.js";
 import type { SubagentRunRecord } from "./subagent-registry.types.js";
+import { removeSubagentGitWorktree } from "./subagent-worktree.js";
 
 export const MIN_ANNOUNCE_RETRY_DELAY_MS = 1_000;
 export const MAX_ANNOUNCE_RETRY_DELAY_MS = 8_000;
@@ -262,6 +263,20 @@ export async function safeRemoveAttachmentsDir(entry: SubagentRunRecord): Promis
   }
 }
 
+export async function safeRemoveSubagentWorktree(entry: SubagentRunRecord): Promise<void> {
+  if (!entry.worktreeDir) {
+    return;
+  }
+  try {
+    await removeSubagentGitWorktree({
+      repoDir: entry.worktreeRepoDir,
+      worktreeDir: entry.worktreeDir,
+    });
+  } catch {
+    // best effort
+  }
+}
+
 export function reconcileOrphanedRun(params: {
   runId: string;
   entry: SubagentRunRecord;
@@ -301,6 +316,7 @@ export function reconcileOrphanedRun(params: {
   if (shouldDeleteAttachments) {
     void safeRemoveAttachmentsDir(params.entry);
   }
+  void safeRemoveSubagentWorktree(params.entry);
   const removed = params.runs.delete(params.runId);
   params.resumedRuns.delete(params.runId);
   if (!removed && !changed) {

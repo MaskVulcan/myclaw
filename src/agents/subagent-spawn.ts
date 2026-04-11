@@ -20,6 +20,7 @@ import { emitSessionLifecycleEvent } from "../sessions/session-lifecycle-events.
 import { normalizeDeliveryContext } from "../utils/delivery-context.js";
 import { resolveAgentConfig } from "./agent-scope.js";
 import { AGENT_LANE_SUBAGENT } from "./lanes.js";
+import { resolveDefaultMemoryProviderKernel } from "./memory-provider-kernel.js";
 import { resolveSubagentSpawnModelSelection } from "./model-selection.js";
 import { resolveSandboxRuntimeStatus } from "./sandbox/runtime-status.js";
 import {
@@ -36,6 +37,11 @@ import {
 import { resolveSubagentCapabilities } from "./subagent-capabilities.js";
 import { getSubagentDepthFromSessionStore } from "./subagent-depth.js";
 import { countActiveRunsForSession, registerSubagentRun } from "./subagent-registry.js";
+import {
+  prepareSubagentGitWorktree,
+  removeSubagentGitWorktree,
+  type SpawnSubagentWorktreeMode,
+} from "./subagent-worktree.js";
 import { readStringParam } from "./tools/common.js";
 import {
   resolveDisplaySessionKey,
@@ -61,6 +67,7 @@ export type SpawnSubagentParams = {
   mode?: SpawnSubagentMode;
   cleanup?: "delete" | "keep";
   sandbox?: SpawnSubagentSandboxMode;
+  worktree?: SpawnSubagentWorktreeMode;
   expectsCompletionMessage?: boolean;
   attachments?: Array<{
     name: string;
@@ -193,6 +200,8 @@ async function cleanupProvisionalSession(
 async function cleanupFailedSpawnBeforeAgentStart(params: {
   childSessionKey: string;
   attachmentAbsDir?: string;
+  worktreeDir?: string;
+  worktreeRepoDir?: string;
   emitLifecycleHooks?: boolean;
   deleteTranscript?: boolean;
 }): Promise<void> {
@@ -203,10 +212,26 @@ async function cleanupFailedSpawnBeforeAgentStart(params: {
       // Best-effort cleanup only.
     }
   }
+  if (params.worktreeDir) {
+    await removeSubagentGitWorktree({
+      repoDir: params.worktreeRepoDir,
+      worktreeDir: params.worktreeDir,
+    }).catch(() => {});
+  }
   await cleanupProvisionalSession(params.childSessionKey, {
     emitLifecycleHooks: params.emitLifecycleHooks,
     deleteTranscript: params.deleteTranscript,
   });
+}
+
+async function rollbackPreparedDelegation(params: {
+  preparation?: { rollback: () => void | Promise<void> };
+}) {
+  try {
+    await params.preparation?.rollback();
+  } catch {
+    // Best-effort rollback only.
+  }
 }
 
 function resolveSpawnMode(params: {
@@ -313,6 +338,7 @@ export async function spawnSubagentDirect(
   const thinkingOverrideRaw = params.thinking;
   const requestThreadBinding = params.thread === true;
   const sandboxMode = params.sandbox === "require" ? "require" : "inherit";
+  const worktreeMode = params.worktree === "git" ? "git" : "off";
   const spawnMode = resolveSpawnMode({
     requestedMode: params.mode,
     threadRequested: requestThreadBinding,
@@ -553,6 +579,64 @@ export async function spawnSubagentDirect(
     threadBindingReady = true;
   }
   const mountPathHint = sanitizeMountPathHint(params.attachMountPath);
+  const toolSpawnMetadata = mapToolContextToSpawnedRunMetadata({
+    agentGroupId: ctx.agentGroupId,
+    agentGroupChannel: ctx.agentGroupChannel,
+    agentGroupSpace: ctx.agentGroupSpace,
+    workspaceDir: ctx.workspaceDir,
+  });
+  const inheritedWorkspaceDir = resolveSpawnedWorkspaceInheritance({
+    config: cfg,
+    targetAgentId,
+    // For cross-agent spawns, ignore the caller's inherited workspace;
+    // let targetAgentId resolve the correct workspace instead.
+    explicitWorkspaceDir:
+      targetAgentId !== requesterAgentId ? undefined : toolSpawnMetadata.workspaceDir,
+  });
+  let effectiveWorkspaceDir = inheritedWorkspaceDir;
+  let preparedWorktree:
+    | {
+        repoDir: string;
+        worktreeDir: string;
+        workspaceDir: string;
+      }
+    | undefined;
+  if (worktreeMode === "git") {
+    if (!inheritedWorkspaceDir) {
+      await cleanupProvisionalSession(childSessionKey, {
+        emitLifecycleHooks: threadBindingReady,
+        deleteTranscript: true,
+      });
+      return {
+        status: "error",
+        error: 'worktree="git" requires a resolved child workspace directory.',
+        childSessionKey,
+      };
+    }
+    try {
+      preparedWorktree = await prepareSubagentGitWorktree({
+        agentId: targetAgentId,
+        childSessionKey,
+        workspaceDir: inheritedWorkspaceDir,
+      });
+      effectiveWorkspaceDir = preparedWorktree.workspaceDir;
+    } catch (err) {
+      await cleanupProvisionalSession(childSessionKey, {
+        emitLifecycleHooks: threadBindingReady,
+        deleteTranscript: true,
+      });
+      return {
+        status: "error",
+        error: summarizeError(err),
+        childSessionKey,
+      };
+    }
+  }
+  const spawnedMetadata = normalizeSpawnedRunMetadata({
+    spawnedBy: spawnedByKey,
+    ...toolSpawnMetadata,
+    workspaceDir: effectiveWorkspaceDir,
+  });
 
   let childSystemPrompt = buildSubagentSystemPrompt({
     requesterSessionKey,
@@ -579,11 +663,15 @@ export async function spawnSubagentDirect(
   const materializedAttachments = await materializeSubagentAttachments({
     config: cfg,
     targetAgentId,
+    workspaceDir: effectiveWorkspaceDir,
     attachments: params.attachments,
     mountPathHint,
   });
   if (materializedAttachments && materializedAttachments.status !== "ok") {
-    await cleanupProvisionalSession(childSessionKey, {
+    await cleanupFailedSpawnBeforeAgentStart({
+      childSessionKey,
+      worktreeDir: preparedWorktree?.worktreeDir,
+      worktreeRepoDir: preparedWorktree?.repoDir,
       emitLifecycleHooks: threadBindingReady,
       deleteTranscript: true,
     });
@@ -609,25 +697,6 @@ export async function spawnSubagentDirect(
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n\n");
-
-  const toolSpawnMetadata = mapToolContextToSpawnedRunMetadata({
-    agentGroupId: ctx.agentGroupId,
-    agentGroupChannel: ctx.agentGroupChannel,
-    agentGroupSpace: ctx.agentGroupSpace,
-    workspaceDir: ctx.workspaceDir,
-  });
-  const spawnedMetadata = normalizeSpawnedRunMetadata({
-    spawnedBy: spawnedByKey,
-    ...toolSpawnMetadata,
-    workspaceDir: resolveSpawnedWorkspaceInheritance({
-      config: cfg,
-      targetAgentId,
-      // For cross-agent spawns, ignore the caller's inherited workspace;
-      // let targetAgentId resolve the correct workspace instead.
-      explicitWorkspaceDir:
-        targetAgentId !== requesterAgentId ? undefined : toolSpawnMetadata.workspaceDir,
-    }),
-  });
   const spawnLineagePatchError = await patchChildSession({
     spawnedBy: spawnedByKey,
     ...(spawnedMetadata.workspaceDir ? { spawnedWorkspaceDir: spawnedMetadata.workspaceDir } : {}),
@@ -636,6 +705,8 @@ export async function spawnSubagentDirect(
     await cleanupFailedSpawnBeforeAgentStart({
       childSessionKey,
       attachmentAbsDir,
+      worktreeDir: preparedWorktree?.worktreeDir,
+      worktreeRepoDir: preparedWorktree?.repoDir,
       emitLifecycleHooks: threadBindingReady,
       deleteTranscript: true,
     });
@@ -645,6 +716,13 @@ export async function spawnSubagentDirect(
       childSessionKey,
     };
   }
+
+  const delegationPreparation = await resolveDefaultMemoryProviderKernel().prepareDelegation({
+    config: cfg,
+    parentSessionKey: requesterInternalKey,
+    childSessionKey,
+    workspaceDir: effectiveWorkspaceDir,
+  });
 
   const childIdem = crypto.randomUUID();
   let childRunId: string = childIdem;
@@ -678,13 +756,6 @@ export async function spawnSubagentDirect(
       childRunId = response.runId;
     }
   } catch (err) {
-    if (attachmentAbsDir) {
-      try {
-        await fs.rm(attachmentAbsDir, { recursive: true, force: true });
-      } catch {
-        // Best-effort cleanup only.
-      }
-    }
     let emitLifecycleHooks = false;
     if (threadBindingReady) {
       const hasEndedHook = hookRunner?.hasHooks("subagent_ended") === true;
@@ -715,21 +786,19 @@ export async function spawnSubagentDirect(
       }
       emitLifecycleHooks = !endedHookEmitted;
     }
+    await rollbackPreparedDelegation({
+      preparation: delegationPreparation,
+    });
     // Always delete the provisional child session after a failed spawn attempt.
     // If we already emitted subagent_ended above, suppress a duplicate lifecycle hook.
-    try {
-      await callGateway({
-        method: "sessions.delete",
-        params: {
-          key: childSessionKey,
-          deleteTranscript: true,
-          emitLifecycleHooks,
-        },
-        timeoutMs: 10_000,
-      });
-    } catch {
-      // Best-effort only.
-    }
+    await cleanupFailedSpawnBeforeAgentStart({
+      childSessionKey,
+      attachmentAbsDir,
+      worktreeDir: preparedWorktree?.worktreeDir,
+      worktreeRepoDir: preparedWorktree?.repoDir,
+      deleteTranscript: true,
+      emitLifecycleHooks,
+    });
     const messageText = summarizeError(err);
     return {
       status: "error",
@@ -755,31 +824,24 @@ export async function spawnSubagentDirect(
       runTimeoutSeconds,
       expectsCompletionMessage,
       spawnMode,
+      worktreeDir: preparedWorktree?.worktreeDir,
+      worktreeRepoDir: preparedWorktree?.repoDir,
       attachmentsDir: attachmentAbsDir,
       attachmentsRootDir: attachmentRootDir,
       retainAttachmentsOnKeep: retainOnSessionKeep,
     });
   } catch (err) {
-    if (attachmentAbsDir) {
-      try {
-        await fs.rm(attachmentAbsDir, { recursive: true, force: true });
-      } catch {
-        // Best-effort cleanup only.
-      }
-    }
-    try {
-      await callGateway({
-        method: "sessions.delete",
-        params: {
-          key: childSessionKey,
-          deleteTranscript: true,
-          emitLifecycleHooks: threadBindingReady,
-        },
-        timeoutMs: 10_000,
-      });
-    } catch {
-      // Best-effort cleanup only.
-    }
+    await rollbackPreparedDelegation({
+      preparation: delegationPreparation,
+    });
+    await cleanupFailedSpawnBeforeAgentStart({
+      childSessionKey,
+      attachmentAbsDir,
+      worktreeDir: preparedWorktree?.worktreeDir,
+      worktreeRepoDir: preparedWorktree?.repoDir,
+      deleteTranscript: true,
+      emitLifecycleHooks: threadBindingReady,
+    });
     return {
       status: "error",
       error: `Failed to register subagent run: ${summarizeError(err)}`,

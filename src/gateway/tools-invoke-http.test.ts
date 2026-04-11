@@ -175,6 +175,20 @@ vi.mock("../agents/pi-tools.before-tool-call.js", () => ({
   runBeforeToolCallHook: hookMocks.runBeforeToolCallHook,
 }));
 
+vi.mock("../agents/policy-kernel.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../agents/policy-kernel.js")>();
+  return {
+    ...actual,
+    resolveDefaultPolicyKernel: () => {
+      const kernel = actual.resolveDefaultPolicyKernel();
+      return {
+        ...kernel,
+        runBeforeToolCall: hookMocks.runBeforeToolCallHook,
+      };
+    },
+  };
+});
+
 const { handleToolsInvokeHttpRequest } = await import("./tools-invoke-http.js");
 
 let pluginHttpHandlers: Array<(req: IncomingMessage, res: ServerResponse) => Promise<boolean>> = [];

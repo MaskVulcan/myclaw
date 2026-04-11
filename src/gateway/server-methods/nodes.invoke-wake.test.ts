@@ -36,6 +36,21 @@ vi.mock("../node-command-policy.js", () => ({
   isNodeCommandAllowed: mocks.isNodeCommandAllowed,
 }));
 
+vi.mock("../../agents/policy-kernel.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../agents/policy-kernel.js")>();
+  return {
+    ...actual,
+    resolveDefaultPolicyKernel: () => {
+      const kernel = actual.resolveDefaultPolicyKernel();
+      return {
+        ...kernel,
+        resolveNodeCommandAllowlist: mocks.resolveNodeCommandAllowlist,
+        isNodeCommandAllowed: mocks.isNodeCommandAllowed,
+      };
+    },
+  };
+});
+
 vi.mock("../node-invoke-sanitize.js", () => ({
   sanitizeNodeInvokeParamsForForwarding: mocks.sanitizeNodeInvokeParamsForForwarding,
 }));

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { resolveDefaultPolicyKernel } from "../../agents/policy-kernel.js";
 import { loadConfig } from "../../config/config.js";
 import { listDevicePairing } from "../../infra/device-pairing.js";
 import {
@@ -23,7 +24,6 @@ import {
   CANVAS_CAPABILITY_TTL_MS,
   mintCanvasCapabilityToken,
 } from "../canvas-capability.js";
-import { isNodeCommandAllowed, resolveNodeCommandAllowlist } from "../node-command-policy.js";
 import { sanitizeNodeInvokeParamsForForwarding } from "../node-invoke-sanitize.js";
 import {
   type ConnectParams,
@@ -223,18 +223,19 @@ function resolveAllowedPendingNodeActions(params: {
   nodeId: string;
   client: { connect?: ConnectParams | null } | null;
 }): PendingNodeAction[] {
+  const policyKernel = resolveDefaultPolicyKernel();
   const pending = listPendingNodeActions(params.nodeId);
   if (pending.length === 0) {
     return pending;
   }
   const connect = params.client?.connect;
   const declaredCommands = Array.isArray(connect?.commands) ? connect.commands : [];
-  const allowlist = resolveNodeCommandAllowlist(loadConfig(), {
+  const allowlist = policyKernel.resolveNodeCommandAllowlist(loadConfig(), {
     platform: connect?.client?.platform,
     deviceFamily: connect?.client?.deviceFamily,
   });
   const allowed = pending.filter((entry) => {
-    const result = isNodeCommandAllowed({
+    const result = policyKernel.isNodeCommandAllowed({
       command: entry.command,
       declaredCommands,
       allowlist,
@@ -937,6 +938,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
     }
 
     await respondUnavailableOnThrow(respond, async () => {
+      const policyKernel = resolveDefaultPolicyKernel();
       let nodeSession = context.nodeRegistry.get(nodeId);
       if (!nodeSession) {
         const wakeReqId = req.id;
@@ -1019,8 +1021,8 @@ export const nodeHandlers: GatewayRequestHandlers = {
         );
       }
       const cfg = loadConfig();
-      const allowlist = resolveNodeCommandAllowlist(cfg, nodeSession);
-      const allowed = isNodeCommandAllowed({
+      const allowlist = policyKernel.resolveNodeCommandAllowlist(cfg, nodeSession);
+      const allowed = policyKernel.isNodeCommandAllowed({
         command,
         declaredCommands: nodeSession.commands,
         allowlist,

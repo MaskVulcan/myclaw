@@ -4,7 +4,7 @@ import { resolveAgentDir, resolveAgentWorkspaceDir, resolveSessionAgentId } from
 import { getChannelAgentToolMeta } from "./channel-tools.js";
 import { resolveModel } from "./pi-embedded-runner/model.js";
 import { createOpenClawCodingTools } from "./pi-tools.js";
-import { resolveEffectiveToolPolicy } from "./pi-tools.policy.js";
+import { resolveDefaultPolicyKernel } from "./policy-kernel.js";
 import { summarizeToolDescriptionText } from "./tool-description-summary.js";
 import { resolveToolDisplay } from "./tool-display.js";
 import type { AnyAgentTool } from "./tools/common.js";
@@ -182,7 +182,7 @@ export function resolveEffectiveToolInventory(
     requireExplicitMessageTarget: params.requireExplicitMessageTarget,
     disableMessageTool: params.disableMessageTool,
   });
-  const effectivePolicy = resolveEffectiveToolPolicy({
+  const effectivePolicy = resolveDefaultPolicyKernel().resolveToolPolicy({
     config: params.cfg,
     agentId,
     sessionKey: params.sessionKey,

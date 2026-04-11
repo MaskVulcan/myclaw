@@ -114,11 +114,15 @@ export async function loadSubagentSpawnModuleForTest(params: {
   pruneLegacyStoreKeysMock?: MockFn;
   registerSubagentRunMock?: MockFn;
   emitSessionLifecycleEventMock?: MockFn;
+  materializeSubagentAttachmentsMock?: MockFn;
+  prepareSubagentGitWorktreeMock?: MockFn;
+  removeSubagentGitWorktreeMock?: MockFn;
   hookRunner?: HookRunner;
   resolveAgentConfig?: (cfg: Record<string, unknown>, agentId: string) => unknown;
   resolveAgentWorkspaceDir?: (cfg: Record<string, unknown>, agentId: string) => string;
   resolveSubagentSpawnModelSelection?: () => string | undefined;
   resolveSandboxRuntimeStatus?: () => { sandboxed: boolean };
+  prepareMemoryProviderDelegationMock?: MockFn;
   workspaceDir?: string;
   sessionStorePath?: string;
 }) {
@@ -128,10 +132,8 @@ export async function loadSubagentSpawnModuleForTest(params: {
     callGateway: (opts: unknown) => params.callGatewayMock(opts),
   }));
 
-  vi.doMock("../config/config.js", async (importOriginal) => {
-    const actual = await importOriginal<typeof import("../config/config.js")>();
+  vi.doMock("../config/config.js", () => {
     return {
-      ...actual,
       loadConfig: () =>
         params.loadConfig?.() ?? createSubagentSpawnTestConfig(params.workspaceDir ?? os.tmpdir()),
     };
@@ -215,6 +217,38 @@ export async function loadSubagentSpawnModuleForTest(params: {
     };
   });
 
+  if (params.materializeSubagentAttachmentsMock) {
+    vi.doMock("./subagent-attachments.js", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("./subagent-attachments.js")>();
+      return {
+        ...actual,
+        materializeSubagentAttachments: (...args: unknown[]) =>
+          params.materializeSubagentAttachmentsMock?.(...args),
+      };
+    });
+  }
+
+  if (params.prepareSubagentGitWorktreeMock || params.removeSubagentGitWorktreeMock) {
+    vi.doMock("./subagent-worktree.js", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("./subagent-worktree.js")>();
+      return {
+        ...actual,
+        prepareSubagentGitWorktree: (...args: unknown[]) =>
+          params.prepareSubagentGitWorktreeMock
+            ? params.prepareSubagentGitWorktreeMock(...args)
+            : actual.prepareSubagentGitWorktree(
+                ...(args as Parameters<typeof actual.prepareSubagentGitWorktree>),
+              ),
+        removeSubagentGitWorktree: (...args: unknown[]) =>
+          params.removeSubagentGitWorktreeMock
+            ? params.removeSubagentGitWorktreeMock(...args)
+            : actual.removeSubagentGitWorktree(
+                ...(args as Parameters<typeof actual.removeSubagentGitWorktree>),
+              ),
+      };
+    });
+  }
+
   vi.doMock("../plugins/hook-runner-global.js", () => ({
     getGlobalHookRunner: () => params.hookRunner ?? { hasHooks: () => false },
   }));
@@ -232,6 +266,30 @@ export async function loadSubagentSpawnModuleForTest(params: {
     return {
       ...actual,
       ...createDefaultSessionHelperMocks(),
+    };
+  });
+
+  vi.doMock("./memory-provider-kernel.js", () => {
+    return {
+      resolveDefaultMemoryProviderKernel: () => ({
+        id: "plugin-memory",
+        systemPromptBlock: () => [],
+        resolveFlushPlan: () => null,
+        prefetch: async () => ({ manager: null, error: "mocked" }),
+        resolveBackendConfig: () => null,
+        bootstrap: async () => undefined,
+        syncTurn: async () => ({ postTurnFinalizationSucceeded: true }),
+        maintain: async () => undefined,
+        prepareDelegation: (...args: unknown[]) =>
+          params.prepareMemoryProviderDelegationMock?.(...args),
+        onDelegationEnded: async () => undefined,
+        runSessionStewardCycle: async () => ({
+          keptSessions: 0,
+          memoryCandidates: 0,
+          skillCandidates: 0,
+        }),
+        shutdown: async () => undefined,
+      }),
     };
   });
 

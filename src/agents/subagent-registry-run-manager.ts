@@ -18,6 +18,7 @@ import {
   persistSubagentSessionTiming,
   resolveArchiveAfterMs,
   safeRemoveAttachmentsDir,
+  safeRemoveSubagentWorktree,
 } from "./subagent-registry-helpers.js";
 import type { SubagentRunRecord } from "./subagent-registry.types.js";
 
@@ -268,6 +269,8 @@ export function createSubagentRunManager(params: {
     label?: string;
     model?: string;
     workspaceDir?: string;
+    worktreeDir?: string;
+    worktreeRepoDir?: string;
     runTimeoutSeconds?: number;
     expectsCompletionMessage?: boolean;
     spawnMode?: "run" | "session";
@@ -303,6 +306,8 @@ export function createSubagentRunManager(params: {
       label: registerParams.label,
       model: registerParams.model,
       workspaceDir: registerParams.workspaceDir,
+      worktreeDir: registerParams.worktreeDir,
+      worktreeRepoDir: registerParams.worktreeRepoDir,
       runTimeoutSeconds,
       createdAt: now,
       startedAt: now,
@@ -332,6 +337,7 @@ export function createSubagentRunManager(params: {
       if (shouldDeleteAttachments(entry)) {
         void safeRemoveAttachmentsDir(entry);
       }
+      void safeRemoveSubagentWorktree(entry);
       void params.notifyContextEngineSubagentEnded({
         childSessionKey: entry.childSessionKey,
         reason: "released",

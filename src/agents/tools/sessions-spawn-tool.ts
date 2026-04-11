@@ -4,6 +4,7 @@ import { ACP_SPAWN_MODES, ACP_SPAWN_STREAM_TARGETS, spawnAcpDirect } from "../ac
 import { optionalStringEnum } from "../schema/typebox.js";
 import type { SpawnedToolContext } from "../spawned-context.js";
 import { SUBAGENT_SPAWN_MODES, spawnSubagentDirect } from "../subagent-spawn.js";
+import { SUBAGENT_WORKTREE_MODES } from "../subagent-worktree.js";
 import type { AnyAgentTool } from "./common.js";
 import { jsonResult, readStringParam, ToolInputError } from "./common.js";
 
@@ -41,6 +42,7 @@ const SessionsSpawnToolSchema = Type.Object({
   mode: optionalStringEnum(SUBAGENT_SPAWN_MODES),
   cleanup: optionalStringEnum(["delete", "keep"] as const),
   sandbox: optionalStringEnum(SESSIONS_SPAWN_SANDBOX_MODES),
+  worktree: optionalStringEnum(SUBAGENT_WORKTREE_MODES),
   streamTo: optionalStringEnum(ACP_SPAWN_STREAM_TARGETS),
 
   // Inline attachments (snapshot-by-value).
@@ -105,6 +107,7 @@ export function createSessionsSpawnTool(
       const cleanup =
         params.cleanup === "keep" || params.cleanup === "delete" ? params.cleanup : "keep";
       const sandbox = params.sandbox === "require" ? "require" : "inherit";
+      const worktree = params.worktree === "git" ? "git" : "off";
       const streamTo = params.streamTo === "parent" ? "parent" : undefined;
       // Back-compat: older callers used timeoutSeconds for this tool.
       const timeoutSecondsCandidate =
@@ -142,6 +145,12 @@ export function createSessionsSpawnTool(
       }
 
       if (runtime === "acp") {
+        if (worktree !== "off") {
+          return jsonResult({
+            status: "error",
+            error: `worktree is only supported for runtime=subagent; got runtime=${runtime}`,
+          });
+        }
         if (Array.isArray(attachments) && attachments.length > 0) {
           return jsonResult({
             status: "error",
@@ -185,6 +194,7 @@ export function createSessionsSpawnTool(
           mode,
           cleanup,
           sandbox,
+          worktree,
           expectsCompletionMessage: true,
           attachments,
           attachMountPath:

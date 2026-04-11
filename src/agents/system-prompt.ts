@@ -2,9 +2,9 @@ import { createHmac, createHash } from "node:crypto";
 import type { ReasoningLevel, ThinkLevel } from "../auto-reply/thinking.js";
 import { SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import type { MemoryCitationsMode } from "../config/types.memory.js";
-import { buildMemoryPromptSection } from "../plugins/memory-state.js";
 import { listDeliverableMessageChannels } from "../utils/message-channel.js";
 import type { ResolvedTimeFormat } from "./date-time.js";
+import { resolveDefaultMemoryProviderKernel } from "./memory-provider-kernel.js";
 import type { EmbeddedContextFile } from "./pi-embedded-helpers.js";
 import type { EmbeddedSandboxInfo } from "./pi-embedded-runner/types.js";
 import { sanitizeForPromptLiteral } from "./sanitize-for-prompt.js";
@@ -45,7 +45,7 @@ function buildMemorySection(params: {
   if (params.isMinimal) {
     return [];
   }
-  return buildMemoryPromptSection({
+  return resolveDefaultMemoryProviderKernel().systemPromptBlock({
     availableTools: params.availableTools,
     citationsMode: params.citationsMode,
   });

@@ -67,6 +67,7 @@ x-i18n:
 - `thinking?`（可选；覆盖子智能体运行的思考级别）
 - `runTimeoutSeconds?`（默认 `0`；设置后，子智能体运行在 N 秒后中止）
 - `cleanup?`（`delete|keep`，默认 `keep`）
+- `worktree?`（`off|git`，默认 `off`；`git` 会在继承工作目录位于 git 仓库内时，为子智能体创建 detached worktree；`runtime: "acp"` 不支持）
 
 允许列表：
 
