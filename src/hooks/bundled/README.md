@@ -23,8 +23,8 @@ openclaw hooks enable session-memory
 Runs the unified knowledge loop around session compaction and session end.
 
 **Events**: `command:new`, `command:reset`, `session:compact:after`
-**What it does**: Writes background review nudges after compaction, then on `/new` or `/reset` writes a deterministic review record and runs steward staging, curation, maintenance, incubation, and skill promotion.
-**Output**: `.openclaw/knowledge/`, `memory/inbox/`, `memory/topics/`, `memory/steward/runs/`, `skills/_candidates/`, `skills/_incubator/`, and `skills/<slug>/SKILL.md` when repeated evidence is sufficient.
+**What it does**: Writes background review nudges after compaction, then on `/new` or `/reset` writes a deterministic review record, refreshes the machine-managed `USER.md` profile block, and runs steward staging, curation, maintenance, incubation, and skill promotion.
+**Output**: `.openclaw/knowledge/`, `USER.md`, `memory/inbox/`, `memory/topics/`, `memory/steward/runs/`, `skills/_candidates/`, `skills/_incubator/`, and `skills/<slug>/SKILL.md` when repeated evidence is sufficient.
 
 **Enable**:
 

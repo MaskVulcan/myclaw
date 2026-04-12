@@ -31,11 +31,12 @@ When a reset/new command starts a fresh session, the hook uses the pre-reset
 session transcript to:
 
 1. Write a deterministic review record under `workspace/.openclaw/knowledge/`
-2. Stage deterministic memory and skill candidates
-3. Curate memory candidates into `memory/topics/` and `MEMORY.md`
-4. Maintain topic note size/link hygiene
-5. Incubate repeated skill candidates
-6. Promote ready incubators into `skills/<slug>/SKILL.md`
+2. Sync the machine-managed `USER.md` profile block from accumulated reviews
+3. Stage deterministic memory and skill candidates
+4. Curate memory candidates into `memory/topics/` and `MEMORY.md`
+5. Maintain topic note size/link hygiene
+6. Incubate repeated skill candidates
+7. Promote ready incubators into `skills/<slug>/SKILL.md`
 
 This keeps long-term memory and reusable workflow capture moving forward without
 manual CLI runs.
@@ -84,6 +85,8 @@ openclaw hooks enable knowledge-steward
 ## Notes
 
 - The review and steward passes are deterministic, not free-form rewriting.
+- Review records are also the shared fact source for session search and `USER.md`
+  profile sync.
 - Promotion still requires repeated evidence across sessions.
 - It works well alongside `session-memory`; `session-memory` keeps a raw reset
   snapshot, while `knowledge-steward` maintains curated long-term notes.

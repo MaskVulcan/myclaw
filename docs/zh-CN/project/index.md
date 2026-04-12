@@ -25,6 +25,8 @@ title: 项目文档索引
   - 分阶段路线图
 - `architecture-convergence-roadmap.md`
   - `myclaw` 吸收 `Hermes` / `OpenHarness` 的架构收敛主线
+- `knowledge-loop-convergence.md`
+  - review nudge / session search / skill 聚类 / USER.md 建模四条知识环主线的当前状态
 - `todo.md`
   - 还没做但明确值得做的项
 - `boundaries.md`
