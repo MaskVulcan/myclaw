@@ -264,10 +264,13 @@ export async function runAfterCompactionHooks(params: {
   try {
     const hookEvent = createInternalHookEvent("session", "compact:after", params.hookSessionKey, {
       sessionId: params.sessionId,
+      agentId: params.sessionAgentId,
       missingSessionKey: params.missingSessionKey,
       messageCount: params.messageCountAfter,
       tokenCount: params.tokensAfter,
       compactedCount: params.compactedCount,
+      workspaceDir: params.workspaceDir,
+      sessionFile: params.sessionFile,
       summaryLength: params.summaryLength,
       tokensBefore: params.tokensBefore,
       tokensAfter: params.tokensAfter,

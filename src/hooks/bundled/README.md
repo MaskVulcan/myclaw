@@ -20,11 +20,11 @@ openclaw hooks enable session-memory
 
 ### 🧠 knowledge-steward
 
-Automatically runs the deterministic steward pipeline when you issue `/new` or `/reset`.
+Runs the unified knowledge loop around session compaction and session end.
 
-**Events**: `command:new`, `command:reset`
-**What it does**: Uses the just-finished transcript to stage durable memory/skill candidates, curate long-term notes, maintain note size, incubate repeated workflows, and promote ready skills.
-**Output**: `memory/inbox/`, `memory/topics/`, `memory/steward/runs/`, `skills/_candidates/`, `skills/_incubator/`, and `skills/<slug>/SKILL.md` when repeated evidence is sufficient.
+**Events**: `command:new`, `command:reset`, `session:compact:after`
+**What it does**: Writes background review nudges after compaction, then on `/new` or `/reset` writes a deterministic review record and runs steward staging, curation, maintenance, incubation, and skill promotion.
+**Output**: `.openclaw/knowledge/`, `memory/inbox/`, `memory/topics/`, `memory/steward/runs/`, `skills/_candidates/`, `skills/_incubator/`, and `skills/<slug>/SKILL.md` when repeated evidence is sufficient.
 
 **Enable**:
 

@@ -230,8 +230,11 @@ describe("compactEmbeddedPiSessionDirect hooks", () => {
       tokenCountOriginal: 20,
     });
     expect(afterContext).toMatchObject({
+      agentId: "main",
       messageCount: 1,
       compactedCount: 1,
+      sessionFile: "/tmp/session.jsonl",
+      workspaceDir: "/tmp",
     });
     expect(afterContext?.compactedCount).toBe(
       (beforeContext?.messageCountOriginal as number) - (afterContext?.messageCount as number),

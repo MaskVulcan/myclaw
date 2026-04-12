@@ -2,6 +2,12 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  KNOWLEDGE_REVIEW_NUDGE_ROOT,
+  KNOWLEDGE_REVIEW_ROOT,
+  type KnowledgeReviewNudge,
+  type KnowledgeReviewRecord,
+} from "../../../agents/knowledge-review-store.js";
 import type { OpenClawConfig } from "../../../config/config.js";
 import type { SessionEntry } from "../../../config/sessions.js";
 import { createHookEvent } from "../../hooks.js";
@@ -30,18 +36,21 @@ function createConfig(workspaceDir: string): OpenClawConfig {
 async function runKnowledgeStewardHook(params: {
   workspaceDir: string;
   sessionKey?: string;
-  action?: "new" | "reset";
+  action?: "new" | "reset" | "compact:after";
+  type?: "command" | "session";
   previousSessionEntry: SessionEntry;
   cfg?: OpenClawConfig;
+  context?: Record<string, unknown>;
 }) {
   const event = createHookEvent(
-    "command",
+    params.type ?? "command",
     params.action ?? "new",
     params.sessionKey ?? "agent:main:main",
     {
       cfg: params.cfg ?? createConfig(params.workspaceDir),
       workspaceDir: params.workspaceDir,
       previousSessionEntry: params.previousSessionEntry,
+      ...params.context,
     },
   );
   await handler(event);
@@ -63,6 +72,10 @@ async function listFilesRecursive(rootDir: string): Promise<string[]> {
   } catch {
     return [];
   }
+}
+
+async function readJsonFile<T>(filePath: string): Promise<T> {
+  return JSON.parse(await fs.readFile(filePath, "utf-8")) as T;
 }
 
 beforeAll(async () => {
@@ -119,6 +132,8 @@ describe("knowledge-steward hook", () => {
     const memoryIndex = await fs.readFile(path.join(workspaceDir, "MEMORY.md"), "utf-8");
     const ledgerPath = path.join(workspaceDir, "memory", "steward", "runs");
     const ledgerFiles = await listFilesRecursive(ledgerPath);
+    const reviewPath = path.join(workspaceDir, KNOWLEDGE_REVIEW_ROOT, "steward-session-1.json");
+    const review = await readJsonFile<KnowledgeReviewRecord>(reviewPath);
 
     expect(topicFiles.length).toBe(1);
     expect(inboxFiles.length).toBe(1);
@@ -126,6 +141,11 @@ describe("knowledge-steward hook", () => {
     expect(skillFiles.filter((file) => file.endsWith("SKILL.md")).length).toBe(0);
     expect(memoryIndex).toContain("Curated Topics");
     expect(ledgerFiles.length).toBe(1);
+    expect(review.sessionId).toBe("steward-session-1");
+    expect(review.userModel.preferences).toContain(
+      "Remember that I prefer concise Chinese updates.",
+    );
+    expect(review.automation.commands).toContain("openclaw status --json");
 
     const topicNote = await fs.readFile(topicFiles[0], "utf-8");
     const incubatorNote = await fs.readFile(incubatorFiles[0], "utf-8");
@@ -194,11 +214,53 @@ describe("knowledge-steward hook", () => {
     const promotedSkillFiles = (await listFilesRecursive(path.join(workspaceDir, "skills"))).filter(
       (file) => file.endsWith("SKILL.md") && !file.includes("/_incubator/"),
     );
+    const firstReview = await readJsonFile<KnowledgeReviewRecord>(
+      path.join(workspaceDir, KNOWLEDGE_REVIEW_ROOT, "release-1.json"),
+    );
+    const secondReview = await readJsonFile<KnowledgeReviewRecord>(
+      path.join(workspaceDir, KNOWLEDGE_REVIEW_ROOT, "release-2.json"),
+    );
 
     expect(promotedSkillFiles.length).toBe(1);
+    expect(firstReview.automation.commands).toContain("openclaw status --json");
+    expect(secondReview.automation.commands).toContain("openclaw status --json");
     const skillContent = await fs.readFile(promotedSkillFiles[0], "utf-8");
     expect(skillContent).toContain("## Suggested Workflow");
     expect(skillContent).toContain("## Source Candidates");
     expect(skillContent).toContain("openclaw status --json");
+  });
+
+  it("writes a compact-after review nudge without running the full steward cycle", async () => {
+    const workspaceDir = await createCaseWorkspace("workspace");
+    const sessionFile = path.join(workspaceDir, "sessions", "compacted-session-1.jsonl");
+    await fs.mkdir(path.dirname(sessionFile), { recursive: true });
+    await fs.writeFile(sessionFile, "", "utf-8");
+
+    await runKnowledgeStewardHook({
+      workspaceDir,
+      type: "session",
+      action: "compact:after",
+      previousSessionEntry: {
+        sessionId: "placeholder",
+      },
+      context: {
+        agentId: "main",
+        sessionId: "compacted-session-1",
+        sessionFile,
+      },
+    });
+
+    const nudgePath = path.join(
+      workspaceDir,
+      KNOWLEDGE_REVIEW_NUDGE_ROOT,
+      "compacted-session-1.json",
+    );
+    const nudge = await readJsonFile<KnowledgeReviewNudge>(nudgePath);
+    const reviewPath = path.join(workspaceDir, KNOWLEDGE_REVIEW_ROOT, "compacted-session-1.json");
+
+    expect(nudge.sessionId).toBe("compacted-session-1");
+    expect(nudge.transcriptFile).toBe(sessionFile);
+    expect(nudge.reasons).toEqual(["session:compact:after"]);
+    await expect(fs.stat(reviewPath)).rejects.toThrow();
   });
 });

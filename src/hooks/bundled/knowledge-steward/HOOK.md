@@ -1,13 +1,13 @@
 ---
 name: knowledge-steward
-description: "Automatically run steward ingest/curate/maintain/skill incubation on /new and /reset"
+description: "Run the knowledge loop: background review nudges after compaction, review + steward on /new and /reset"
 homepage: https://docs.openclaw.ai/automation/hooks#knowledge-steward
 metadata:
   {
     "openclaw":
       {
         "emoji": "🧠",
-        "events": ["command:new", "command:reset"],
+        "events": ["command:new", "command:reset", "session:compact:after"],
         "requires": { "config": ["workspace.dir"] },
         "install": [{ "id": "bundled", "kind": "bundled", "label": "Bundled with OpenClaw" }],
       },
@@ -16,19 +16,26 @@ metadata:
 
 # Knowledge Steward Hook
 
-Automatically runs the steward pipeline when you close out a session with `/new`
-or `/reset`.
+Runs the unified knowledge loop around a session:
+
+- after compaction, it writes a lightweight review nudge
+- on `/new` or `/reset`, it writes a deterministic session review and then runs
+  the steward pipeline
 
 ## What It Does
+
+When compaction finishes, the hook records a background nudge so the session can
+be reviewed later with full context.
 
 When a reset/new command starts a fresh session, the hook uses the pre-reset
 session transcript to:
 
-1. Stage deterministic memory and skill candidates
-2. Curate memory candidates into `memory/topics/` and `MEMORY.md`
-3. Maintain topic note size/link hygiene
-4. Incubate repeated skill candidates
-5. Promote ready incubators into `skills/<slug>/SKILL.md`
+1. Write a deterministic review record under `workspace/.openclaw/knowledge/`
+2. Stage deterministic memory and skill candidates
+3. Curate memory candidates into `memory/topics/` and `MEMORY.md`
+4. Maintain topic note size/link hygiene
+5. Incubate repeated skill candidates
+6. Promote ready incubators into `skills/<slug>/SKILL.md`
 
 This keeps long-term memory and reusable workflow capture moving forward without
 manual CLI runs.
@@ -76,7 +83,7 @@ openclaw hooks enable knowledge-steward
 
 ## Notes
 
-- The hook uses deterministic steward extraction, not free-form rewriting.
+- The review and steward passes are deterministic, not free-form rewriting.
 - Promotion still requires repeated evidence across sessions.
 - It works well alongside `session-memory`; `session-memory` keeps a raw reset
   snapshot, while `knowledge-steward` maintains curated long-term notes.
