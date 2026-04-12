@@ -24,6 +24,7 @@ import {
   resolveDefaultMemoryProviderKernel,
   type MemoryStewardSessionEndResult,
 } from "./memory-provider-kernel.js";
+import { syncWorkspaceUserProfile } from "./user-profile-file.js";
 import { buildWorkflowFingerprint } from "./workflow-fingerprint.js";
 
 const log = createSubsystemLogger("agents/knowledge-review-kernel");
@@ -543,6 +544,15 @@ async function reviewKnowledgeSession(
     record,
   });
   await clearKnowledgeReviewNudge(params.workspaceDir, params.entry.sessionId);
+  try {
+    await syncWorkspaceUserProfile({ workspaceDir: params.workspaceDir });
+  } catch (err) {
+    log.warn("user profile sync failed", {
+      sessionKey: params.sessionKey,
+      sessionId: params.entry.sessionId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
   return { recordPath, record };
 }
 

@@ -130,6 +130,7 @@ describe("knowledge-steward hook", () => {
     );
     const skillFiles = await listFilesRecursive(path.join(workspaceDir, "skills"));
     const memoryIndex = await fs.readFile(path.join(workspaceDir, "MEMORY.md"), "utf-8");
+    const userProfile = await fs.readFile(path.join(workspaceDir, "USER.md"), "utf-8");
     const ledgerPath = path.join(workspaceDir, "memory", "steward", "runs");
     const ledgerFiles = await listFilesRecursive(ledgerPath);
     const reviewPath = path.join(workspaceDir, KNOWLEDGE_REVIEW_ROOT, "steward-session-1.json");
@@ -140,6 +141,8 @@ describe("knowledge-steward hook", () => {
     expect(incubatorFiles.length).toBe(1);
     expect(skillFiles.filter((file) => file.endsWith("SKILL.md")).length).toBe(0);
     expect(memoryIndex).toContain("Curated Topics");
+    expect(userProfile).toContain("## Machine-Managed Profile");
+    expect(userProfile).toContain("Remember that I prefer concise Chinese updates.");
     expect(ledgerFiles.length).toBe(1);
     expect(review.sessionId).toBe("steward-session-1");
     expect(review.userModel.preferences).toContain(

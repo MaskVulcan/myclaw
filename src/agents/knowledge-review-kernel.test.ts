@@ -155,8 +155,13 @@ describe("knowledge-review-kernel", () => {
 
     const persistedRecord = await loadKnowledgeReviewRecord(workspaceDir, sessionId);
     const persistedNudge = await loadKnowledgeReviewNudge(workspaceDir, sessionId);
+    const userProfile = await fs.readFile(path.join(workspaceDir, "USER.md"), "utf-8");
     expect(persistedRecord?.sessionId).toBe(sessionId);
     expect(persistedNudge).toBeNull();
+    expect(userProfile).toContain("## Machine-Managed Profile");
+    expect(userProfile).toContain("Name: 小王");
+    expect(userProfile).toContain("Timezone: Asia/Shanghai");
+    expect(userProfile).toContain("请用中文回复，保持简洁。");
   });
 
   it("writes the review before delegating to the steward cycle", async () => {
