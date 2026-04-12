@@ -247,8 +247,26 @@ export abstract class MemoryManagerSyncOps {
     }
   }
 
-  protected buildSourceFilter(alias?: string): { sql: string; params: MemorySource[] } {
-    const sources = Array.from(this.sources);
+  protected resolveSearchSources(sourcesOverride?: MemorySource[]): MemorySource[] {
+    if (!sourcesOverride || sourcesOverride.length === 0) {
+      return Array.from(this.sources);
+    }
+    const requested = new Set(
+      sourcesOverride.filter(
+        (source): source is MemorySource => source === "memory" || source === "sessions",
+      ),
+    );
+    if (requested.size === 0) {
+      return [];
+    }
+    return Array.from(this.sources).filter((source) => requested.has(source));
+  }
+
+  protected buildSourceFilter(
+    alias?: string,
+    sourcesOverride?: MemorySource[],
+  ): { sql: string; params: MemorySource[] } {
+    const sources = this.resolveSearchSources(sourcesOverride);
     if (sources.length === 0) {
       return { sql: "", params: [] };
     }

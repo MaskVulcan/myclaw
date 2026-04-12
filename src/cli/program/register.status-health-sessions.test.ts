@@ -5,6 +5,7 @@ import { createCliRuntimeCapture } from "../test-runtime-capture.js";
 const statusCommand = vi.fn();
 const healthCommand = vi.fn();
 const sessionsCommand = vi.fn();
+const sessionsSearchCommand = vi.fn();
 const sessionsSummaryCommand = vi.fn();
 const sessionsCleanupCommand = vi.fn();
 const setVerbose = vi.fn();
@@ -21,6 +22,10 @@ vi.mock("../../commands/health.js", () => ({
 
 vi.mock("../../commands/sessions.js", () => ({
   sessionsCommand,
+}));
+
+vi.mock("../../commands/sessions-search.js", () => ({
+  sessionsSearchCommand,
 }));
 
 vi.mock("../../commands/sessions-summary.js", () => ({
@@ -59,6 +64,7 @@ describe("registerStatusHealthSessionsCommands", () => {
     statusCommand.mockResolvedValue(undefined);
     healthCommand.mockResolvedValue(undefined);
     sessionsCommand.mockResolvedValue(undefined);
+    sessionsSearchCommand.mockResolvedValue(undefined);
     sessionsSummaryCommand.mockResolvedValue(undefined);
     sessionsCleanupCommand.mockResolvedValue(undefined);
   });
@@ -185,6 +191,34 @@ describe("registerStatusHealthSessionsCommands", () => {
         allAgents: true,
         active: "60",
         recent: "3",
+        json: true,
+      }),
+      runtime,
+    );
+  });
+
+  it("runs sessions search subcommand with forwarded options", async () => {
+    await runCli([
+      "sessions",
+      "--json",
+      "--all-agents",
+      "search",
+      "roadmap",
+      "--max-results",
+      "3",
+      "--max-hits-per-session",
+      "1",
+      "--min-score",
+      "0.4",
+    ]);
+
+    expect(sessionsSearchCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: "roadmap",
+        allAgents: true,
+        maxResults: "3",
+        maxHitsPerSession: "1",
+        minScore: "0.4",
         json: true,
       }),
       runtime,

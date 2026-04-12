@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import { healthCommand } from "../../commands/health.js";
 import { sessionsCleanupCommand } from "../../commands/sessions-cleanup.js";
+import { sessionsSearchCommand } from "../../commands/sessions-search.js";
 import { sessionsSummaryCommand } from "../../commands/sessions-summary.js";
 import { sessionsCommand } from "../../commands/sessions.js";
 import { statusCommand } from "../../commands/status.js";
@@ -195,6 +196,62 @@ export function registerStatusHealthSessionsCommands(program: Command) {
             allAgents: Boolean(opts.allAgents || parentOpts?.allAgents),
             active: (opts.active as string | undefined) ?? parentOpts?.active,
             recent: opts.recent as string | undefined,
+            json: Boolean(opts.json || parentOpts?.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  sessionsCmd
+    .command("search <query>")
+    .description("Search indexed session transcripts")
+    .option("--store <path>", "Path to session store (default: resolved from config)")
+    .option("--agent <id>", "Agent id to inspect (default: configured default agent)")
+    .option("--all-agents", "Aggregate search across all configured agents", false)
+    .option("--max-results <count>", "Maximum matched sessions to return")
+    .option("--max-hits-per-session <count>", "Maximum snippets per matched session")
+    .option("--min-score <score>", "Minimum score threshold (0-1)")
+    .option("--json", "Output JSON", false)
+    .addHelpText(
+      "after",
+      () =>
+        `\n${theme.heading("Examples:")}\n${formatHelpExamples([
+          ['openclaw sessions search "release checklist"', "Search current agent sessions."],
+          [
+            'openclaw sessions --agent work search "incident postmortem"',
+            "Search one agent's indexed sessions.",
+          ],
+          [
+            'openclaw sessions --all-agents search "customer escalation"',
+            "Search across all configured agents.",
+          ],
+          [
+            'openclaw sessions search "roadmap" --max-results 3 --max-hits-per-session 1',
+            "Keep results compact.",
+          ],
+          ['openclaw sessions search "roadmap" --json', "Machine-readable output."],
+        ])}`,
+    )
+    .action(async (query, opts, command) => {
+      const parentOpts = command.parent?.opts() as
+        | {
+            store?: string;
+            agent?: string;
+            allAgents?: boolean;
+            json?: boolean;
+          }
+        | undefined;
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await sessionsSearchCommand(
+          {
+            query,
+            store: (opts.store as string | undefined) ?? parentOpts?.store,
+            agent: (opts.agent as string | undefined) ?? parentOpts?.agent,
+            allAgents: Boolean(opts.allAgents || parentOpts?.allAgents),
+            maxResults: opts.maxResults as string | undefined,
+            maxHitsPerSession: opts.maxHitsPerSession as string | undefined,
+            minScore: opts.minScore as string | undefined,
             json: Boolean(opts.json || parentOpts?.json),
           },
           defaultRuntime,

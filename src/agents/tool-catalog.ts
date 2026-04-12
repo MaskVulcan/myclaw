@@ -122,6 +122,14 @@ const CORE_TOOL_DEFINITIONS: CoreToolDefinition[] = [
     includeInOpenClawGroup: true,
   },
   {
+    id: "sessions_search",
+    label: "sessions_search",
+    description: "Search session transcripts",
+    sectionId: "sessions",
+    profiles: ["coding"],
+    includeInOpenClawGroup: true,
+  },
+  {
     id: "sessions_history",
     label: "sessions_history",
     description: "Session history",

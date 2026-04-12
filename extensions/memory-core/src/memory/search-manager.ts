@@ -111,7 +111,12 @@ class BorrowedMemoryManager implements MemorySearchManager {
 
   async search(
     query: string,
-    opts?: { maxResults?: number; minScore?: number; sessionKey?: string },
+    opts?: {
+      maxResults?: number;
+      minScore?: number;
+      sessionKey?: string;
+      sources?: ("memory" | "sessions")[];
+    },
   ) {
     return await this.inner.search(query, opts);
   }
@@ -176,7 +181,12 @@ class FallbackMemoryManager implements MemorySearchManager {
 
   async search(
     query: string,
-    opts?: { maxResults?: number; minScore?: number; sessionKey?: string },
+    opts?: {
+      maxResults?: number;
+      minScore?: number;
+      sessionKey?: string;
+      sources?: ("memory" | "sessions")[];
+    },
   ) {
     if (!this.primaryFailed) {
       try {

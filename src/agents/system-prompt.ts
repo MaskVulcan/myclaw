@@ -248,6 +248,7 @@ export function buildAgentSystemPrompt(params: {
       : "List OpenClaw agent ids allowed for sessions_spawn",
     update_plan: "Track a short structured work plan",
     sessions_list: "List other sessions (incl. sub-agents) with filters/last",
+    sessions_search: "Search indexed session transcripts and review summaries",
     sessions_history: "Fetch history for another session/sub-agent",
     sessions_send: "Send a message to another session/sub-agent",
     sessions_spawn: acpSpawnRuntimeEnabled
@@ -281,6 +282,7 @@ export function buildAgentSystemPrompt(params: {
     "agents_list",
     "update_plan",
     "sessions_list",
+    "sessions_search",
     "sessions_history",
     "sessions_send",
     "subagents",
@@ -436,6 +438,7 @@ export function buildAgentSystemPrompt(params: {
           "- nodes: list/describe/notify/camera/screen on paired nodes",
           "- cron: manage cron jobs and wake events (use for reminders; when scheduling a reminder, write the systemEvent text as something that will read like a reminder when it fires, and mention that it is a reminder depending on the time gap between setting and firing; include recent context in reminder text if appropriate)",
           "- sessions_list: list sessions",
+          "- sessions_search: search indexed session transcripts",
           "- sessions_history: fetch session history",
           "- sessions_send: send to another session",
           "- subagents: list/steer/kill sub-agent runs",

@@ -26,6 +26,11 @@
       "title": "Sessions",
       "detailKeys": ["kinds", "limit", "activeMinutes", "messageLimit"]
     },
+    "sessions_search": {
+      "emoji": "🔍",
+      "title": "Session Search",
+      "detailKeys": ["query", "maxResults", "maxHitsPerSession", "minScore"]
+    },
     "sessions_send": {
       "emoji": "📨",
       "title": "Session Send",

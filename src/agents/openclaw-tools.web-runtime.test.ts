@@ -59,6 +59,9 @@ vi.mock("./tools/sessions-history-tool.js", () => ({
 vi.mock("./tools/sessions-list-tool.js", () => ({
   createSessionsListTool: mockToolFactory("sessions_list_stub"),
 }));
+vi.mock("./tools/sessions-search-tool.js", () => ({
+  createSessionsSearchTool: mockToolFactory("sessions_search_stub"),
+}));
 vi.mock("./tools/sessions-send-tool.js", () => ({
   createSessionsSendTool: mockToolFactory("sessions_send_stub"),
 }));

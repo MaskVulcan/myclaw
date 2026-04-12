@@ -127,6 +127,10 @@ vi.mock("./tools/sessions-list-tool.js", () => ({
   createSessionsListTool: () => makeTool("sessions_list"),
 }));
 
+vi.mock("./tools/sessions-search-tool.js", () => ({
+  createSessionsSearchTool: () => makeTool("sessions_search"),
+}));
+
 vi.mock("./tools/sessions-send-tool.js", () => ({
   createSessionsSendTool: () => makeTool("sessions_send"),
 }));

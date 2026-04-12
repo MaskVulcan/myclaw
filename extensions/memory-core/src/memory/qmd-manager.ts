@@ -749,7 +749,12 @@ export class QmdMemoryManager implements MemorySearchManager {
 
   async search(
     query: string,
-    opts?: { maxResults?: number; minScore?: number; sessionKey?: string },
+    opts?: {
+      maxResults?: number;
+      minScore?: number;
+      sessionKey?: string;
+      sources?: MemorySource[];
+    },
   ): Promise<MemorySearchResult[]> {
     if (!this.isScopeAllowed(opts?.sessionKey)) {
       this.logScopeDenied(opts?.sessionKey);
@@ -764,7 +769,7 @@ export class QmdMemoryManager implements MemorySearchManager {
       this.qmd.limits.maxResults,
       opts?.maxResults ?? this.qmd.limits.maxResults,
     );
-    const collectionNames = this.listManagedCollectionNames();
+    const collectionNames = this.listManagedCollectionNames(opts?.sources);
     if (collectionNames.length === 0) {
       log.warn("qmd query skipped: no managed collections configured");
       return [];
@@ -2161,8 +2166,33 @@ export class QmdMemoryManager implements MemorySearchManager {
     return [...bestByDocId.values()].toSorted((a, b) => (b.score ?? 0) - (a.score ?? 0));
   }
 
-  private listManagedCollectionNames(): string[] {
-    return this.managedCollectionNames;
+  private listManagedCollectionNames(sourcesOverride?: MemorySource[]): string[] {
+    if (!sourcesOverride || sourcesOverride.length === 0) {
+      return this.managedCollectionNames;
+    }
+    const requested = new Set(
+      sourcesOverride.filter(
+        (source): source is MemorySource => source === "memory" || source === "sessions",
+      ),
+    );
+    if (requested.size === 0) {
+      return [];
+    }
+    const names: string[] = [];
+    const seen = new Set<string>();
+    for (const collection of this.qmd.collections) {
+      const kind: MemorySource = collection.kind === "sessions" ? "sessions" : "memory";
+      if (!requested.has(kind)) {
+        continue;
+      }
+      const name = collection.name?.trim();
+      if (!name || seen.has(name)) {
+        continue;
+      }
+      seen.add(name);
+      names.push(name);
+    }
+    return names;
   }
 
   private computeManagedCollectionNames(): string[] {

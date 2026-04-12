@@ -14,7 +14,7 @@ export type AgentToAgentPolicy = {
   isAllowed: (requesterAgentId: string, targetAgentId: string) => boolean;
 };
 
-export type SessionAccessAction = "history" | "send" | "list" | "status";
+export type SessionAccessAction = "history" | "send" | "list" | "status" | "search";
 
 export type SessionAccessResult =
   | { allowed: true }
@@ -127,6 +127,9 @@ function actionPrefix(action: SessionAccessAction): string {
   if (action === "history") {
     return "Session history";
   }
+  if (action === "search") {
+    return "Session search";
+  }
   if (action === "send") {
     return "Session send";
   }
@@ -139,6 +142,9 @@ function actionPrefix(action: SessionAccessAction): string {
 function a2aDisabledMessage(action: SessionAccessAction): string {
   if (action === "history") {
     return "Agent-to-agent history is disabled. Set tools.agentToAgent.enabled=true to allow cross-agent access.";
+  }
+  if (action === "search") {
+    return "Agent-to-agent session search is disabled. Set tools.agentToAgent.enabled=true to allow cross-agent access.";
   }
   if (action === "send") {
     return "Agent-to-agent messaging is disabled. Set tools.agentToAgent.enabled=true to allow cross-agent sends.";
@@ -153,6 +159,9 @@ function a2aDeniedMessage(action: SessionAccessAction): string {
   if (action === "history") {
     return "Agent-to-agent history denied by tools.agentToAgent.allow.";
   }
+  if (action === "search") {
+    return "Agent-to-agent session search denied by tools.agentToAgent.allow.";
+  }
   if (action === "send") {
     return "Agent-to-agent messaging denied by tools.agentToAgent.allow.";
   }
@@ -165,6 +174,9 @@ function a2aDeniedMessage(action: SessionAccessAction): string {
 function crossVisibilityMessage(action: SessionAccessAction): string {
   if (action === "history") {
     return "Session history visibility is restricted. Set tools.sessions.visibility=all to allow cross-agent access.";
+  }
+  if (action === "search") {
+    return "Session search visibility is restricted. Set tools.sessions.visibility=all to allow cross-agent access.";
   }
   if (action === "send") {
     return "Session send visibility is restricted. Set tools.sessions.visibility=all to allow cross-agent access.";
