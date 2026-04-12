@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
+import {
+  loadKnowledgeReviewRecordSync,
+  type KnowledgeReviewRecord,
+} from "../agents/knowledge-review-store.js";
 import { inferCapabilityIdsFromCommandLines } from "../capabilities/registry.js";
 import { loadConfig } from "../config/config.js";
 import { loadSessionStore, type SessionEntry } from "../config/sessions.js";
@@ -264,6 +268,7 @@ type ParsedStewardSkillCandidate = {
   title: string;
   candidatePath: string;
   slug: string;
+  workflowFingerprint?: string;
   signals: string[];
   commands: string[];
   tools: string[];
@@ -276,6 +281,7 @@ type ParsedStewardSkillIncubator = {
   incubatorPath: string;
   candidateCount: number;
   score: number;
+  workflowFingerprint?: string;
   commands: string[];
   tools: string[];
   signals: string[];
@@ -460,6 +466,40 @@ function buildCandidateSlug(params: { title: string; sessionId: string }): strin
     return suffix;
   }
   return `${base}-${suffix}`;
+}
+
+function collectReviewMemoryFacts(review: KnowledgeReviewRecord): string[] {
+  return dedupePreserveOrder([
+    ...review.userModel.preferences,
+    ...review.userModel.contexts,
+    ...review.userModel.goals,
+    ...review.userModel.notes,
+  ]).slice(0, MAX_MEMORY_FACTS);
+}
+
+function collectReviewSkillSignals(review: KnowledgeReviewRecord): string[] {
+  return dedupePreserveOrder([
+    review.summary,
+    ...review.previewItems,
+    ...review.tags.map((tag) => `Workflow tag: ${tag}`),
+  ])
+    .filter((entry) => SKILL_SIGNAL_PATTERNS.some((pattern) => pattern.test(entry)))
+    .slice(0, MAX_AUTOMATION_SIGNALS);
+}
+
+function pickMostFrequentValue(values: string[], fallback: string): string {
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      continue;
+    }
+    counts.set(trimmed, (counts.get(trimmed) ?? 0) + 1);
+  }
+  const entries = Array.from(counts.entries()).toSorted(
+    (left, right) => right[1] - left[1] || left[0].localeCompare(right[0]),
+  );
+  return entries[0]?.[0] ?? fallback;
 }
 
 function assertAllowedStewardRelativePath(
@@ -720,7 +760,9 @@ function buildMemoryCandidateContent(params: {
 
 function buildSkillCandidateContent(params: {
   title: string;
+  suggestedTitle?: string;
   slugBase: string;
+  workflowFingerprint?: string;
   agentId: string;
   sessionKey: string;
   sessionId: string;
@@ -737,6 +779,11 @@ function buildSkillCandidateContent(params: {
     ["session_key", params.sessionKey],
     ["session_id", params.sessionId],
     ["updated_at", params.updatedAtIso],
+    ...(params.suggestedTitle ? ([["suggested_title", params.suggestedTitle]] as const) : []),
+    ["suggested_slug", params.slugBase],
+    ...(params.workflowFingerprint
+      ? ([["workflow_fingerprint", params.workflowFingerprint]] as const)
+      : []),
     ["tags", ["steward/skills", "candidate/skill"]],
   ]);
   const lines = [
@@ -761,6 +808,7 @@ function buildSkillCandidateContent(params: {
       : ["- None captured in the transcript."]),
     "",
     "## Proposed Promotion Sketch",
+    `- Suggested title: \`${params.suggestedTitle ?? params.title}\``,
     `- Suggested slug: \`${params.slugBase}\``,
     "- Candidate output target: `skills/<slug>/SKILL.md`",
     "- Promotion rule: require repeated evidence across sessions before creating a real skill.",
@@ -868,9 +916,17 @@ function unwrapInlineCode(value: string): string {
   return trimmed;
 }
 
-function extractSuggestedSlug(content: string): string | null {
-  const match = content.match(/Suggested slug:\s*`([^`]+)`/u);
+function extractFrontmatterString(content: string, key: string): string | null {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = content.match(new RegExp(`^${escapedKey}:\\s*"([^"\\n]+)"$`, "mu"));
   const raw = match?.[1]?.trim();
+  return raw ? raw : null;
+}
+
+function extractSuggestedSlug(content: string): string | null {
+  const raw =
+    extractFrontmatterString(content, "suggested_slug") ??
+    content.match(/Suggested slug:\s*`([^`]+)`/u)?.[1]?.trim();
   return raw ? raw : null;
 }
 
@@ -897,10 +953,12 @@ function parseStewardSkillCandidate(params: {
   const tools = extractMarkdownBulletSection(content, "## Observed Tools")
     .map(unwrapInlineCode)
     .filter((entry) => entry && entry !== "None captured in the transcript.");
+  const workflowFingerprint = extractFrontmatterString(content, "workflow_fingerprint");
   return {
     title,
     candidatePath,
     slug,
+    ...(workflowFingerprint ? { workflowFingerprint } : {}),
     signals: extractMarkdownBulletSection(content, "## Why This Looks Reusable").filter(
       (entry) => entry && !entry.startsWith("Repeated commands/tools"),
     ),
@@ -975,6 +1033,7 @@ function buildSkillIncubatorContent(params: {
   generatedAt: string;
   candidatePaths: string[];
   score: number;
+  workflowFingerprint?: string;
   signals: string[];
   commands: string[];
   tools: string[];
@@ -987,6 +1046,9 @@ function buildSkillIncubatorContent(params: {
     ["updated_at", params.generatedAt],
     ["candidate_count", params.candidatePaths.length],
     ["score", params.score],
+    ...(params.workflowFingerprint
+      ? ([["workflow_fingerprint", params.workflowFingerprint]] as const)
+      : []),
     ["tags", ["steward/skills", "incubator"]],
   ]);
   const lines = [
@@ -1041,6 +1103,7 @@ function parseStewardSkillIncubator(params: {
   const title = heading.replace(/^Skill Incubator:\s*/u, "").trim() || heading;
   const scoreMatch = content.match(/^score:\s*(\d+)/mu);
   const countMatch = content.match(/^candidate_count:\s*(\d+)/mu);
+  const workflowFingerprint = extractFrontmatterString(content, "workflow_fingerprint");
   return {
     title,
     slug:
@@ -1050,6 +1113,7 @@ function parseStewardSkillIncubator(params: {
     incubatorPath,
     candidateCount: Number.parseInt(countMatch?.[1] ?? "0", 10) || 0,
     score: Number.parseInt(scoreMatch?.[1] ?? "0", 10) || 0,
+    ...(workflowFingerprint ? { workflowFingerprint } : {}),
     commands: extractMarkdownBulletSection(content, "## Observed Commands")
       .map(unwrapInlineCode)
       .filter((entry) => entry && entry !== "No reusable commands extracted yet."),
@@ -1389,32 +1453,60 @@ function prepareStewardSession(row: StewardIngestRow, now: Date): StewardPrepare
     .filter((message) => message.role === "user" && Boolean(message.text))
     .map((message) => message.text ?? "");
   const visibleTexts = textMessages.map((message) => message.text ?? "").filter(Boolean);
-
-  const title = buildSessionTitle({
-    firstUserMessage: titleFields.firstUserMessage,
-    lastMessagePreview: titleFields.lastMessagePreview,
-    sessionKey: row.key,
-  });
+  const review = loadKnowledgeReviewRecordSync(row.workspaceDir, row.entry.sessionId);
+  const title =
+    review?.title ??
+    buildSessionTitle({
+      firstUserMessage: titleFields.firstUserMessage,
+      lastMessagePreview: titleFields.lastMessagePreview,
+      sessionKey: row.key,
+    });
   const updatedAtIso = normalizeIsoDate(row.entry.updatedAt ?? null, now);
   const slug = buildCandidateSlug({
     title,
     sessionId: row.entry.sessionId,
   });
+  const reviewedMemoryFacts = review ? collectReviewMemoryFacts(review) : [];
   const memorySignals = collectSignalTexts(userTexts, MEMORY_SIGNAL_PATTERNS, MAX_MEMORY_FACTS);
-  const automationSignals = collectSignalTexts(
+  const memoryFacts = reviewedMemoryFacts.length > 0 ? reviewedMemoryFacts : memorySignals.items;
+  const transcriptAutomationSignals = collectSignalTexts(
     userTexts,
     SKILL_SIGNAL_PATTERNS,
     MAX_AUTOMATION_SIGNALS,
   );
-  const commandSnippets = collectCommandSnippets(visibleTexts);
-  const toolNames = collectToolNames(transcriptMessages);
-  const evidence = buildEvidenceItems(textMessages);
+  const reviewAutomationSignals = review ? collectReviewSkillSignals(review) : [];
+  const automationSignals =
+    reviewAutomationSignals.length > 0
+      ? reviewAutomationSignals
+      : transcriptAutomationSignals.items;
+  const transcriptCommandSnippets = collectCommandSnippets(visibleTexts);
+  const commandSnippets =
+    review?.automation.commands.length && review.automation.commands.length > 0
+      ? review.automation.commands
+      : transcriptCommandSnippets;
+  const transcriptToolNames = collectToolNames(transcriptMessages);
+  const toolNames =
+    review?.automation.tools.length && review.automation.tools.length > 0
+      ? review.automation.tools
+      : transcriptToolNames;
+  const transcriptEvidence = buildEvidenceItems(textMessages);
+  const evidence =
+    review?.previewItems.length && review.previewItems.length > 0
+      ? review.previewItems.slice(0, MAX_EVIDENCE_ITEMS)
+      : transcriptEvidence;
+  const skillTitle = review?.automation.suggestedTitle ?? title;
+  const skillSlugBase = review?.automation.suggestedSlug ?? normalizeHyphenSlug(skillTitle) ?? slug;
+  const skillWorkflowFingerprint = review?.automation.workflowFingerprint;
+  const skillCandidateSlug = buildCandidateSlug({
+    title: skillTitle,
+    sessionId: row.entry.sessionId,
+  });
 
   const reasons: string[] = [];
-  if (memorySignals.matched) {
+  if (memoryFacts.length > 0) {
     reasons.push("durable-memory signals found");
   }
-  if (automationSignals.matched) {
+  if (automationSignals.length > 0) {
     reasons.push("automation/skill signals found");
   }
   if (commandSnippets.length > 0) {
@@ -1425,7 +1517,7 @@ function prepareStewardSession(row: StewardIngestRow, now: Date): StewardPrepare
   }
 
   const memoryContent =
-    memorySignals.items.length > 0
+    memoryFacts.length > 0
       ? buildMemoryCandidateContent({
           title,
           agentId: row.agentId,
@@ -1433,7 +1525,7 @@ function prepareStewardSession(row: StewardIngestRow, now: Date): StewardPrepare
           sessionId: row.entry.sessionId,
           sessionKind: classifyStewardSessionKind(row.key, row.entry),
           updatedAtIso,
-          facts: memorySignals.items,
+          facts: memoryFacts,
           evidence,
         })
       : null;
@@ -1452,15 +1544,17 @@ function prepareStewardSession(row: StewardIngestRow, now: Date): StewardPrepare
       : null;
 
   const skillContent =
-    automationSignals.items.length > 0 || commandSnippets.length > 0 || toolNames.length > 0
+    automationSignals.length > 0 || commandSnippets.length > 0 || toolNames.length > 0
       ? buildSkillCandidateContent({
-          title,
-          slugBase: normalizeHyphenSlug(title) || slug,
+          title: skillTitle,
+          suggestedTitle: review?.automation.suggestedTitle ?? skillTitle,
+          slugBase: skillSlugBase,
+          ...(skillWorkflowFingerprint ? { workflowFingerprint: skillWorkflowFingerprint } : {}),
           agentId: row.agentId,
           sessionKey: row.key,
           sessionId: row.entry.sessionId,
           updatedAtIso,
-          automationSignals: automationSignals.items,
+          automationSignals,
           commandSnippets,
           toolNames,
           evidence,
@@ -1473,9 +1567,9 @@ function prepareStewardSession(row: StewardIngestRow, now: Date): StewardPrepare
           path: buildRelativeCandidatePath({
             prefix: STEWARD_SKILL_PREFIX,
             updatedAtIso,
-            slug,
+            slug: skillCandidateSlug,
           }),
-          title,
+          title: skillTitle,
           bytes: Buffer.byteLength(skillContent, "utf-8"),
         }
       : null;
@@ -2525,16 +2619,30 @@ export async function stewardIncubateSkillsCommand(
 
   const candidateGroups = new Map<string, ParsedStewardSkillCandidate[]>();
   for (const candidate of parsedCandidates) {
-    const slug = normalizeHyphenSlug(candidate.slug) || "steward-skill";
-    const current = candidateGroups.get(slug) ?? [];
+    const groupKey =
+      candidate.workflowFingerprint?.trim() ||
+      normalizeHyphenSlug(candidate.slug) ||
+      "steward-skill";
+    const current = candidateGroups.get(groupKey) ?? [];
     current.push(candidate);
-    candidateGroups.set(slug, current);
+    candidateGroups.set(groupKey, current);
   }
 
   const clusterPlans: StewardSkillClusterPlan[] = [];
 
-  for (const [slug, cluster] of candidateGroups) {
-    const title = cluster[0]?.title ?? slug;
+  for (const cluster of candidateGroups.values()) {
+    const slug = pickMostFrequentValue(
+      cluster
+        .map((candidate) => normalizeHyphenSlug(candidate.slug) ?? "")
+        .filter((value) => value.length > 0),
+      "steward-skill",
+    );
+    const title = pickMostFrequentValue(
+      cluster
+        .filter((candidate) => (normalizeHyphenSlug(candidate.slug) ?? "") === slug)
+        .map((candidate) => candidate.title),
+      cluster[0]?.title ?? slug,
+    );
     const signals = dedupePreserveOrder(cluster.flatMap((candidate) => candidate.signals)).slice(
       0,
       MAX_AUTOMATION_SIGNALS,
@@ -2550,6 +2658,10 @@ export async function stewardIncubateSkillsCommand(
     const evidence = dedupePreserveOrder(cluster.flatMap((candidate) => candidate.evidence)).slice(
       0,
       MAX_EVIDENCE_ITEMS,
+    );
+    const workflowFingerprint = pickMostFrequentValue(
+      cluster.map((candidate) => candidate.workflowFingerprint ?? "").filter(Boolean),
+      "",
     );
     const score = computeSkillClusterScore({
       candidateCount: cluster.length,
@@ -2567,6 +2679,7 @@ export async function stewardIncubateSkillsCommand(
       generatedAt: now.toISOString(),
       candidatePaths: cluster.map((candidate) => candidate.candidatePath),
       score,
+      ...(workflowFingerprint ? { workflowFingerprint } : {}),
       signals,
       commands,
       tools,

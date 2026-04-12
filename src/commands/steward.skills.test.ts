@@ -11,6 +11,7 @@ function writeSkillCandidate(params: {
   relativePath: string;
   title: string;
   slug: string;
+  workflowFingerprint?: string;
   signals: string[];
   commands: string[];
   tools: string[];
@@ -28,6 +29,11 @@ function writeSkillCandidate(params: {
       'session_key: "agent:main:main"',
       'session_id: "session-test"',
       'updated_at: "2026-04-02T12:00:00.000Z"',
+      `suggested_title: ${JSON.stringify(params.title)}`,
+      `suggested_slug: ${JSON.stringify(params.slug)}`,
+      ...(params.workflowFingerprint
+        ? [`workflow_fingerprint: ${JSON.stringify(params.workflowFingerprint)}`]
+        : []),
       "tags:",
       '  - "steward/skills"',
       '  - "candidate/skill"',
@@ -45,6 +51,7 @@ function writeSkillCandidate(params: {
       ...params.tools.map((toolName) => `- \`${toolName}\``),
       "",
       "## Proposed Promotion Sketch",
+      `- Suggested title: \`${params.title}\``,
       `- Suggested slug: \`${params.slug}\``,
       "- Candidate output target: `skills/<slug>/SKILL.md`",
       "",
@@ -123,6 +130,67 @@ describe("steward skill automation", () => {
         }),
       );
       expect(fs.existsSync(path.join(workspaceDir, "skills", "_incubator"))).toBe(false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("clusters by workflow fingerprint before falling back to slug", async () => {
+    const root = fs.mkdtempSync(
+      path.join(fs.realpathSync("/tmp"), "openclaw-steward-skills-fingerprint-"),
+    );
+    const workspaceDir = path.join(root, "workspace");
+    fs.mkdirSync(workspaceDir, { recursive: true });
+
+    writeSkillCandidate({
+      workspaceDir,
+      relativePath: "skills/_candidates/2026-04-02/release-checks-a1.md",
+      title: "Release Checks",
+      slug: "release-checks",
+      workflowFingerprint: "fp-release-checks",
+      signals: ["Automate release checks for every deploy."],
+      commands: ["openclaw status --json"],
+      tools: ["exec"],
+      evidence: ["user: automate release checks"],
+    });
+    writeSkillCandidate({
+      workspaceDir,
+      relativePath: "skills/_candidates/2026-04-03/deploy-checks-b2.md",
+      title: "Deploy Checks",
+      slug: "deploy-checks",
+      workflowFingerprint: "fp-release-checks",
+      signals: ["Keep deploy checks reusable as the same workflow."],
+      commands: ["openclaw status --json"],
+      tools: ["exec"],
+      evidence: ["user: reuse the workflow"],
+    });
+
+    const { runtime, logs } = makeRuntime();
+    try {
+      await stewardIncubateSkillsCommand(
+        {
+          workspace: workspaceDir,
+          limit: "10",
+          json: true,
+        },
+        runtime,
+      );
+
+      const payload = JSON.parse(logs[0] ?? "{}") as {
+        incubators?: number;
+        readyClusters?: number;
+        clusters?: Array<{ slug?: string; candidateCount?: number; targetPath?: string }>;
+      };
+
+      expect(payload.incubators).toBe(1);
+      expect(payload.readyClusters).toBe(1);
+      expect(payload.clusters?.[0]).toEqual(
+        expect.objectContaining({
+          slug: "deploy-checks",
+          candidateCount: 2,
+          targetPath: "skills/_incubator/deploy-checks.md",
+        }),
+      );
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

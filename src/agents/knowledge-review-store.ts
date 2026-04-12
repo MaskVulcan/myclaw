@@ -1,3 +1,4 @@
+import syncFs from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -21,6 +22,7 @@ export type KnowledgeReviewAutomationSignals = {
   tools: string[];
   suggestedTitle?: string;
   suggestedSlug?: string;
+  workflowFingerprint?: string;
 };
 
 export type KnowledgeReviewRecord = {
@@ -71,6 +73,15 @@ async function readJsonFile<T>(filePath: string): Promise<T | null> {
   }
 }
 
+function readJsonFileSync<T>(filePath: string): T | null {
+  try {
+    const content = syncFs.readFileSync(filePath, "utf-8");
+    return JSON.parse(content) as T;
+  } catch {
+    return null;
+  }
+}
+
 async function writeJsonFile(filePath: string, payload: unknown): Promise<void> {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf-8");
@@ -81,6 +92,13 @@ export async function loadKnowledgeReviewRecord(
   sessionId: string,
 ): Promise<KnowledgeReviewRecord | null> {
   return await readJsonFile<KnowledgeReviewRecord>(resolveReviewPath(workspaceDir, sessionId));
+}
+
+export function loadKnowledgeReviewRecordSync(
+  workspaceDir: string,
+  sessionId: string,
+): KnowledgeReviewRecord | null {
+  return readJsonFileSync<KnowledgeReviewRecord>(resolveReviewPath(workspaceDir, sessionId));
 }
 
 export async function writeKnowledgeReviewRecord(params: {

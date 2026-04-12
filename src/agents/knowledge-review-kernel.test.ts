@@ -145,6 +145,9 @@ describe("knowledge-review-kernel", () => {
     expect(result?.record.userModel.contexts).toContain("当前项目是 myclaw 知识环重构。");
     expect(result?.record.userModel.goals).toContain("目标：把 session search 做好。");
     expect(result?.record.automation.commands).toContain("openclaw status --json");
+    expect(result?.record.automation.suggestedTitle).toBe("openclaw status");
+    expect(result?.record.automation.suggestedSlug).toBe("status");
+    expect(result?.record.automation.workflowFingerprint).toHaveLength(16);
     expect(result?.record.automation.tools).toEqual(
       expect.arrayContaining(["exec_command", "memory_search"]),
     );

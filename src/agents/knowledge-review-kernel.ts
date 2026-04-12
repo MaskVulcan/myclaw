@@ -24,6 +24,7 @@ import {
   resolveDefaultMemoryProviderKernel,
   type MemoryStewardSessionEndResult,
 } from "./memory-provider-kernel.js";
+import { buildWorkflowFingerprint } from "./workflow-fingerprint.js";
 
 const log = createSubsystemLogger("agents/knowledge-review-kernel");
 
@@ -319,11 +320,17 @@ function collectAutomationSignals(messages: NormalizedReviewMessage[]) {
           .replace(/\s+/g, "-"),
       ) || undefined
     : undefined;
+  const workflowFingerprint = buildWorkflowFingerprint({
+    commands: uniqueCommands,
+    tools: uniqueTools,
+    suggestedSlug,
+  });
   return {
     commands: uniqueCommands,
     tools: uniqueTools,
     ...(suggestedTitle ? { suggestedTitle } : {}),
     ...(suggestedSlug ? { suggestedSlug } : {}),
+    ...(workflowFingerprint ? { workflowFingerprint } : {}),
   };
 }
 
